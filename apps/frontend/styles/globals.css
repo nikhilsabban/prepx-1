@@ -118,3 +118,35 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Themed scrollbar ───────────────────────────────────────────── */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.32 0 0) transparent;
+}
+
+/* Chrome / Edge / Safari */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.28 0 0);
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.55 0.18 280); /* violet tint on hover */
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
