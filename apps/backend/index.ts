@@ -24,6 +24,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/v1", interviewRoutes);
 app.use("/api/v1/resume-analysis", resumeAnalysisRoutes);
 
+import codingRoutes from "./src/modules/coding/routes/codingRoutes";
+app.use("/api/coding", codingRoutes);
+
 app.get("/", (req, res) => {
   res.json({
     status: "ok",

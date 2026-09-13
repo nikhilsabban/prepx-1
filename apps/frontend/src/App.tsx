@@ -29,6 +29,10 @@ import { SkeletonPage } from "./components/ui/skeleton";
 import { ResumeAnalyzerPage } from "./pages/ResumeAnalyzerPage";
 
 import { BookmarksPage } from "./pages/BookmarksPage";
+import { CodingDashboardPage } from "./modules/coding/pages/CodingDashboardPage";
+import { ProblemListPage } from "./modules/coding/pages/ProblemListPage";
+import { ProblemDetailPage } from "./modules/coding/pages/ProblemDetailPage";
+import { LeaderboardPage } from "./modules/coding/pages/LeaderboardPage";
 
 export function App() {
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -93,10 +97,42 @@ export function App() {
                     }
                   />
                   <Route
+                    path="/coding"
+                    element={
+                      <ProtectedRoute>
+                        <CodingDashboardPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/coding/problems"
+                    element={
+                      <ProtectedRoute>
+                        <ProblemListPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/coding/problem/:slug"
+                    element={
+                      <ProtectedRoute>
+                        <ProblemDetailPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/coding/leaderboard"
+                    element={
+                      <ProtectedRoute>
+                        <LeaderboardPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
                     path="/:userId/coding"
                     element={
                       <ProtectedRoute>
-                        <FeaturePlaceholder title="Coding Platform" description="Our AI-assisted coding platform is currently under development. Stay tuned!" />
+                        <CodingDashboardPage />
                       </ProtectedRoute>
                     }
                   />
