@@ -10,10 +10,15 @@ export async function connectDB(): Promise<typeof mongoose> {
     return cachedConn;
   }
 
+  if (process.env.VERCEL && !process.env.MONGO_URI) {
+    console.warn("⚠️ MONGO_URI environment variable is missing on Vercel.");
+    return mongoose;
+  }
+
   const URIs = [
     process.env.MONGO_URI,
-    "mongodb://127.0.0.1:27017/ai-interviewer",
-    "mongodb://localhost:27017/ai-interviewer",
+    !process.env.VERCEL ? "mongodb://127.0.0.1:27017/ai-interviewer" : null,
+    !process.env.VERCEL ? "mongodb://localhost:27017/ai-interviewer" : null,
   ].filter(Boolean) as string[];
 
   for (const uri of URIs) {
@@ -37,9 +42,9 @@ export async function connectDB(): Promise<typeof mongoose> {
     }
   }
   
-  console.error("❌ Fatal: Could not connect to any MongoDB instance.");
+  console.warn("⚠️ Could not connect to any MongoDB instance.");
   if (!process.env.VERCEL) {
     process.exit(1);
   }
-  throw new Error("Could not connect to any MongoDB instance.");
+  return mongoose;
 }

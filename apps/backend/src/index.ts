@@ -15,13 +15,25 @@ import { seedCodingProblems } from "./utils/seedCodingProblems";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Connect to MongoDB
-connectDB().then(() => {
-  seedCodingProblems();
-});
+// Connect to MongoDB (for standalone server)
+if (!process.env.VERCEL) {
+  connectDB().then(() => {
+    seedCodingProblems();
+  }).catch((err) => {
+    console.warn("MongoDB initial connection notice:", err.message);
+  });
+}
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  })
+);
+app.options("*", cors() as any);
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
 app.use(express.text({ type: ["application/sdp", "text/plain"], limit: "10mb" }));
