@@ -38,9 +38,10 @@ import { VerifyEmailPendingPage } from "./pages/VerifyEmailPendingPage";
 import { GDHubPage } from "./pages/gd/GDHubPage";
 import { GDRoomPage } from "./pages/gd/GDRoomPage";
 import { GDResultPage } from "./pages/gd/GDResultPage";
+import { GOOGLE_CLIENT_ID } from "./lib/config";
 
 export function App() {
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const googleClientId = GOOGLE_CLIENT_ID;
   const hasGoogleClientId = !!googleClientId && googleClientId !== "MOCK_CLIENT_ID";
 
   const appContent = (

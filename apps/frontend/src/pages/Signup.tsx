@@ -10,6 +10,7 @@ import { GoogleLogin } from "@react-oauth/google";
 import api from "../services/api";
 
 import { getErrorMessage } from "../lib/utils";
+import { GOOGLE_CLIENT_ID, GITHUB_CLIENT_ID } from "../lib/config";
 
 export function Signup() {
   const [formData, setFormData] = useState({
@@ -185,8 +186,7 @@ export function Signup() {
   }
 
   const handleGithubLogin = () => {
-    // @ts-ignore
-    const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID || "MOCK_GITHUB_CLIENT_ID";
+    const clientId = GITHUB_CLIENT_ID;
     window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&state=github&scope=user:email`;
   };
 
@@ -551,7 +551,7 @@ export function Signup() {
             </div>
 
             <div className="mt-6 flex justify-center items-center gap-4">
-              {import.meta.env.VITE_GOOGLE_CLIENT_ID && import.meta.env.VITE_GOOGLE_CLIENT_ID !== "MOCK_CLIENT_ID" ? (
+              {GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== "MOCK_CLIENT_ID" ? (
                 <GoogleLogin
                   onSuccess={async (credentialResponse) => {
                     if (credentialResponse.credential) {
