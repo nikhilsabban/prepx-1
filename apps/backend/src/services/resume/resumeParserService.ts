@@ -2,8 +2,8 @@ import { createRequire } from "module";
 import mammoth from "mammoth";
 
 const require = createRequire(import.meta.url);
-const pdfParsePkg = require("pdf-parse");
-const PDFParse = pdfParsePkg.PDFParse || pdfParsePkg.default?.PDFParse;
+let pdfParsePkg: any = null;
+let PDFParse: any = null;
 
 export interface ParsedResumeData {
 
@@ -61,6 +61,14 @@ export async function extractTextFromBuffer(
 
   if (isPdf) {
     try {
+      if (!pdfParsePkg) {
+        try {
+          pdfParsePkg = require("pdf-parse");
+          PDFParse = pdfParsePkg.PDFParse || pdfParsePkg.default?.PDFParse;
+        } catch (e: any) {
+          console.warn("Could not lazily load pdf-parse:", e?.message);
+        }
+      }
       if (typeof pdfParsePkg === "function") {
         const parsed = await pdfParsePkg(buffer);
         rawText = parsed.text || "";
