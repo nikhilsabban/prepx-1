@@ -5,7 +5,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Button } from "../../../components/ui/button";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { Briefcase, Sparkles, Loader2, Building2, Search } from "lucide-react";
 
 export function JobDescriptionInput() {
@@ -31,9 +31,17 @@ export function JobDescriptionInput() {
       });
 
       if (res.success && res.data) {
+        const rawText = res.data.generatedJobDescription || jobDescription.text;
+        const cleanText = rawText
+          .replace(/\*{1,3}/g, "")
+          .replace(/^[-_]{3,}$/gm, "")
+          .replace(/^#{1,6}\s*/gm, "")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+
         setJobDescription({
           ...jobDescription,
-          text: res.data.generatedJobDescription || jobDescription.text,
+          text: cleanText,
         });
 
         setSuggestions({

@@ -11,8 +11,10 @@ import { ResumeRecommendations } from "../features/resumeAnalyzer/components/Res
 import { FormattingAnalysis } from "../features/resumeAnalyzer/components/FormattingAnalysis";
 import { AnalysisHistory } from "../features/resumeAnalyzer/components/AnalysisHistory";
 import { Button } from "../components/ui/button";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { Sparkles, Loader2, RefreshCw } from "lucide-react";
+
+import { getErrorMessage } from "../lib/utils";
 
 export function ResumeAnalyzerPage() {
   const {
@@ -33,12 +35,12 @@ export function ResumeAnalyzerPage() {
     setUploadStatus("idle");
     setJobDescription({ title: "", company: "", text: "" });
     setResult(null);
-    toast.info("Cleared previous session. Ready to upload a new resume!");
+    toast.info("Cleared previous session. Ready to upload a new resume.");
   };
 
   const handleRunAnalysis = async () => {
     if (!resumeFile) {
-      toast.error("Please upload a resume file first.");
+      toast.error("Upload a resume file first.");
       return;
     }
 
@@ -53,16 +55,15 @@ export function ResumeAnalyzerPage() {
 
       if (res.success && res.data) {
         setResult(res.data);
-        toast.success("Resume analyzed successfully!");
+        toast.success("Resume review complete.");
 
-        // Refresh history list asynchronously
         fetchAnalysisHistoryApi(1, 5).then((h) => {
           if (h.success && h.data) setHistory(h.data);
         });
       }
     } catch (err: any) {
       console.error("Analysis execution error:", err);
-      toast.error(err.response?.data?.message || "Failed to analyze resume.");
+      toast.error(getErrorMessage(err, "Couldn't analyze resume. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -78,11 +79,11 @@ export function ResumeAnalyzerPage() {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-3 max-w-3xl">
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight bg-gradient-to-r from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent">
-              AI Resume & ATS Analyzer
+              Resume Review & ATS Check
             </h1>
 
             <p className="text-sm text-zinc-300 leading-relaxed max-w-2xl font-normal">
-              Evaluate your resume against target job requirements with transparent ATS scoring, keyword gap detection, and actionable AI recommendations.
+              Evaluate your resume against target job requirements with ATS scoring, keyword gap detection, and actionable suggestions.
             </p>
           </div>
 
@@ -90,7 +91,7 @@ export function ResumeAnalyzerPage() {
             onClick={handleNewAnalysis}
             className="gap-2.5 text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white h-11 px-5 rounded-xl shadow-lg shadow-blue-500/25 transition-all hover:scale-105 active:scale-95 shrink-0 cursor-pointer border border-blue-400/30"
           >
-            <RefreshCw className="size-4" /> Start New Analysis
+            <RefreshCw className="size-4" /> Start new review
           </Button>
         </div>
       </div>
@@ -110,12 +111,12 @@ export function ResumeAnalyzerPage() {
             {loading ? (
               <>
                 <Loader2 className="size-5 animate-spin" />
-                Analyzing ATS Fit & AI Feedback...
+                Reviewing resume...
               </>
             ) : (
               <>
                 <Sparkles className="size-5" />
-                Analyze Resume ATS Score
+                Review resume
               </>
             )}
           </Button>
@@ -140,9 +141,9 @@ export function ResumeAnalyzerPage() {
                 <Sparkles className="size-8" />
               </div>
               <div className="max-w-md space-y-1">
-                <h3 className="text-lg font-bold text-white">No Analysis Generated Yet</h3>
+                <h3 className="text-lg font-bold text-white">No resume analyzed yet</h3>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Upload your resume on the left panel, optional target job description, and click "Analyze Resume ATS Score" to view section breakdown, keyword gap, and AI suggestions.
+                  Upload your resume on the left panel and enter an optional job description to check your resume score and formatting suggestions.
                 </p>
               </div>
             </div>

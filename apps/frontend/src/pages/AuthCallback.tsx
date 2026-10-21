@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../context/AuthContext";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
+import { getErrorMessage } from "../lib/utils";
 import { Loader2 } from "lucide-react";
 
 export function AuthCallback() {
@@ -50,14 +51,14 @@ export function AuthCallback() {
           throw new Error("Invalid provider");
         }
 
-        toast.success(`Successfully logged in with ${actualProvider.charAt(0).toUpperCase() + actualProvider.slice(1)}!`);
+        toast.success("Signed in successfully.");
         if (user?.id) {
           navigate(`/${user.id}`, { replace: true });
         } else {
           navigate("/", { replace: true });
         }
       } catch (error: any) {
-        toast.error(error.response?.data?.message || "Authentication failed");
+        toast.error(getErrorMessage(error, "Authentication failed. Try again."));
         navigate("/login", { replace: true });
       }
     };

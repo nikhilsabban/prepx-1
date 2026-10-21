@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { fetchBookmarksApi, toggleBookmarkApi, type InterviewRecord } from "../services/interviewService";
 import { Button } from "../components/ui/button";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { Bookmark, BookmarkCheck, Play, ArrowRight, Loader2, Sparkles, Calendar, Award } from "lucide-react";
 
 export function BookmarksPage() {

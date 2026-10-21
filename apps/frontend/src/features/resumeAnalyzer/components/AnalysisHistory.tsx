@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useResumeStore } from "../state/useResumeStore";
 import { fetchAnalysisHistoryApi, deleteAnalysisApi } from "../services/resumeAnalysisApi";
 import { Button } from "../../../components/ui/button";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { History, Trash2, Eye, Calendar, FileText } from "lucide-react";
 
 export function AnalysisHistory() {
@@ -124,29 +124,33 @@ export function AnalysisHistory() {
             return (
               <div
                 key={item._id}
-                className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-500/30 transition-all"
+                className="p-3.5 sm:p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-500/30 transition-all overflow-hidden"
               >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <FileText className="size-3.5 text-blue-400" />
-                    <span className="text-xs font-bold text-white">{fileName}</span>
-                    <span className="text-[10px] text-zinc-500 font-mono">({jobTitle})</span>
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                    <FileText className="size-3.5 text-blue-400 shrink-0" />
+                    <span className="text-xs font-bold text-white truncate max-w-[140px] sm:max-w-[200px]" title={fileName}>
+                      {fileName}
+                    </span>
+                    <span className="text-[10px] text-zinc-400 font-mono whitespace-nowrap truncate max-w-[110px] shrink-0" title={jobTitle}>
+                      ({jobTitle})
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3 text-[11px] text-zinc-400">
-                    <span className="flex items-center gap-1">
+                  <div className="flex items-center gap-2.5 text-[11px] text-zinc-400 flex-wrap">
+                    <span className="flex items-center gap-1 shrink-0">
                       <Calendar className="size-3" /> {dateStr}
                     </span>
-                    <span className="text-emerald-400 font-bold">ATS: {item.atsScore}/100</span>
-                    <span className="text-purple-400 font-bold">Match: {item.jobMatchScore}%</span>
+                    <span className="text-emerald-400 font-bold shrink-0">ATS: {item.atsScore}/100</span>
+                    <span className="text-purple-400 font-bold shrink-0">Match: {item.jobMatchScore}%</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-auto">
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => handleSelect(item)}
-                    className="h-8 text-xs gap-1 border-zinc-700 hover:bg-zinc-800 text-zinc-300"
+                    className="h-8 text-xs gap-1 border-zinc-700 hover:bg-zinc-800 text-zinc-300 shrink-0"
                   >
                     <Eye className="size-3" /> Re-open
                   </Button>
@@ -154,7 +158,7 @@ export function AnalysisHistory() {
                     size="sm"
                     variant="ghost"
                     onClick={() => handleDelete(item._id)}
-                    className="size-8 p-0 text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                    className="size-8 p-0 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 shrink-0"
                   >
                     <Trash2 className="size-3.5" />
                   </Button>

@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "./ui/button";
-import { LogOut, User, BookOpenCheck, History, Bookmark, ArrowLeft, Menu, X, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { LogOut, User, BookOpenCheck, History, Bookmark, ArrowLeft, Menu, X, Sparkles, LayoutDashboard, FileText, Users } from "lucide-react";
+import { toast } from "react-toastify";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -24,38 +24,62 @@ export function Navbar() {
 
   async function handleLogout() {
     await logout();
-    toast.success("Logged out successfully");
+    toast.success("Signed out successfully");
     navigate("/");
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-zinc-900 bg-[#09090b]/95 backdrop-blur-md">
-      <div className={`mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 ${user ? "pl-20 md:pl-24" : ""}`}>
+    <header className="sticky top-0 z-50 w-full border-b border-zinc-800/80 bg-[#09090b]/90 backdrop-blur-xl">
+      <div className={`mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 ${user ? "pl-4 md:pl-6" : ""}`}>
         {/* Logo & Brand */}
         <div className="flex items-center gap-3">
           {showBackArrow && (
             <button 
               onClick={() => navigate(-1)} 
-              className="flex items-center justify-center rounded-full hover:bg-zinc-800 p-1.5 transition text-zinc-300 hover:text-white cursor-pointer"
+              className="flex items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 p-2 transition text-zinc-300 hover:text-white cursor-pointer active:scale-95"
+              aria-label="Go Back"
             >
-              <ArrowLeft className="size-5" />
+              <ArrowLeft className="size-4" />
             </button>
           )}
-          <Link to={user ? `/${user.id}` : "/"} className="flex items-center gap-2.5 transition hover:opacity-80">
-            <div className="flex size-8 md:size-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold text-base md:text-lg shadow-lg shadow-indigo-500/20">
+          <Link to={user ? `/${user.id}` : "/"} className="flex items-center gap-2.5 transition hover:opacity-90">
+            <div className="flex size-8 md:size-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-blue-600 text-white font-black text-sm md:text-base shadow-lg shadow-indigo-500/20">
               AI
             </div>
-            <span className="text-white font-bold text-lg md:text-xl tracking-tight">prepX</span>
+            <span className="text-white font-extrabold text-lg md:text-xl tracking-tight bg-gradient-to-r from-white via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
+              prepX
+            </span>
           </Link>
         </div>
 
-        {/* Center / Nav Links (Only show on unauthenticated landing pages) */}
+        {/* Navigation Links for Unauthenticated Landing */}
         {!isAuthenticated && (
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium">
-            <Link to="/" className="text-zinc-400 hover:text-white transition-colors">Home</Link>
-            <Link to="/about" className="text-zinc-400 hover:text-white transition-colors">About Us</Link>
+            <Link to="/" className={`transition-colors ${location.pathname === "/" ? "text-white font-semibold" : "text-zinc-400 hover:text-white"}`}>Home</Link>
+            <Link to="/about" className={`transition-colors ${location.pathname === "/about" ? "text-white font-semibold" : "text-zinc-400 hover:text-white"}`}>About Us</Link>
             <a href="/#features" className="text-zinc-400 hover:text-white transition-colors">Features</a>
-            <a href="/#interview-types" className="text-zinc-400 hover:text-white transition-colors">Interview Types</a>
+            <a href="/#interview-types" className="text-zinc-400 hover:text-white transition-colors">Interview Modes</a>
+          </nav>
+        )}
+
+        {/* Authenticated Quick Bar for Desktop */}
+        {isAuthenticated && user && (
+          <nav className="hidden lg:flex items-center gap-1 bg-zinc-950/60 border border-zinc-800/80 rounded-full px-3 py-1 text-xs font-medium text-zinc-400">
+            <Link to={`/${user.id}`} className={`px-3 py-1.5 rounded-full transition-all ${location.pathname === `/${user.id}` ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
+              Dashboard
+            </Link>
+            <Link to="/ai-interview" className={`px-3 py-1.5 rounded-full transition-all ${location.pathname === "/ai-interview" ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
+              Mock Interview
+            </Link>
+            <Link to="/group-discussion" className={`px-3 py-1.5 rounded-full transition-all ${location.pathname.includes("/group-discussion") ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
+              Group Discussion
+            </Link>
+            <Link to={`/${user.id}/coding`} className={`px-3 py-1.5 rounded-full transition-all ${location.pathname.includes("/coding") ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
+              Coding
+            </Link>
+            <Link to={`/${user.id}/resume`} className={`px-3 py-1.5 rounded-full transition-all ${location.pathname.includes("/resume") ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
+              Resume Review
+            </Link>
           </nav>
         )}
 
@@ -65,7 +89,8 @@ export function Navbar() {
             <div className="relative flex items-center gap-2">
               <button 
                 onClick={() => setDropdownOpen(!dropdownOpen)} 
-                className="flex size-9 md:size-10 items-center justify-center rounded-full bg-blue-600 text-white font-semibold text-xs md:text-sm hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 hover:ring-offset-[#09090b] transition-all focus:outline-none cursor-pointer"
+                className="flex size-9 md:size-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-bold text-xs md:text-sm ring-2 ring-indigo-500/30 hover:ring-indigo-400 hover:ring-offset-2 hover:ring-offset-[#09090b] transition-all focus:outline-none cursor-pointer shadow-lg shadow-indigo-500/20"
+                aria-label="User Account Menu"
               >
                 {user.profilePicture ? (
                   <img src={user.profilePicture} alt={user.fullName} className="size-full rounded-full object-cover" />
@@ -77,36 +102,37 @@ export function Navbar() {
               {dropdownOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-zinc-800 bg-[#0a0a0a] shadow-xl shadow-black/50 overflow-hidden z-50 py-1">
-                    <div className="px-4 py-3 border-b border-zinc-800">
-                      <p className="text-sm font-bold text-white tracking-wide">{user.fullName}</p>
+                  <div className="absolute right-0 top-full mt-2 w-60 rounded-2xl border border-zinc-800 bg-[#0c0c0e]/95 backdrop-blur-xl shadow-2xl shadow-black/80 overflow-hidden z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="px-4 py-3 border-b border-zinc-800/80 bg-zinc-950/40">
+                      <p className="text-sm font-bold text-white truncate">{user.fullName}</p>
+                      <p className="text-xs text-zinc-400 truncate mt-0.5">{user.email}</p>
                     </div>
                     <div className="py-1">
-                      <Link onClick={() => setDropdownOpen(false)} to="/ai-interview" className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-indigo-400 hover:text-indigo-300 hover:bg-zinc-900 transition-colors">
-                        <Sparkles className="size-4 stroke-[1.5]" />
-                        AI Interview
+                      <Link onClick={() => setDropdownOpen(false)} to="/ai-interview" className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
+                        <Sparkles className="size-4 text-purple-400" />
+                        Start Mock Interview
                       </Link>
-                      <Link onClick={() => setDropdownOpen(false)} to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors">
-                        <User className="size-4 stroke-[1.5]" />
-                        Profile
+                      <Link onClick={() => setDropdownOpen(false)} to="/group-discussion" className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
+                        <Users className="size-4 text-pink-400" />
+                        Group Discussion
                       </Link>
-                      <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}/coding`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors">
-                        <BookOpenCheck className="size-4 stroke-[1.5]" />
-                        Coding Platform
+                      <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}/coding`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
+                        <BookOpenCheck className="size-4 text-blue-400" />
+                        Coding Practice
                       </Link>
-                      <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}/history`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors">
-                        <History className="size-4 stroke-[1.5]" />
-                        Video History
+                      <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}/resume`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
+                        <FileText className="size-4 text-emerald-400" />
+                        Resume Review
                       </Link>
-                      <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}/bookmarks`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors">
-                        <Bookmark className="size-4 stroke-[1.5]" />
-                        Bookmarks
+                      <Link onClick={() => setDropdownOpen(false)} to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
+                        <User className="size-4 text-zinc-400" />
+                        Profile & Settings
                       </Link>
                     </div>
-                    <div className="py-1 border-t border-zinc-800">
-                      <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-red-400 hover:text-red-300 hover:bg-zinc-900 transition-colors cursor-pointer">
-                        <LogOut className="size-4 stroke-[1.5]" />
-                        Log out
+                    <div className="py-1 border-t border-zinc-800/80 bg-zinc-950/40">
+                      <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer">
+                        <LogOut className="size-4 stroke-[1.75]" />
+                        Sign out
                       </button>
                     </div>
                   </div>
@@ -117,65 +143,62 @@ export function Navbar() {
             <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 onClick={() => navigate("/login")}
-                className="bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg px-3.5 sm:px-5 h-9 text-xs sm:text-sm cursor-pointer"
+                className="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-semibold rounded-xl px-4 h-9 text-xs sm:text-sm transition-all cursor-pointer"
               >
-                Login
+                Sign in
               </Button>
               <Button
                 onClick={() => navigate("/signup")}
-                className="bg-[#2563EB] hover:bg-blue-600 text-white font-semibold rounded-lg px-3.5 sm:px-5 h-9 text-xs sm:text-sm cursor-pointer"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl px-4 h-9 text-xs sm:text-sm shadow-md shadow-indigo-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
-                Join now
+                Sign up
               </Button>
             </div>
           )}
 
           {/* Mobile Menu Toggle Button */}
-          {!isAuthenticated && (
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden flex items-center justify-center p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition cursor-pointer"
-              aria-label="Toggle Navigation Menu"
-            >
-              {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-            </button>
-          )}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden flex items-center justify-center p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition cursor-pointer"
+            aria-label="Toggle Navigation Menu"
+          >
+            {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
         </div>
       </div>
 
       {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && !isAuthenticated && (
-        <div className="md:hidden border-b border-zinc-800 bg-[#09090b] px-6 py-4 space-y-3">
-          <Link
-            to="/"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm text-zinc-300 hover:text-white py-1.5"
-          >
-            Home
-          </Link>
-          <Link
-            to="/about"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm text-zinc-300 hover:text-white py-1.5"
-          >
-            About Us
-          </Link>
-          <a
-            href="/#features"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm text-zinc-300 hover:text-white py-1.5"
-          >
-            Features
-          </a>
-          <a
-            href="/#interview-types"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-sm text-zinc-300 hover:text-white py-1.5"
-          >
-            Interview Types
-          </a>
+      {mobileMenuOpen && (
+        <div className="lg:hidden border-b border-zinc-800 bg-[#09090b]/95 backdrop-blur-2xl px-6 py-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+          {!isAuthenticated ? (
+            <>
+              <Link to="/" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2">Home</Link>
+              <Link to="/about" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2">About Us</Link>
+              <a href="/#features" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2">Features</a>
+              <a href="/#interview-types" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2">Interview Modes</a>
+            </>
+          ) : user && (
+            <div className="space-y-2 py-1">
+              <Link to="/ai-interview" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2 border-b border-zinc-800/50">
+                <Sparkles className="size-4 text-purple-400" /> Mock Interview
+              </Link>
+              <Link to="/group-discussion" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2 border-b border-zinc-800/50">
+                <Users className="size-4 text-pink-400" /> Group Discussion
+              </Link>
+              <Link to={`/${user.id}/coding`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2 border-b border-zinc-800/50">
+                <BookOpenCheck className="size-4 text-blue-400" /> Coding Practice
+              </Link>
+              <Link to={`/${user.id}/resume`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2 border-b border-zinc-800/50">
+                <FileText className="size-4 text-emerald-400" /> Resume Review
+              </Link>
+              <Link to="/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2">
+                <User className="size-4 text-zinc-400" /> Profile & Settings
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </header>
   );
 }
+

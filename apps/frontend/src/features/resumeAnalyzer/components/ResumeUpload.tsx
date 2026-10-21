@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from "react";
 import { useResumeStore } from "../state/useResumeStore";
 import { uploadResumeApi } from "../services/resumeAnalysisApi";
 import { Button } from "../../../components/ui/button";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { Upload, FileText, CheckCircle2, Loader2, Eye, X, FileSearch } from "lucide-react";
+
+import { getErrorMessage } from "../../../lib/utils";
 
 export function ResumeUpload() {
   const { resumeFile, uploadStatus, setResumeFile, setUploadStatus, setError } = useResumeStore();
@@ -27,16 +29,15 @@ export function ResumeUpload() {
     const ext = file.name.split(".").pop()?.toLowerCase();
 
     if (!validTypes.includes(file.type) && !["pdf", "docx", "doc", "txt"].includes(ext || "")) {
-      toast.error("Invalid file format. Please upload a PDF or DOCX resume.");
+      toast.error("Upload a PDF or DOCX file.");
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      toast.error("File size exceeds 10MB limit.");
+      toast.error("File size must be under 10 MB.");
       return;
     }
 
-    // Create local blob URL for instant PDF viewing
     if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
     const objectUrl = URL.createObjectURL(file);
     setLocalBlobUrl(objectUrl);
@@ -56,12 +57,12 @@ export function ResumeUpload() {
           structuredData: res.data.structuredData,
         });
         setUploadStatus("parsed");
-        toast.success("Resume parsed successfully!");
+        toast.success("Resume uploaded.");
       }
     } catch (err: any) {
       console.error("Upload error:", err);
       setUploadStatus("error");
-      const msg = err.response?.data?.message || "Failed to upload and parse resume.";
+      const msg = getErrorMessage(err, "Couldn't upload resume. Please try again.");
       setError(msg);
       toast.error(msg);
     }

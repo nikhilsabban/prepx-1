@@ -7,17 +7,32 @@
 
   html,
   body {
-    @apply m-0 min-h-screen min-w-[320px] bg-background text-foreground antialiased;
+    @apply m-0 min-h-screen min-w-[320px] bg-[#09090b] text-foreground antialiased selection:bg-indigo-500/30 selection:text-white;
   }
 
   #root {
-    @apply min-h-screen;
+    @apply min-h-screen flex flex-col;
   }
 }
 
+/* Glassmorphism & Surface Utilities */
+.prepx-card {
+  @apply rounded-2xl border border-zinc-800/80 bg-zinc-900/60 backdrop-blur-xl shadow-xl transition-all duration-200 hover:border-zinc-700/80;
+}
 
+.prepx-card-hover {
+  @apply hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-indigo-500/5;
+}
 
-/* Soft ambient background glow for the dark theme */
+.prepx-glow-blue {
+  background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15), transparent 70%);
+}
+
+.prepx-glow-purple {
+  background: radial-gradient(circle at 50% 0%, rgba(147, 51, 234, 0.15), transparent 70%);
+}
+
+/* Soft ambient background glow for dark theme */
 body::before {
   content: "";
   position: fixed;
@@ -25,16 +40,19 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60% 50% at 20% 0%, oklch(0.488 0.243 264.376 / 0.18), transparent 70%),
-    radial-gradient(50% 50% at 90% 10%, oklch(0.696 0.17 162.48 / 0.12), transparent 70%),
-    radial-gradient(60% 60% at 50% 100%, oklch(0.627 0.265 303.9 / 0.1), transparent 70%);
+    radial-gradient(60% 50% at 20% 0%, oklch(0.488 0.243 264.376 / 0.14), transparent 70%),
+    radial-gradient(50% 50% at 90% 10%, oklch(0.696 0.17 162.48 / 0.10), transparent 70%),
+    radial-gradient(60% 60% at 50% 100%, oklch(0.627 0.265 303.9 / 0.08), transparent 70%);
 }
 
-@media (prefers-reduced-motion) {
+@media (prefers-reduced-motion: reduce) {
   *,
   ::before,
   ::after {
-    animation: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -43,4 +61,5 @@ body::before {
     transform: translateX(100%);
   }
 }
+
 

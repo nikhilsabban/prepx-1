@@ -16,8 +16,6 @@ import {
   linkedinLogin as linkedinLoginApi,
   sendEmailOtp as sendEmailOtpApi,
   verifyEmailOtp as verifyEmailOtpApi,
-  sendPhoneOtp as sendPhoneOtpApi,
-  verifyPhoneOtp as verifyPhoneOtpApi,
 } from "../services/authService";
 
 interface AuthContextType {
@@ -31,8 +29,6 @@ interface AuthContextType {
   linkedinLogin: (code: string, redirectUri: string) => Promise<UserProfile | undefined>;
   sendEmailOtp: (email: string) => Promise<{ success: boolean; message: string; dev_otp?: string }>;
   verifyEmailOtp: (email: string, otp: string) => Promise<UserProfile | undefined>;
-  sendPhoneOtp: (phone: string) => Promise<{ success: boolean; message: string; dev_otp?: string }>;
-  verifyPhoneOtp: (phone: string, otp: string) => Promise<UserProfile | undefined>;
   signup: (data: SignupData) => Promise<UserProfile | undefined>;
   logout: () => Promise<void>;
   updateUser: (data: UpdateProfileData) => Promise<void>;
@@ -159,37 +155,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function sendPhoneOtp(phone: string) {
-    return await sendPhoneOtpApi(phone);
-  }
-
-  async function verifyPhoneOtp(phone: string, otp: string) {
-    setIsLoading(true);
-    try {
-      const response = await verifyPhoneOtpApi(phone, otp);
-      if (response.token && response.user) {
-        localStorage.setItem("token", response.token);
-        localStorage.setItem("user", JSON.stringify(response.user));
-        setToken(response.token);
-        setUser(response.user);
-        return response.user;
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
   async function signup(data: SignupData) {
     setIsLoading(true);
     try {
       const response = await signupUser(data);
-      if (response.token && response.user) {
-        localStorage.setItem("token", response.token);
-        localStorage.setItem("user", JSON.stringify(response.user));
-        setToken(response.token);
-        setUser(response.user);
-        return response.user;
-      }
+      // Do not store token or auto-login unverified accounts upon signup
+      return response.user;
     } finally {
       setIsLoading(false);
     }
@@ -242,8 +213,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         linkedinLogin,
         sendEmailOtp,
         verifyEmailOtp,
-        sendPhoneOtp,
-        verifyPhoneOtp,
         signup,
         logout,
         updateUser,

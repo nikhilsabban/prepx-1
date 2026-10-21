@@ -21,7 +21,8 @@ import { PrivacyPolicy } from "./pages/PrivacyPolicy";
 import { TermsAndConditions } from "./pages/TermsAndConditions";
 import { AIInterview } from "./pages/AIInterview";
 import { GoogleOAuthProvider } from "@react-oauth/google";
-import { Toaster } from "sonner";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 import { HistoryPage } from "./pages/HistoryPage";
 import { AboutUs } from "./pages/AboutUs";
@@ -29,10 +30,14 @@ import { SkeletonPage } from "./components/ui/skeleton";
 import { ResumeAnalyzerPage } from "./pages/ResumeAnalyzerPage";
 
 import { BookmarksPage } from "./pages/BookmarksPage";
-import { CodingDashboardPage } from "./modules/coding/pages/CodingDashboardPage";
-import { ProblemListPage } from "./modules/coding/pages/ProblemListPage";
-import { ProblemDetailPage } from "./modules/coding/pages/ProblemDetailPage";
-import { LeaderboardPage } from "./modules/coding/pages/LeaderboardPage";
+import { CodingProblemsPage } from "./pages/coding/CodingProblemsPage";
+import { CodingSolvePage } from "./pages/coding/CodingSolvePage";
+import { CodingLeaderboardPage } from "./pages/coding/CodingLeaderboardPage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
+import { VerifyEmailPendingPage } from "./pages/VerifyEmailPendingPage";
+import { GDHubPage } from "./pages/gd/GDHubPage";
+import { GDRoomPage } from "./pages/gd/GDRoomPage";
+import { GDResultPage } from "./pages/gd/GDResultPage";
 
 export function App() {
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -51,6 +56,8 @@ export function App() {
                   <Route path="/about" element={<AboutUs />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/signup" element={<Signup />} />
+                  <Route path="/verify-email" element={<VerifyEmailPage />} />
+                  <Route path="/verify-email-pending" element={<VerifyEmailPendingPage />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/reset-password/:token" element={<ResetPassword />} />
@@ -100,7 +107,7 @@ export function App() {
                     path="/coding"
                     element={
                       <ProtectedRoute>
-                        <CodingDashboardPage />
+                        <CodingProblemsPage />
                       </ProtectedRoute>
                     }
                   />
@@ -108,7 +115,7 @@ export function App() {
                     path="/coding/problems"
                     element={
                       <ProtectedRoute>
-                        <ProblemListPage />
+                        <CodingProblemsPage />
                       </ProtectedRoute>
                     }
                   />
@@ -116,7 +123,7 @@ export function App() {
                     path="/coding/problem/:slug"
                     element={
                       <ProtectedRoute>
-                        <ProblemDetailPage />
+                        <CodingSolvePage />
                       </ProtectedRoute>
                     }
                   />
@@ -124,7 +131,7 @@ export function App() {
                     path="/coding/leaderboard"
                     element={
                       <ProtectedRoute>
-                        <LeaderboardPage />
+                        <CodingLeaderboardPage />
                       </ProtectedRoute>
                     }
                   />
@@ -132,7 +139,7 @@ export function App() {
                     path="/:userId/coding"
                     element={
                       <ProtectedRoute>
-                        <CodingDashboardPage />
+                        <CodingProblemsPage />
                       </ProtectedRoute>
                     }
                   />
@@ -141,6 +148,14 @@ export function App() {
                     element={
                       <ProtectedRoute>
                         <ResumeAnalyzerPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/history"
+                    element={
+                      <ProtectedRoute>
+                        <HistoryPage />
                       </ProtectedRoute>
                     }
                   />
@@ -160,11 +175,70 @@ export function App() {
                       </ProtectedRoute>
                     }
                   />
+                  <Route
+                    path="/group-discussion"
+                    element={
+                      <ProtectedRoute>
+                        <GDHubPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/:userId/group-discussion"
+                    element={
+                      <ProtectedRoute>
+                        <GDHubPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/group-discussion/result/:sessionId"
+                    element={
+                      <ProtectedRoute>
+                        <GDResultPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/:userId/group-discussion/result/:sessionId"
+                    element={
+                      <ProtectedRoute>
+                        <GDResultPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/group-discussion/:sessionId"
+                    element={
+                      <ProtectedRoute>
+                        <GDRoomPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/:userId/group-discussion/:sessionId"
+                    element={
+                      <ProtectedRoute>
+                        <GDRoomPage />
+                      </ProtectedRoute>
+                    }
+                  />
                 </Routes>
               </Suspense>
             </div>
             <Footer />
-            <Toaster richColors position="top-right" theme="dark" />
+            <ToastContainer
+              position="top-right"
+              autoClose={2000}
+              hideProgressBar={false}
+              newestOnTop={false}
+              closeOnClick
+              rtl={false}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+              theme="dark"
+            />
           </div>
         </BrowserRouter>
       </AuthProvider>

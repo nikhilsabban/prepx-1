@@ -4,9 +4,11 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { Loader2, Mail, Youtube, Twitter, Linkedin, Github } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
+
+import { getErrorMessage } from "../lib/utils";
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -31,22 +33,6 @@ export function Login() {
     return () => window.removeEventListener("mousemove", updateMousePosition);
   }, []);
 
-  // Instant zero-flash redirect for logged-in users (after all hooks)
-  if (isAuthenticated && user?.id) {
-    return <Navigate to={`/${user.id}`} replace />;
-  }
-
-  if (isLoading && token) {
-    return null;
-  }
-
-  const handleGithubLogin = () => {
-    // @ts-ignore
-    const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID || "MOCK_GITHUB_CLIENT_ID";
-    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&state=github&scope=user:email`;
-  };
-
-  // Countdown timer effect for Resend OTP (120 seconds = 2 minutes)
   useEffect(() => {
     let interval: any = null;
     if (otpSent && resendTimer > 0) {
@@ -60,6 +46,20 @@ export function Login() {
       if (interval) clearInterval(interval);
     };
   }, [otpSent, resendTimer]);
+
+  if (isAuthenticated && user?.id) {
+    return <Navigate to={`/${user.id}`} replace />;
+  }
+
+  if (isLoading && token) {
+    return null;
+  }
+
+  const handleGithubLogin = () => {
+    // @ts-ignore
+    const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID || "MOCK_GITHUB_CLIENT_ID";
+    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&state=github&scope=user:email`;
+  };
 
   const handleMethodChange = (method: LoginMethod) => {
     setLoginMethod(method);
@@ -75,17 +75,17 @@ export function Login() {
 
   async function handleSendEmailOtp() {
     if (!email.trim()) {
-      toast.error("Please enter your email address.");
+      toast.error("Enter your email address.");
       return;
     }
     setLoading(true);
     try {
       await sendEmailOtp(email.trim());
-      toast.success(`OTP sent to ${email.trim()}! Check your inbox.`);
+      toast.success("Verification code sent. Check your inbox.");
       setOtpSent(true);
-      setResendTimer(120); // 2 minutes countdown
+      setResendTimer(120);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to send OTP.");
+      toast.error(getErrorMessage(error, "Couldn't send code. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -93,20 +93,20 @@ export function Login() {
 
   async function handleVerifyEmailOtp() {
     if (!otp.trim()) {
-      toast.error("Please enter the 6-digit OTP code.");
+      toast.error("Enter the 6-digit code.");
       return;
     }
     setLoading(true);
     try {
       const loggedUser = await verifyEmailOtp(email.trim(), otp.trim());
-      toast.success("Successfully logged in with Email OTP!");
+      toast.success("Signed in successfully.");
       if (loggedUser?.id) {
         navigate(`/${loggedUser.id}`, { replace: true });
       } else {
         navigate("/", { replace: true });
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Invalid or expired OTP code.");
+      toast.error(getErrorMessage(error, "That code doesn't look right. Try again."));
     } finally {
       setLoading(false);
     }
@@ -125,14 +125,14 @@ export function Login() {
     }
 
     if (!email.trim() || !password) {
-      toast.error("Please fill in both email and password.");
+      toast.error("Please enter your email address and password.");
       return;
     }
 
     setLoading(true);
     try {
       const loggedUser = await login({ email: email.trim(), password });
-      toast.success("Welcome back! You are now logged in.");
+      toast.success("Welcome back! Excited to have you here.");
       
       if (loggedUser?.id) {
         navigate(`/${loggedUser.id}`, { replace: true });
@@ -140,8 +140,13 @@ export function Login() {
         navigate("/", { replace: true });
       }
     } catch (error: any) {
-      const msg = error.response?.data?.message || "Invalid credentials. Please try again.";
-      toast.error(msg);
+      if (error.response?.status === 403 || error.response?.data?.requiresVerification) {
+        toast.warn(error.response?.data?.message || "Please verify your Gmail address before logging in. Check your inbox for the verification link.");
+      } else if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error(getErrorMessage(error, "Email or password is wrong. Please verify it and try again."));
+      }
     } finally {
       setLoading(false);
     }

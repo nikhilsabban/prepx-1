@@ -4,14 +4,14 @@ import { Bot, Loader2, PhoneOff, User, Send, Volume2, MessageSquareText, Mic, Mi
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { VoiceOrb } from "./VoiceOrb";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import {
   fetchDeepgramKey,
   initiateInterviewSession,
   sendUserSpeechAndGetResponse,
-  correctTranscript,
   type VoiceResponse,
 } from "../services/interviewService";
+import { getErrorMessage } from "../lib/utils";
 
 type Status = "connecting" | "live" | "ending";
 
@@ -55,8 +55,6 @@ export function Interview() {
   // Live interim transcript shown while student is still speaking (not yet committed)
   const [interimTranscript, setInterimTranscript] = useState("");
   const [isProcessingResponse, setIsProcessingResponse] = useState(false);
-  // True while the AI correction pass is running (brief, before submit)
-  const [isCorrectingTranscript, setIsCorrectingTranscript] = useState(false);
   const [chatLogs, setChatLogs] = useState<ChatTurn[]>([]);
   const [isMicActive, setIsMicActive] = useState(true);
 
@@ -290,7 +288,13 @@ export function Interview() {
         if (cancelled) return;
 
         setStatus("live");
-        if (initData.aiMessage) {
+        if (initData.history && initData.history.length > 0) {
+          setChatLogs(initData.history);
+          if (initData.aiMessage) {
+            setCurrentAiText(initData.aiMessage);
+            playAudioOrSpeakText(initData.aiMessage, initData.audioBase64);
+          }
+        } else if (initData.aiMessage) {
           setCurrentAiText(initData.aiMessage);
           addChatTurn("ai", initData.aiMessage);
           playAudioOrSpeakText(initData.aiMessage, initData.audioBase64);
@@ -304,7 +308,7 @@ export function Interview() {
         rafRef.current = requestAnimationFrame(tick);
       } catch (err: any) {
         console.error("Interview initialization error:", err);
-        toast.error("Failed to initialize voice session.");
+        toast.error(getErrorMessage(err, "Couldn't start voice session. Please try again."));
       }
     })();
 
@@ -324,12 +328,12 @@ export function Interview() {
         } catch (e) {}
         recognitionRef.current = null;
       }
-      toast.info("Microphone paused.");
+      toast.info("Microphone muted.");
     } else {
       isListeningRef.current = true;
       setIsMicActive(true);
       startNativeSpeechRecognition();
-      toast.success("Microphone listening active.");
+      toast.success("Microphone active.");
     }
   }
 
@@ -516,19 +520,9 @@ export function Interview() {
   function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault();
     const fullText = [textInput, interimTranscript].filter(Boolean).join(" ").trim();
-    if (!fullText || isProcessingResponse || isCorrectingTranscript) return;
+    if (!fullText || isProcessingResponse) return;
 
-    // Run AI correction then submit
-    setIsCorrectingTranscript(true);
-    correctTranscript(fullText).then((corrected) => {
-      setIsCorrectingTranscript(false);
-      // Show corrected text in the box briefly before sending
-      if (corrected !== fullText) {
-        setTextInput(corrected);
-        toast.success(`Auto-corrected: "${fullText}" → "${corrected}"`, { duration: 3000 });
-      }
-      handleUserSpeechFinal(corrected);
-    });
+    handleUserSpeechFinal(fullText);
   }
 
   function clearTextInput() {
@@ -720,21 +714,17 @@ export function Interview() {
                         }
                       }}
                       placeholder={
-                        isCorrectingTranscript
-                          ? "Correcting transcript…"
-                          : isProcessingResponse
+                        isProcessingResponse
                           ? "AI is thinking…"
                           : isMicActive
                           ? "Speak or type your answer…"
                           : "Type your answer… (Enter to send)"
                       }
-                      disabled={isProcessingResponse || isCorrectingTranscript}
+                      disabled={isProcessingResponse}
                       rows={1}
                       className={
                         "w-full resize-none overflow-hidden min-h-9 px-3 py-2 rounded-lg border text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 disabled:opacity-70 disabled:cursor-not-allowed leading-relaxed pr-7 transition-all duration-200 bg-transparent " +
-                        (isCorrectingTranscript
-                          ? "border-violet-500/50 ring-2 ring-violet-500/20 bg-violet-950/10"
-                          : isMicActive && !isProcessingResponse
+                        (isMicActive && !isProcessingResponse
                           ? "border-emerald-500/40 focus:ring-emerald-500/20 focus:border-emerald-500/60 bg-emerald-950/10"
                           : "border-border/50 focus:ring-violet-500/30 focus:border-violet-500/40")
                       }
@@ -772,11 +762,11 @@ export function Interview() {
                   {/* Send */}
                   <button
                     type="submit"
-                    disabled={isProcessingResponse || isCorrectingTranscript || (!textInput.trim() && !interimTranscript.trim())}
-                    title={isCorrectingTranscript ? "Correcting…" : "Send answer"}
+                    disabled={isProcessingResponse || (!textInput.trim() && !interimTranscript.trim())}
+                    title="Send answer"
                     className="shrink-0 flex items-center justify-center size-9 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-35 disabled:cursor-not-allowed text-white transition-all duration-200 shadow-lg shadow-violet-900/30 mt-0.5"
                   >
-                    {isProcessingResponse || isCorrectingTranscript
+                    {isProcessingResponse
                       ? <Loader2 className="size-4 animate-spin" />
                       : <Send className="size-4" />}
                   </button>

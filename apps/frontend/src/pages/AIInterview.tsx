@@ -6,7 +6,7 @@ import { startInterview } from "../services/interviewService";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import {
   Github,
   Loader2,
@@ -26,11 +26,13 @@ import {
 
 import { GLOBAL_JOB_ROLES } from "../constants/jobRoles";
 
+import { getErrorMessage } from "../lib/utils";
+
 const tips = [
-  { icon: Mic, label: "Speak naturally", desc: "AI listens and responds in real-time" },
-  { icon: BarChart3, label: "Instant feedback", desc: "Get scored on clarity, depth & confidence" },
-  { icon: Brain, label: "Adaptive questions", desc: "Tailored to your role, repo, or job description" },
-  { icon: Clock, label: "~15–20 min", desc: "A focused, structured voice interview session" },
+  { icon: Mic, label: "Speak naturally", desc: "Listen and answer standard technical questions" },
+  { icon: BarChart3, label: "Performance feedback", desc: "Get scored on technical depth and communication" },
+  { icon: Brain, label: "Role-specific questions", desc: "Questions tailored to your role, repo, or JD" },
+  { icon: Clock, label: "~15–20 min", desc: "A focused, structured practice session" },
 ];
 
 export function AIInterview() {
@@ -52,20 +54,20 @@ export function AIInterview() {
   const handleStartInterview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!interviewTitle.trim()) {
-      toast.error("Please enter an Interview Name / Title.");
+      toast.error("Enter an interview title.");
       return;
     }
 
     if (mode === "github" && !githubUrl.trim()) {
-      toast.error("Please enter a valid GitHub repository URL.");
+      toast.error("Enter a GitHub repository URL.");
       return;
     }
     if (mode === "role" && !targetRole.trim()) {
-      toast.error("Please enter or select a Target Role.");
+      toast.error("Select or enter a target role.");
       return;
     }
     if (mode === "jd" && !jobDescription.trim()) {
-      toast.error("Please paste the Job Description text.");
+      toast.error("Paste the job description text.");
       return;
     }
 
@@ -80,10 +82,10 @@ export function AIInterview() {
         difficulty,
       });
 
-      toast.success(`Starting ${difficulty} level ${mode.toUpperCase()} interview…`);
+      toast.success("Starting interview...");
       navigate(`/interview/${id}`);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to start interview");
+      toast.error(getErrorMessage(error, "Couldn't start interview. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -125,13 +127,13 @@ export function AIInterview() {
         >
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold uppercase tracking-wider mb-4">
             <Sparkles className="size-3.5" />
-            AI Mock Interview
+            Mock Interview Setup
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-            Hey {firstName}, ready to practice? 👋
+            Hey {firstName}, ready to practice?
           </h1>
           <p className="mt-2 text-zinc-400 text-base max-w-2xl">
-            Select your preferred interview mode below. You can base your session on a GitHub repository, a target job role, or a customized Job Description.
+            Choose an interview mode below to start your mock interview session.
           </p>
         </motion.div>
 

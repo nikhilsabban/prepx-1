@@ -9,7 +9,7 @@ import { useAuth } from "../context/AuthContext";
 export function Result() {
     const { interviewId } = useParams();
     const navigate = useNavigate();
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const [result, setResult] = useState<ResultResponse>({
         score: 0,
         feedback: "",
@@ -46,9 +46,9 @@ export function Result() {
         <main className="mx-auto min-h-[calc(100vh-4rem)] w-full max-w-3xl px-6 py-10">
             <header className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground">Interview Evaluation</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-foreground">Interview Results</h1>
                     <p className="mt-1 text-xs text-muted-foreground">
-                        Your performance feedback, score, and full conversational transcript.
+                        Your score, feedback, and question breakdown.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -56,11 +56,11 @@ export function Result() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => navigate("/profile")}
-                            className="gap-1.5 text-xs border-border/80"
+                            onClick={() => navigate(user?.id ? `/${user.id}/history` : "/history")}
+                            className="gap-1.5 text-xs border-border/80 cursor-pointer"
                         >
                             <History className="size-3.5" />
-                            My History
+                            Interview History
                         </Button>
                     )}
                     <Button
@@ -69,7 +69,7 @@ export function Result() {
                         className="gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white"
                     >
                         <ArrowLeft className="size-3.5" />
-                        New Interview
+                        Start New Interview
                     </Button>
                 </div>
             </header>
@@ -78,9 +78,9 @@ export function Result() {
                 <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-border bg-card/50 py-20 text-center shadow-lg backdrop-blur">
                     <Loader2 className="size-8 animate-spin text-violet-500" />
                     <div>
-                        <p className="text-base font-semibold text-foreground">Evaluating your interview…</p>
+                        <p className="text-base font-semibold text-foreground">Reviewing your interview...</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                            Analyzing technical responses and generating feedback.
+                            Preparing your scores and feedback.
                         </p>
                     </div>
                 </div>
@@ -91,7 +91,7 @@ export function Result() {
                         <div className="flex items-start justify-between gap-6 border-b border-border/60 pb-5">
                             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                                 <Sparkles className="size-4 text-violet-400" />
-                                AI Evaluator Feedback
+                                Performance Summary
                             </div>
                             <div className="flex shrink-0 items-baseline gap-1 bg-violet-500/10 px-3 py-1 rounded-xl border border-violet-500/20">
                                 <span className="text-2xl font-black tracking-tight text-violet-300">

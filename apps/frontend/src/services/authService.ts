@@ -1,6 +1,7 @@
 import api from "./api";
 
 export interface SignupData {
+  username: string;
   fullName: string;
   email: string;
   password: string;
@@ -130,16 +131,6 @@ export async function sendEmailOtp(email: string): Promise<{ success: boolean; m
 
 export async function verifyEmailOtp(email: string, otp: string): Promise<AuthResponse> {
   const response = await api.post<AuthResponse>("/api/auth/verify-email-otp", { email, otp });
-  return response.data;
-}
-
-export async function sendPhoneOtp(phone: string): Promise<{ success: boolean; message: string; dev_otp?: string }> {
-  const response = await api.post<{ success: boolean; message: string; dev_otp?: string }>("/api/auth/send-phone-otp", { phone });
-  return response.data;
-}
-
-export async function verifyPhoneOtp(phone: string, otp: string): Promise<AuthResponse> {
-  const response = await api.post<AuthResponse>("/api/auth/verify-phone-otp", { phone, otp });
   return response.data;
 }
 

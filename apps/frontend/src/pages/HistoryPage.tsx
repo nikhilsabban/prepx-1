@@ -3,15 +3,21 @@ import { Link, useNavigate } from "react-router";
 import { fetchMyInterviews, toggleBookmarkApi, type InterviewRecord } from "../services/interviewService";
 import { 
   History, CheckCircle2, Clock, Award, ArrowRight, Play, 
-  BarChart3, Loader2, Sparkles, AlertCircle, Bookmark, BookmarkCheck 
+  BarChart3, Loader2, Sparkles, AlertCircle, Bookmark, BookmarkCheck,
+  ChevronDown, MessageSquare, Bot, User
 } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 
 export function HistoryPage() {
   const [interviews, setInterviews] = useState<InterviewRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedInterviewIds, setExpandedInterviewIds] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
+
+  const toggleExpand = (id: string) => {
+    setExpandedInterviewIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   useEffect(() => {
     async function loadHistory() {
@@ -123,95 +129,178 @@ export function HistoryPage() {
               return (
                 <div
                   key={item._id}
-                  className={`p-6 rounded-2xl bg-[#0D0D14] border transition-all flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-zinc-700 shadow-md ${
+                  className={`p-6 rounded-2xl bg-[#0D0D14] border transition-all flex flex-col gap-5 hover:border-zinc-700 shadow-md ${
                     isDone ? "border-zinc-800/80" : "border-amber-500/30 bg-gradient-to-r from-[#0D0D14] via-[#12100E] to-[#0D0D14]"
                   }`}
                 >
-                  {/* Left Metadata Info */}
-                  <div className="space-y-2.5 flex-1">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          isDone
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                            : "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
-                        }`}
-                      >
-                        {isDone ? (
-                          <>
-                            <CheckCircle2 className="size-3.5" />
-                            Finished & Analyzed
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="size-3.5" />
-                            In Progress (Left Unfinished)
-                          </>
-                        )}
-                      </span>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    {/* Left Metadata Info */}
+                    <div className="space-y-2.5 flex-1">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            isDone
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
+                          }`}
+                        >
+                          {isDone ? (
+                            <>
+                              <CheckCircle2 className="size-3.5" />
+                              Finished & Analyzed
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="size-3.5" />
+                              In Progress (Left Unfinished)
+                            </>
+                          )}
+                        </span>
 
-                      <span className="text-xs text-zinc-500 font-mono">
-                        ID: #{item._id.slice(-6)} • {dateStr} at {timeStr}
-                      </span>
+                        <span className="text-xs text-zinc-500 font-mono">
+                          ID: #{item._id.slice(-6)} • {dateStr} at {timeStr}
+                        </span>
 
-                      <button
-                        onClick={() => handleToggleBookmark(item._id)}
-                        className="ml-auto p-1.5 rounded-lg text-purple-400 hover:bg-purple-500/10 transition-colors cursor-pointer"
-                        title={item.isBookmarked ? "Remove bookmark" : "Bookmark this practice session"}
-                      >
-                        {item.isBookmarked ? (
-                          <BookmarkCheck className="size-4 fill-purple-400" />
-                        ) : (
-                          <Bookmark className="size-4 text-zinc-400 hover:text-purple-400" />
+                        <button
+                          onClick={() => handleToggleBookmark(item._id)}
+                          className="ml-auto p-1.5 rounded-lg text-purple-400 hover:bg-purple-500/10 transition-colors cursor-pointer"
+                          title={item.isBookmarked ? "Remove bookmark" : "Bookmark this practice session"}
+                        >
+                          {item.isBookmarked ? (
+                            <BookmarkCheck className="size-4 fill-purple-400" />
+                          ) : (
+                            <Bookmark className="size-4 text-zinc-400 hover:text-purple-400" />
+                          )}
+                        </button>
+                      </div>
+
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        {item.title || item.githubMetadata?.[0]?.name || item.githubMetadata?.repoName || "AI Technical Interview"}
+                        {item.difficulty && (
+                          <span className="text-[10px] px-2 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-300 font-semibold">
+                            {item.difficulty}
+                          </span>
                         )}
-                      </button>
+                      </h3>
+
+                      {item.feedback ? (
+                        <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed max-w-2xl">
+                          {item.feedback}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-amber-300/80 flex items-center gap-1.5">
+                          <AlertCircle className="size-3.5" />
+                          Session was interrupted. You can resume this interview from where you left off!
+                        </p>
+                      )}
                     </div>
 
-                    <h3 className="text-base font-bold text-white flex items-center gap-2">
-                      {item.title || item.githubMetadata?.[0]?.name || item.githubMetadata?.repoName || "AI Technical Interview"}
-                      {item.difficulty && (
-                        <span className="text-[10px] px-2 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-300 font-semibold">
-                          {item.difficulty}
-                        </span>
+                    {/* Right Score & Actions */}
+                    <div className="flex items-center justify-between md:justify-end gap-5 border-t md:border-t-0 pt-4 md:pt-0 border-zinc-800/60 shrink-0">
+                      {isDone && (
+                        <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 rounded-xl">
+                          <Award className="size-4 text-emerald-400" />
+                          <div>
+                            <div className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Score</div>
+                            <div className="text-sm font-extrabold text-white">{item.score} / 10</div>
+                          </div>
+                        </div>
                       )}
-                    </h3>
 
-                    {item.feedback ? (
-                      <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed max-w-2xl">
-                        {item.feedback}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-amber-300/80 flex items-center gap-1.5">
-                        <AlertCircle className="size-3.5" />
-                        Session was interrupted. You can resume this interview from where you left off!
-                      </p>
-                    )}
+                      {isDone ? (
+                        <Link to={`/result/${item._id}`}>
+                          <Button className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-semibold h-10 px-4 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+                            <BarChart3 className="size-4" /> View Full Analytics <ArrowRight className="size-3.5" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Link to={`/interview/${item._id}`}>
+                          <Button className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs h-10 px-5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20">
+                            <Play className="size-3.5 fill-white" /> Resume Interview <ArrowRight className="size-3.5" />
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Right Score & Actions */}
-                  <div className="flex items-center justify-between md:justify-end gap-5 border-t md:border-t-0 pt-4 md:pt-0 border-zinc-800/60 shrink-0">
-                    {isDone && (
-                      <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 rounded-xl">
-                        <Award className="size-4 text-emerald-400" />
-                        <div>
-                          <div className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Score</div>
-                          <div className="text-sm font-extrabold text-white">{item.score} / 10</div>
-                        </div>
-                      </div>
-                    )}
+                  {/* Toggle Questions & Responses Section */}
+                  <div className="border-t border-zinc-800/80 pt-3">
+                    <button
+                      onClick={() => toggleExpand(item._id)}
+                      className="inline-flex items-center gap-2 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                    >
+                      <MessageSquare className="size-3.5" />
+                      <span>
+                        {expandedInterviewIds[item._id] ? "Hide" : "View"} Questions & Responses ({item.messages?.length || 0})
+                      </span>
+                      <ChevronDown
+                        className={`size-3.5 transition-transform duration-200 ${
+                          expandedInterviewIds[item._id] ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
 
-                    {isDone ? (
-                      <Link to={`/result/${item._id}`}>
-                        <Button className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-semibold h-10 px-4 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-                          <BarChart3 className="size-4" /> View Full Analytics <ArrowRight className="size-3.5" />
-                        </Button>
-                      </Link>
-                    ) : (
-                      <Link to={`/interview/${item._id}`}>
-                        <Button className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs h-10 px-5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20">
-                          <Play className="size-3.5 fill-white" /> Resume Interview <ArrowRight className="size-3.5" />
-                        </Button>
-                      </Link>
+                    {expandedInterviewIds[item._id] && (
+                      <div className="mt-4 space-y-3 bg-[#08080C] rounded-xl p-4 border border-zinc-800/90 max-h-96 overflow-y-auto">
+                        {!item.messages || item.messages.length === 0 ? (
+                          <p className="text-xs text-zinc-500 italic py-2">
+                            No questions or responses recorded yet for this session.
+                          </p>
+                        ) : (
+                          item.messages.map((msg, index) => {
+                            const isAi = msg.type === "Assistant";
+                            const isLastAi = isAi && index === (item.messages?.findLastIndex?.((m) => m.type === "Assistant") ?? -1);
+                            const msgTime = new Date(msg.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            });
+
+                            return (
+                              <div
+                                key={msg.id || index}
+                                className={`p-3.5 rounded-xl border text-xs leading-relaxed space-y-1.5 ${
+                                  isAi
+                                    ? "bg-violet-950/20 border-violet-500/20 text-violet-100"
+                                    : "bg-emerald-950/20 border-emerald-500/20 text-emerald-100"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 font-bold text-[11px] uppercase tracking-wider">
+                                    {isAi ? (
+                                      <>
+                                        <Bot className="size-3 text-violet-400" />
+                                        <span className="text-violet-300">AI Interviewer</span>
+                                        {!isDone && isLastAi && (
+                                          <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold normal-case">
+                                            Where you left off
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <User className="size-3 text-emerald-400" />
+                                        <span className="text-emerald-300">Your Response</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-zinc-500">{msgTime}</span>
+                                </div>
+                                <p className="text-zinc-200">{msg.message}</p>
+                              </div>
+                            );
+                          })
+                        )}
+
+                        {!isDone && (
+                          <div className="pt-2 flex justify-end">
+                            <Link to={`/interview/${item._id}`}>
+                              <Button size="sm" className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold h-8 px-4 rounded-lg flex items-center gap-1.5">
+                                <Play className="size-3 fill-white" /> Resume From Here <ArrowRight className="size-3" />
+                              </Button>
+                            </Link>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

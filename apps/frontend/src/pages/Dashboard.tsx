@@ -4,12 +4,13 @@ import { useAuth } from "../context/AuthContext";
 import { 
   Sparkles, Code2, FileText, CheckCircle2, Home, GraduationCap, 
   BookOpenCheck, History, Bookmark, User, Play, ArrowRight, 
-  Flame, Award, Target, Clock, Plus, Zap, Activity
+  Flame, Award, Target, Clock, Plus, Zap, Activity, Users
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { startInterview, fetchMyInterviews, fetchBookmarksApi, toggleBookmarkApi, type InterviewRecord } from "../services/interviewService";
 import { fetchLeaderboardApi, type LeaderboardItem } from "../services/authService";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
+import { getErrorMessage } from "../lib/utils";
 
 export function Dashboard() {
   const { userId } = useParams();
@@ -69,7 +70,7 @@ export function Dashboard() {
   const handleStartQuickInterview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!repoUrl.trim()) {
-      toast.error("Please enter a valid GitHub repository URL");
+      toast.error("Enter a GitHub repository URL.");
       return;
     }
     setLoading(true);
@@ -79,10 +80,10 @@ export function Dashboard() {
         github: repoUrl.trim(),
         mode: "github",
       });
-      toast.success("Interview created successfully!");
+      toast.success("Interview started.");
       navigate(`/interview/${id}`);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to start interview");
+      toast.error(getErrorMessage(error, "Couldn't start interview. Try again."));
     } finally {
       setLoading(false);
     }
@@ -90,11 +91,12 @@ export function Dashboard() {
 
   const navItems = [
     { icon: Home, label: "Dashboard", href: `/${userId}` },
-    { icon: GraduationCap, label: "AI Interview", href: `/ai-interview` },
-    { icon: BookOpenCheck, label: "Coding Platform", href: `/${userId}/coding` },
-    { icon: FileText, label: "Resume Analyze", href: `/${userId}/resume` },
+    { icon: GraduationCap, label: "Mock Interview", href: `/ai-interview` },
+    { icon: Users, label: "Group Discussion", href: `/group-discussion` },
+    { icon: BookOpenCheck, label: "Coding Practice", href: `/${userId}/coding` },
+    { icon: FileText, label: "Resume Review", href: `/${userId}/resume` },
     { icon: History, label: "History", href: `/${userId}/history` },
-    { icon: Bookmark, label: "Bookmarks", href: `/${userId}/bookmarks` },
+    { icon: Bookmark, label: "Saved Items", href: `/${userId}/bookmarks` },
   ];
 
   return (
@@ -145,20 +147,20 @@ export function Dashboard() {
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider border border-blue-500/30">
                   <Flame className="size-3.5 fill-blue-400 text-blue-400" />
-                  Active Interview Session
+                  Placement Preparation
                 </div>
                 <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">
-                  Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">{firstName}</span>!
+                  Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">{firstName}</span>
                 </h1>
                 <p className="text-zinc-400 text-sm md:text-base max-w-xl">
-                  Ready to level up your technical career today? Launch an AI mock interview or practice coding challenges.
+                  Ready for another round? Start a mock interview, review your resume, or practice coding problems.
                 </p>
               </div>
 
               {/* Quick Action Button */}
               <Link to="/ai-interview">
                 <Button className="h-12 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer">
-                  <Play className="size-4 fill-white" /> Start New Interview
+                  <Play className="size-4 fill-white" /> Start interview
                 </Button>
               </Link>
             </div>
@@ -198,7 +200,7 @@ export function Dashboard() {
                 </div>
                 <div>
                   <div className="text-zinc-400 font-medium">Current Streak</div>
-                  <div className="text-base font-bold text-white">3 Days 🔥</div>
+                  <div className="text-base font-bold text-white">3 Days</div>
                 </div>
               </div>
             </div>
@@ -208,10 +210,10 @@ export function Dashboard() {
           <div className="p-6 md:p-8 rounded-3xl bg-[#0C0C12] border border-zinc-800 shadow-xl space-y-4">
             <div className="flex items-center gap-2">
               <Sparkles className="size-5 text-blue-400" />
-              <h2 className="text-lg font-bold text-white">Instant GitHub Repository Interview</h2>
+              <h2 className="text-lg font-bold text-white">Quick Practice with GitHub Repository</h2>
             </div>
             <p className="text-xs text-zinc-400">
-              Paste any public GitHub repository link below. prepX AI will immediately index your code and create a tailored technical interview session!
+              Paste a public GitHub repository link below to generate questions based on your project code.
             </p>
             <form onSubmit={handleStartQuickInterview} className="flex flex-col sm:flex-row gap-3 pt-2">
               <input
@@ -227,7 +229,7 @@ export function Dashboard() {
                 disabled={loading}
                 className="h-11 px-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all cursor-pointer shrink-0"
               >
-                {loading ? "Initializing..." : "Launch Interview"}
+                {loading ? "Preparing..." : "Start interview"}
               </Button>
             </form>
           </div>
@@ -239,7 +241,7 @@ export function Dashboard() {
               <span className="text-xs text-zinc-500">Choose your prep focus</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               
               {/* Card 1: AI Mock Interviews */}
               <div className="rounded-2xl bg-[#0D0D14] border border-zinc-800/80 p-6 flex flex-col justify-between hover:border-blue-500/40 transition-all group">
@@ -321,6 +323,34 @@ export function Dashboard() {
                 <Link to={`/${userId}/resume`} className="mt-6">
                   <Button className="w-full bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-semibold h-10 rounded-xl transition-all flex items-center justify-center gap-2">
                     Analyze Resume <ArrowRight className="size-3.5" />
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Card 4: AI Group Discussion */}
+              <div className="rounded-2xl bg-[#0D0D14] border border-zinc-800/80 p-6 flex flex-col justify-between hover:border-pink-500/40 transition-all group">
+                <div className="space-y-4">
+                  <div className="size-12 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Users className="size-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">AI Group Discussion</h3>
+                    <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                      Live 5-participant GD arena with automated web topic discovery, speaking metrics, and Groq evaluations.
+                    </p>
+                  </div>
+                  <div className="space-y-2 pt-2 text-xs text-zinc-300">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="size-3.5 text-emerald-400" /> Random Trending Web Topics
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="size-3.5 text-emerald-400" /> 5 Placement Criteria Rubric
+                    </div>
+                  </div>
+                </div>
+                <Link to="/group-discussion" className="mt-6">
+                  <Button className="w-full bg-pink-600/20 hover:bg-pink-600 text-pink-300 hover:text-white border border-pink-500/30 text-xs font-semibold h-10 rounded-xl transition-all flex items-center justify-center gap-2">
+                    Enter GD Arena <ArrowRight className="size-3.5" />
                   </Button>
                 </Link>
               </div>

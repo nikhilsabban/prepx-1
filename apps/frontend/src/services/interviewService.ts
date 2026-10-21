@@ -1,5 +1,12 @@
 import api from "./api";
 
+export interface InterviewMessage {
+  id: string;
+  type: "User" | "Assistant";
+  message: string;
+  createdAt: string;
+}
+
 export interface InterviewRecord {
   _id: string;
   title?: string;
@@ -13,6 +20,7 @@ export interface InterviewRecord {
   isBookmarked?: boolean;
   feedback?: string;
   createdAt: string;
+  messages?: InterviewMessage[];
 }
 
 export interface ResultResponse {
@@ -46,10 +54,19 @@ export interface ResultResponse {
   };
 }
 
+export interface VoiceHistoryTurn {
+  id: string;
+  sender: "ai" | "user";
+  text: string;
+  time: string;
+  audioBase64?: string | null;
+}
+
 export interface VoiceResponse {
   aiMessage: string;
   audioBase64?: string | null;
   contentType?: string;
+  history?: VoiceHistoryTurn[];
 }
 
 export async function startInterview(params: {

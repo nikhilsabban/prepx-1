@@ -5,7 +5,8 @@ import { useAuth } from "../context/AuthContext";
 import { startInterview } from "../services/interviewService";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
+import { getErrorMessage } from "../lib/utils";
 import { Mic, Target, Briefcase, GraduationCap, Building, Loader2, X, ChevronRight, BarChart3, Terminal, Sparkles } from "lucide-react";
 
 export function Form() {
@@ -15,15 +16,6 @@ export function Form() {
   const { isAuthenticated, user, isLoading, token } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Instant zero-flash redirect for logged-in users
-  if (isAuthenticated && user?.id) {
-    return <Navigate to={`/${user.id}`} replace />;
-  }
-
-  if (isLoading && token) {
-    return null;
-  }
 
   // Handle hash scrolling on mount
   useEffect(() => {
@@ -38,6 +30,15 @@ export function Form() {
     }
   }, [location]);
 
+  // Instant zero-flash redirect for logged-in users
+  if (isAuthenticated && user?.id) {
+    return <Navigate to={`/${user.id}`} replace />;
+  }
+
+  if (isLoading && token) {
+    return null;
+  }
+
   const handleStartInterview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAuthenticated) {
@@ -46,7 +47,7 @@ export function Form() {
       return;
     }
     if (!githubUrl.trim()) {
-      toast.error("Please enter a valid GitHub repository URL");
+      toast.error("Enter a GitHub repository URL.");
       return;
     }
     
@@ -57,10 +58,10 @@ export function Form() {
         github: githubUrl.trim(),
         mode: "github",
       });
-      toast.success("Interview created successfully!");
+      toast.success("Interview started.");
       navigate(`/interview/${id}`);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to start interview");
+      toast.error(getErrorMessage(error, "Couldn't start interview. Try again."));
     } finally {
       setLoading(false);
     }
@@ -86,21 +87,21 @@ export function Form() {
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-indigo-300 font-medium"
           >
-            <Sparkles className="size-4" /> AI-Powered Interview Practice
+            <Sparkles className="size-4" /> Placement Interview Practice
           </motion.div>
           
           <motion.h1 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
             className="text-5xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white to-zinc-400 max-w-4xl leading-tight"
           >
-            Ace Your Next Interview <br className="hidden md:block"/> with AI Mock Interviews
+            Practice Interviews <br className="hidden md:block"/> for Your Next Placement
           </motion.h1>
           
           <motion.p 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
             className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto leading-relaxed"
           >
-            Practice with a realistic AI interviewer that listens, responds in real-time, and helps you improve with personalized feedback.
+            Practice realistic mock interviews tailored to your target role, with real-time feedback on your performance.
           </motion.p>
           
           <motion.div 
@@ -108,7 +109,7 @@ export function Form() {
             className="flex flex-col sm:flex-row items-center gap-4 pt-4"
           >
             <Button onClick={() => navigate(isAuthenticated ? "/ai-interview" : "/login")} className="h-12 px-8 text-base font-semibold bg-white text-black hover:bg-zinc-200 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer">
-              Start Practicing Free <ChevronRight className="ml-1 size-4" />
+              Start interview <ChevronRight className="ml-1 size-4" />
             </Button>
             <a href="/#features">
               <Button variant="ghost" className="h-12 px-8 text-base font-semibold text-zinc-300 hover:text-white rounded-xl hover:bg-white/5 transition-all">

@@ -105,9 +105,9 @@ export function AboutUs() {
               <div className="size-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
                 <ShieldCheck className="size-5" />
               </div>
-              <h3 className="text-base font-semibold text-white">Anti-Cheating Device Guard</h3>
+              <h3 className="text-base font-semibold text-white">Multi-Device Access</h3>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Secures active sessions with single-device enforcement to guarantee authentic candidate evaluations.
+                Log in seamlessly across multiple mobile devices, tablets, and desktop workstations simultaneously.
               </p>
             </div>
 

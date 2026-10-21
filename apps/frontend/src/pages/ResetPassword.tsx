@@ -3,9 +3,11 @@ import { Link, useNavigate, useParams } from "react-router";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { Loader2 } from "lucide-react";
 import { resetPassword } from "../services/authService";
+
+import { getErrorMessage } from "../lib/utils";
 
 export function ResetPassword() {
   const { token } = useParams<{ token: string }>();
@@ -17,25 +19,25 @@ export function ResetPassword() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
+      toast.error("Passwords don't match.");
       return;
     }
     if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+      toast.error("Password must be at least 6 characters.");
       return;
     }
     if (!token) {
-      toast.error("Invalid reset token");
+      toast.error("Reset link is invalid or expired.");
       return;
     }
 
     setLoading(true);
     try {
-      const response = await resetPassword(token, password);
-      toast.success(response.message || "Password successfully reset!");
+      await resetPassword(token, password);
+      toast.success("Password reset. Please sign in with your new password.");
       navigate("/login");
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to reset password");
+      toast.error(getErrorMessage(error, "Couldn't reset password. Please try again."));
     } finally {
       setLoading(false);
     }

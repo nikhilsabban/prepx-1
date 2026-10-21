@@ -5,7 +5,8 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { fetchMyInterviews, type InterviewRecord } from "../services/interviewService";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
+import { getErrorMessage } from "../lib/utils";
 import {
   User,
   Mail,
@@ -38,8 +39,12 @@ import { GLOBAL_COLLEGES } from "../constants/colleges";
 import { uploadAvatar } from "../services/authService";
 
 export function Profile() {
-  const { user, updateUser, changePassword, logout } = useAuth();
+  const { user, updateUser, changePassword, logout, refreshProfile } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    refreshProfile().catch((err) => console.warn("Failed to fetch fresh profile data:", err));
+  }, []);
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -88,6 +93,24 @@ export function Profile() {
     githubUrl: user?.githubUrl || "",
     phoneNumber: user?.phoneNumber || "",
   });
+
+  useEffect(() => {
+    if (user) {
+      setProfileForm({
+        username: user.username || "",
+        fullName: user.fullName || "",
+        college: user.college || "",
+        branch: user.branch || "",
+        degree: user.degree || "",
+        graduationYear: user.graduationYear ? String(user.graduationYear) : "",
+        cgpa: user.cgpa ? String(user.cgpa) : "",
+        profilePicture: user.profilePicture || "",
+        linkedinUrl: user.linkedinUrl || "",
+        githubUrl: user.githubUrl || "",
+        phoneNumber: user.phoneNumber || "",
+      });
+    }
+  }, [user]);
   const [showCollegeDropdown, setShowCollegeDropdown] = useState(false);
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
@@ -326,10 +349,9 @@ export function Profile() {
     setUpdatingProfile(true);
     try {
       await updateUser(profileForm);
-      toast.success("Profile updated successfully!");
+      toast.success("Profile updated.");
     } catch (error: any) {
-      const msg = error.response?.data?.message || "Failed to update profile.";
-      toast.error(msg);
+      toast.error(getErrorMessage(error, "Couldn't update profile. Please try again."));
     } finally {
       setUpdatingProfile(false);
     }
@@ -338,7 +360,7 @@ export function Profile() {
   async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!passwordForm.currentPassword || !passwordForm.newPassword) {
-      toast.error("Please enter both current and new password.");
+      toast.error("Enter your current and new password.");
       return;
     }
 
@@ -348,7 +370,7 @@ export function Profile() {
     }
 
     if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
-      toast.error("New passwords do not match.");
+      toast.error("New passwords don't match.");
       return;
     }
 
@@ -359,11 +381,10 @@ export function Profile() {
         newPassword: passwordForm.newPassword,
         confirmNewPassword: passwordForm.confirmNewPassword,
       });
-      toast.success("Password changed successfully!");
+      toast.success("Password changed.");
       setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
     } catch (error: any) {
-      const msg = error.response?.data?.message || "Failed to change password.";
-      toast.error(msg);
+      toast.error(getErrorMessage(error, "Couldn't change password. Please try again."));
     } finally {
       setUpdatingPassword(false);
     }
@@ -371,7 +392,7 @@ export function Profile() {
 
   async function handleLogout() {
     await logout();
-    toast.success("Logged out successfully");
+    toast.success("Signed out.");
     navigate("/");
   }
 
@@ -422,7 +443,7 @@ export function Profile() {
                   type="file"
                   ref={fileInputRef}
                   onChange={handleAvatarFileChange}
-                  accept="image/*"
+                  accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, image/svg+xml, image/*"
                   className="hidden"
                 />
                 {user.profilePicture ? (

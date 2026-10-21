@@ -4,13 +4,16 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 import { Loader2, Mail, Youtube, Twitter, Linkedin, Github, Sparkles } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
 import api from "../services/api";
 
+import { getErrorMessage } from "../lib/utils";
+
 export function Signup() {
   const [formData, setFormData] = useState({
+    username: "",
     fullName: "",
     email: "",
     password: "",
@@ -131,12 +134,10 @@ export function Signup() {
 
     setShowCollegeDropdown(true);
 
-    // Debounce fast DB lookup & background AI lookup
     debounceTimerRef.current = setTimeout(async () => {
       const query = val.trim();
       setSearchingCollege(true);
 
-      // Stage 1: Fast Database Search (<50ms)
       try {
         const dbRes = await api.get(`/api/auth/search-colleges-db?q=${encodeURIComponent(query)}`);
         if (dbRes.data?.success) {
@@ -146,7 +147,6 @@ export function Signup() {
         console.warn("College DB search error:", err);
       }
 
-      // Stage 2: Silent AI Recommendation Search in Background
       try {
         const aiRes = await api.get(`/api/auth/search-colleges-ai?q=${encodeURIComponent(query)}`);
         if (aiRes.data?.success) {
@@ -176,7 +176,6 @@ export function Signup() {
     return () => window.removeEventListener("mousemove", updateMousePosition);
   }, []);
 
-  // Instant zero-flash redirect for logged-in users (after all hooks)
   if (isAuthenticated && user?.id) {
     return <Navigate to={`/${user.id}`} replace />;
   }
@@ -198,24 +197,35 @@ export function Signup() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    if (!formData.username.trim()) {
+      toast.error("Please enter a unique username.");
+      return;
+    }
+
+    if (formData.username.trim().length < 3) {
+      toast.error("Username must be at least 3 characters long.");
+      return;
+    }
+
     if (!formData.fullName.trim() || !formData.email.trim() || !formData.password) {
-      toast.error("Full Name, Email, and Password are required.");
+      toast.error("Enter your full name, email, username, and password.");
       return;
     }
 
     if (formData.password.length < 6) {
-      toast.error("Password must be at least 6 characters long.");
+      toast.error("Password must be at least 6 characters.");
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match.");
+      toast.error("Passwords don't match.");
       return;
     }
 
     setLoading(true);
     try {
       const user = await signup({
+        username: formData.username.trim(),
         fullName: formData.fullName.trim(),
         email: formData.email.trim(),
         password: formData.password,
@@ -226,15 +236,10 @@ export function Signup() {
         graduationYear: formData.graduationYear.trim(),
         profilePicture: formData.profilePicture.trim(),
       });
-      toast.success("Account created successfully! Welcome aboard.");
-      if (user?.id) {
-        navigate(`/${user.id}`);
-      } else {
-        navigate("/");
-      }
+      toast.success("Account created! Please check your Gmail to verify your account.");
+      navigate(`/verify-email-pending?email=${encodeURIComponent(formData.email.trim())}`);
     } catch (error: any) {
-      const msg = error.response?.data?.message || "Failed to create account. Please try again.";
-      toast.error(msg);
+      toast.error(getErrorMessage(error, "Couldn't create your account. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -242,7 +247,6 @@ export function Signup() {
 
   return (
     <div className="min-h-screen bg-[#09090b] text-white flex flex-col font-sans overflow-x-hidden relative">
-      {/* Cursor spotlight effect */}
       <div
         className="pointer-events-none fixed inset-0 z-30 transition-opacity duration-300"
         style={{
@@ -254,12 +258,23 @@ export function Signup() {
         <div className="w-full max-w-xl bg-[#0F0F12] border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl relative">
           
           <div className="p-8 pb-6 text-center">
-            <h1 className="text-2xl font-bold text-white mb-2">Create Your <span className="text-[#2563EB]">prepX</span> Account</h1>
-            <p className="text-sm text-[#A3A3A3]">Join prepX to track your technical interviews.</p>
+            <h1 className="text-2xl font-bold text-white mb-2">Create your <span className="text-[#2563EB]">prepX</span> account</h1>
+            <p className="text-sm text-[#A3A3A3]">Start practicing mock interviews and preparing for placements.</p>
           </div>
 
           <div className="p-8 pt-2">
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="username" className="text-xs font-medium text-white">Username *</Label>
+                <Input
+                  id="username" name="username" type="text"
+                  placeholder="john_doe (unique handle)"
+                  value={formData.username} onChange={handleChange}
+                  disabled={loading} required
+                  className="bg-black border border-white/10 text-white focus-visible:ring-2 focus-visible:ring-[#2563EB] h-10 px-3 placeholder:text-zinc-500 rounded-md"
+                />
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="fullName" className="text-xs font-medium text-white">Full Name *</Label>
@@ -497,14 +512,27 @@ export function Signup() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="profilePicture" className="text-xs font-medium text-white">Profile Picture URL (Optional)</Label>
-                <Input
-                  id="profilePicture" name="profilePicture" type="url"
-                  placeholder="https://images.unsplash.com/... or avatar link"
-                  value={formData.profilePicture} onChange={handleChange}
-                  disabled={loading}
-                  className="bg-white text-black border-0 focus-visible:ring-2 focus-visible:ring-[#2563EB] h-10 px-3 placeholder:text-zinc-400"
-                />
+                <Label htmlFor="profilePicture" className="text-xs font-medium text-white">Profile Picture (Optional)</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="profilePicture" name="profilePicture" type="file" accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, image/svg+xml, image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setFormData(prev => ({ ...prev, profilePicture: reader.result as string }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    disabled={loading}
+                    className="bg-black/50 text-white border border-white/10 text-xs focus-visible:ring-2 focus-visible:ring-[#2563EB] h-10 px-3 cursor-pointer file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                  />
+                  {formData.profilePicture && (
+                    <img src={formData.profilePicture} alt="Preview" className="w-10 h-10 rounded-full object-cover border border-white/20" />
+                  )}
+                </div>
               </div>
 
               <Button
