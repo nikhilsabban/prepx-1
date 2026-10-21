@@ -9858,7 +9858,7 @@ app.use("/api/v1", interviewRoutes_default);
 app.use("/api/v1/resume-analysis", resumeAnalysisRoutes_default);
 app.use("/api/v1/coding", codingRoutes_default);
 app.use("/api/v1/gd", gdRoutes_default);
-app.get("/", (req, res) => {
+app.get(["/", "/api"], (req, res) => {
   res.json({
     status: "ok",
     message: "PrepX AI Placement & Coding Backend is running",
