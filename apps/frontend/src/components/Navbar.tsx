@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "./ui/button";
@@ -12,6 +12,24 @@ export function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Automatically close dropdown and mobile menu whenever route changes or user auth changes (login/logout)
+  useEffect(() => {
+    setDropdownOpen(false);
+    setMobileMenuOpen(false);
+  }, [location.pathname, user?.id, isAuthenticated]);
+
+  // Close on Escape key press
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setDropdownOpen(false);
+        setMobileMenuOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Show back arrow on all inner/protected pages except the user's own dashboard
   const noBackArrowPaths = ["/login", "/signup", "/auth/callback"];
   const isDashboard = user ? location.pathname === `/${user.id}` : false;
@@ -23,6 +41,7 @@ export function Navbar() {
     !location.pathname.startsWith("/reset-password");
 
   async function handleLogout() {
+    setDropdownOpen(false);
     await logout();
     toast.success("Signed out successfully");
     navigate("/");
