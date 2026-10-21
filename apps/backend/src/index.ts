@@ -24,7 +24,20 @@ if (!process.env.VERCEL) {
   });
 }
 
-// Middleware
+// Explicit CORS and preflight handling (crucial for Vercel Serverless Functions)
+app.use((req, res, next) => {
+  const origin = req.headers.origin || "*";
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+
 app.use(
   cors({
     origin: true,
@@ -33,7 +46,17 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   })
 );
-app.options("*", cors() as any);
+
+// Lazy-connect DB for serverless environments
+app.use(async (_req, _res, next) => {
+  try {
+    await connectDB();
+  } catch (err: any) {
+    console.warn("MongoDB connection warning in request middleware:", err.message);
+  }
+  next();
+});
+
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
 app.use(express.text({ type: ["application/sdp", "text/plain"], limit: "10mb" }));

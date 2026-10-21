@@ -5,18 +5,17 @@ dotenv.config();
 
 let cachedConn: typeof mongoose | null = null;
 
+const DEFAULT_MONGO_URI = "mongodb+srv://nikhilsabban56:ekbVqEywwnVnhhZg@cluster0.xxqun.mongodb.net/test?retryWrites=true&w=majority";
+
 export async function connectDB(): Promise<typeof mongoose> {
   if (cachedConn && mongoose.connection.readyState === 1) {
     return cachedConn;
   }
 
-  if (process.env.VERCEL && !process.env.MONGO_URI) {
-    console.warn("⚠️ MONGO_URI environment variable is missing on Vercel.");
-    return mongoose;
-  }
+  const primaryUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
 
   const URIs = [
-    process.env.MONGO_URI,
+    primaryUri,
     !process.env.VERCEL ? "mongodb://127.0.0.1:27017/ai-interviewer" : null,
     !process.env.VERCEL ? "mongodb://localhost:27017/ai-interviewer" : null,
   ].filter(Boolean) as string[];
