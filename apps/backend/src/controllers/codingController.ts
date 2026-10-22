@@ -258,8 +258,8 @@ export const submitCode = async (req: AuthRequest, res: Response): Promise<void>
 
     const verdict =
       passed === testCases.length ? "Accepted" :
-      firstFail?.stderr ? "Runtime Error" :
-      "Wrong Answer";
+        firstFail?.stderr ? "Runtime Error" :
+          "Wrong Answer";
 
     const sub = new CodingSubmission({
       user: userId,
