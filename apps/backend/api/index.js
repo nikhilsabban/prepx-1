@@ -3676,36 +3676,157 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import axios4 from "axios";
 var execAsync = promisify(execFile);
-var JUDGE0_BATCH_URL = "https://judge0-ce.p.rapidapi.com/submissions/batch";
-var JUDGE0_LANG = { cpp: 54, python: 71, java: 62, c: 50, javascript: 63 };
-var judge0Headers = () => ({
-  "Content-Type": "application/json",
-  "X-RapidAPI-Key": process.env.JUDGE0_API_KEY || "c25291f0c0msh4d4997be035c3b0p1f9b1djsnb6e749b944e6",
-  "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com"
-});
+var OC_API_URL = "https://api.onlinecompiler.io/api/run-code-sync/";
+var OC_COMPILERS = {
+  javascript: "nodejs-24",
+  python: "python-3.14",
+  cpp: "g++-15",
+  java: "openjdk-25",
+  c: "gcc-15"
+};
+var ocApiKey = () => process.env.ONLINE_COMPILER_API_KEY || "";
 var fixInput = (s) => (s || "").replace(/\\n/g, "\n");
 var applyWrapper = (userCode, wrapper) => {
   if (!wrapper || !wrapper.trim()) return userCode;
   return wrapper.replace("__USER_CODE__", userCode);
 };
-async function runLocalBatch(code, language, inputs) {
-  const langName = language === "c++" ? "cpp" : language;
-  return Promise.all(inputs.map(async (stdin) => {
-    const start = Date.now();
-    if (langName === "javascript") {
-      const logs = [];
-      const sandbox = {
-        console: {
-          log: (...args) => logs.push(args.map((a) => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ")),
-          error: (...args) => logs.push(args.map((a) => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" "))
-        },
-        stdin,
-        require: () => {
-        }
-      };
-      sandbox.globalThis = sandbox;
-      try {
-        const jsRunner = `
+function extractFunctionNames(code) {
+  const names = [];
+  const patterns = [
+    /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g,
+    // function trap(...)
+    /(?:var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function/g,
+    // var trap = function(...)
+    /(?:var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\(/g,
+    // const trap = (...) =>
+    /(?:var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*[a-zA-Z_$]/g
+    // const trap = async ...
+  ];
+  for (const pat of patterns) {
+    let m;
+    while ((m = pat.exec(code)) !== null) {
+      if (m[1] && !names.includes(m[1])) names.push(m[1]);
+    }
+  }
+  return names;
+}
+var BUILTIN_GLOBALS = /* @__PURE__ */ new Set([
+  "console",
+  "require",
+  "globalThis",
+  "stdin",
+  "clearInterval",
+  "clearTimeout",
+  "setInterval",
+  "setTimeout",
+  "queueMicrotask",
+  "structuredClone",
+  "atob",
+  "btoa",
+  "fetch",
+  "performance",
+  "URL",
+  "URLSearchParams",
+  "TextEncoder",
+  "TextDecoder",
+  "AbortController",
+  "AbortSignal",
+  "Event",
+  "EventTarget",
+  "MessageChannel",
+  "MessagePort",
+  "MessageEvent",
+  "DOMException",
+  "Headers",
+  "Request",
+  "Response",
+  "FormData",
+  "Blob",
+  "File",
+  "ReadableStream",
+  "WritableStream",
+  "TransformStream",
+  "CompressionStream",
+  "DecompressionStream",
+  "ByteLengthQueuingStrategy",
+  "CountQueuingStrategy",
+  "BroadcastChannel",
+  "WebSocket",
+  "Object",
+  "Function",
+  "Array",
+  "Number",
+  "Boolean",
+  "String",
+  "Symbol",
+  "Date",
+  "RegExp",
+  "Error",
+  "Map",
+  "Set",
+  "WeakMap",
+  "WeakSet",
+  "WeakRef",
+  "Promise",
+  "Proxy",
+  "Reflect",
+  "JSON",
+  "Math",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "isFinite",
+  "decodeURI",
+  "decodeURIComponent",
+  "encodeURI",
+  "encodeURIComponent",
+  "eval",
+  "undefined",
+  "NaN",
+  "Infinity",
+  "ArrayBuffer",
+  "SharedArrayBuffer",
+  "DataView",
+  "Float32Array",
+  "Float64Array",
+  "Int8Array",
+  "Int16Array",
+  "Int32Array",
+  "Uint8Array",
+  "Uint8ClampedArray",
+  "Uint16Array",
+  "Uint32Array",
+  "BigInt",
+  "BigInt64Array",
+  "BigUint64Array",
+  "FinalizationRegistry",
+  "AggregateError",
+  "EvalError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "TypeError",
+  "URIError",
+  "escape",
+  "unescape"
+]);
+async function runLocalJS(code, stdin) {
+  const start = Date.now();
+  const logs = [];
+  const sandbox = {
+    console: {
+      log: (...args) => logs.push(args.map((a) => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ")),
+      error: (...args) => logs.push(args.map((a) => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" "))
+    },
+    stdin,
+    require: () => {
+    }
+  };
+  sandbox.globalThis = sandbox;
+  const candidateNames = extractFunctionNames(code);
+  const candidateJSON = JSON.stringify(candidateNames);
+  try {
+    const jsRunner = `
 ; (function() {
   const rawInput = (typeof stdin !== 'undefined' ? String(stdin) : '').trim();
   let args = [];
@@ -3725,28 +3846,39 @@ async function runLocalBatch(code, language, inputs) {
   }
 
   let fn = null;
-  if (typeof solve === 'function') fn = solve;
-  else if (typeof Solution !== 'undefined') {
-    const sol = typeof Solution === 'function' ? new Solution() : Solution;
-    const proto = Object.getPrototypeOf(sol) || sol;
-    const methods = Object.getOwnPropertyNames(proto).filter(m => m !== 'constructor' && typeof sol[m] === 'function');
-    if (methods.length > 0) fn = sol[methods[0]].bind(sol);
+
+  // 1. Check for Solution class
+  if (typeof Solution !== 'undefined') {
+    try {
+      const sol = typeof Solution === 'function' ? new Solution() : Solution;
+      const proto = Object.getPrototypeOf(sol) || sol;
+      const methods = Object.getOwnPropertyNames(proto).filter(m => m !== 'constructor' && typeof sol[m] === 'function');
+      if (methods.length > 0) fn = sol[methods[0]].bind(sol);
+    } catch(e) {}
   }
 
-  if (!fn && typeof isValid === 'function') fn = isValid;
-  if (!fn && typeof twoSum === 'function') fn = twoSum;
-  if (!fn && typeof mergeTwoLists === 'function') fn = mergeTwoLists;
-  if (!fn && typeof maxProfit === 'function') fn = maxProfit;
-  if (!fn && typeof isAnagram === 'function') fn = isAnagram;
-  if (!fn && typeof search === 'function') fn = search;
-  if (!fn && typeof maxSubArray === 'function') fn = maxSubArray;
+  // 2. Check for 'solve' function
+  if (!fn && typeof solve === 'function') fn = solve;
 
+  // 3. Dynamically check candidate names extracted from user code
   if (!fn) {
+    const candidates = ${candidateJSON};
+    for (const name of candidates) {
+      try {
+        const f = eval(name);
+        if (typeof f === 'function') { fn = f; break; }
+      } catch(e) {}
+    }
+  }
+
+  // 4. Fallback: scan globalThis but skip all known builtins
+  if (!fn) {
+    const IGNORE = new Set(${JSON.stringify([...BUILTIN_GLOBALS])});
     for (const key of Object.keys(globalThis)) {
-      if (typeof globalThis[key] === 'function' && !['console', 'require', 'isValid'].includes(key)) {
-        fn = globalThis[key];
-        break;
-      }
+      if (IGNORE.has(key)) continue;
+      try {
+        if (typeof globalThis[key] === 'function') { fn = globalThis[key]; break; }
+      } catch(e) {}
     }
   }
 
@@ -3758,36 +3890,38 @@ async function runLocalBatch(code, language, inputs) {
   }
 })();
 `;
-        const fullCode = `${code}
+    const fullCode = `${code}
 ${jsRunner}`;
-        const script = new vm.Script(fullCode);
-        const context = vm.createContext(sandbox);
-        script.runInContext(context, { timeout: 4e3 });
-        const elapsed2 = Date.now() - start;
-        return {
-          stdout: logs.join("\n").trim(),
-          stderr: "",
-          exitCode: 0,
-          statusLabel: "Accepted",
-          runtime: `${elapsed2}ms`,
-          runtimeMs: elapsed2
-        };
-      } catch (err) {
-        const elapsed2 = Date.now() - start;
-        return {
-          stdout: logs.join("\n").trim(),
-          stderr: err.message || "Runtime Error",
-          exitCode: 1,
-          statusLabel: "Runtime Error",
-          runtime: `${elapsed2}ms`,
-          runtimeMs: elapsed2
-        };
-      }
-    }
-    if (langName === "python") {
-      try {
-        const pyRunner = `
+    const script = new vm.Script(fullCode);
+    const context = vm.createContext(sandbox);
+    script.runInContext(context, { timeout: 5e3 });
+    const elapsed = Date.now() - start;
+    return {
+      stdout: logs.join("\n").trim(),
+      stderr: "",
+      exitCode: 0,
+      statusLabel: "Accepted",
+      runtime: `${elapsed}ms`,
+      runtimeMs: elapsed
+    };
+  } catch (err) {
+    const elapsed = Date.now() - start;
+    return {
+      stdout: logs.join("\n").trim(),
+      stderr: err.message || "Runtime Error",
+      exitCode: 1,
+      statusLabel: "Runtime Error",
+      runtime: `${elapsed}ms`,
+      runtimeMs: elapsed
+    };
+  }
+}
+async function runLocalPython(code, stdin) {
+  const start = Date.now();
+  try {
+    const pyRunner = `
 import sys, json
+from typing import List, Dict, Tuple, Optional, Set, Any
 
 ${code}
 
@@ -3807,36 +3941,43 @@ if __name__ == '__main__':
         if methods:
             fn = getattr(sol, methods[0])
     if not fn:
-        funcs = [v for k, v in globals().items() if callable(v) and not k.startswith('_') and k not in ('sys', 'json')]
+        _skip = {'sys', 'json', 'List', 'Dict', 'Tuple', 'Optional', 'Set', 'Any'}
+        funcs = [v for k, v in globals().items() if callable(v) and not k.startswith('_') and k not in _skip and k != 'Solution']
         if funcs:
-            fn = funcs[0]
+            fn = funcs[-1]
     if fn:
         res = fn(*args)
         if res is not None:
             print(json.dumps(res) if isinstance(res, (bool, list, dict)) else res)
 `;
-        const { stdout, stderr } = await execAsync("python", ["-c", pyRunner], { timeout: 4e3 });
-        const elapsed2 = Date.now() - start;
-        return {
-          stdout: (stdout || "").trim(),
-          stderr: (stderr || "").trim(),
-          exitCode: 0,
-          statusLabel: "Accepted",
-          runtime: `${elapsed2}ms`,
-          runtimeMs: elapsed2
-        };
-      } catch (err) {
-        const elapsed2 = Date.now() - start;
-        return {
-          stdout: (err.stdout || "").trim(),
-          stderr: (err.stderr || err.message || "").trim(),
-          exitCode: 1,
-          statusLabel: "Runtime Error",
-          runtime: `${elapsed2}ms`,
-          runtimeMs: elapsed2
-        };
-      }
-    }
+    const { stdout, stderr } = await execAsync("python", ["-c", pyRunner], { timeout: 5e3 });
+    const elapsed = Date.now() - start;
+    return {
+      stdout: (stdout || "").trim(),
+      stderr: (stderr || "").trim(),
+      exitCode: 0,
+      statusLabel: "Accepted",
+      runtime: `${elapsed}ms`,
+      runtimeMs: elapsed
+    };
+  } catch (err) {
+    const elapsed = Date.now() - start;
+    return {
+      stdout: (err.stdout || "").trim(),
+      stderr: (err.stderr || err.message || "").trim(),
+      exitCode: 1,
+      statusLabel: "Runtime Error",
+      runtime: `${elapsed}ms`,
+      runtimeMs: elapsed
+    };
+  }
+}
+async function runLocalBatch(code, language, inputs) {
+  const langName = language === "c++" ? "cpp" : language;
+  return Promise.all(inputs.map(async (stdin) => {
+    if (langName === "javascript") return runLocalJS(code, stdin);
+    if (langName === "python") return runLocalPython(code, stdin);
+    const start = Date.now();
     const elapsed = Date.now() - start;
     return {
       stdout: "",
@@ -3848,60 +3989,76 @@ if __name__ == '__main__':
     };
   }));
 }
-async function runBatch(code, language, inputs) {
+async function runOnlineCompiler(code, compiler, stdin, timeLimit = 10) {
+  const start = Date.now();
   try {
-    const start = Date.now();
-    const langKey = language === "c++" ? "cpp" : language;
-    const langId = JUDGE0_LANG[langKey];
-    if (!langId) {
-      return await runLocalBatch(code, language, inputs);
-    }
     const response = await axios4.post(
-      `${JUDGE0_BATCH_URL}?base64_encoded=false`,
+      OC_API_URL,
       {
-        submissions: inputs.map((stdin) => ({
-          source_code: code,
-          language_id: langId,
-          stdin,
-          cpu_time_limit: 5,
-          wall_time_limit: 10
-        }))
+        compiler,
+        code,
+        input: stdin,
+        time_limit: timeLimit
       },
-      { headers: judge0Headers(), timeout: 5e3 }
+      {
+        headers: {
+          "Authorization": ocApiKey(),
+          "Content-Type": "application/json"
+        },
+        timeout: 3e4
+      }
     );
-    const tokens = response.data;
-    if (!Array.isArray(tokens) || tokens.some((t) => t.message?.includes("not subscribed"))) {
-      return await runLocalBatch(code, language, inputs);
-    }
-    const tokenList = tokens.map((t) => t.token).join(",");
-    let results = null;
-    for (let i = 0; i < 8; i++) {
-      await new Promise((r) => setTimeout(r, 800));
-      const getResp = await axios4.get(
-        `${JUDGE0_BATCH_URL}?tokens=${tokenList}&base64_encoded=false&fields=stdout,stderr,compile_output,status`,
-        { headers: judge0Headers(), timeout: 5e3 }
-      );
-      const data = getResp.data;
-      const allDone = data.submissions?.every((s) => s.status?.id >= 3);
-      if (allDone) {
-        results = data.submissions;
-        break;
+    const data = response.data;
+    const elapsed = Date.now() - start;
+    const exitCode = data.exit_code ?? (data.status === "success" ? 0 : 1);
+    const stdout = (data.output || "").trim();
+    const stderr = (data.error || "").trim();
+    let statusLabel = "Accepted";
+    if (exitCode !== 0) {
+      if (stderr.includes("Compilation") || stderr.includes("SyntaxError")) {
+        statusLabel = "Compilation Error";
+      } else if (data.signal === "SIGKILL" || data.signal === "SIGXCPU") {
+        statusLabel = "Time Limit Exceeded";
+      } else {
+        statusLabel = "Runtime Error";
       }
     }
-    if (!results) return await runLocalBatch(code, language, inputs);
+    return {
+      stdout,
+      stderr,
+      exitCode,
+      statusLabel,
+      runtime: data.time ? `${parseFloat(data.time) * 1e3}ms` : `${elapsed}ms`,
+      runtimeMs: data.time ? parseFloat(data.time) * 1e3 : elapsed
+    };
+  } catch (err) {
     const elapsed = Date.now() - start;
-    return results.map((s) => {
-      const id = s.status?.id;
-      const statusLabel = id === 3 ? "Accepted" : id === 4 ? "Wrong Answer" : id === 5 ? "Time Limit Exceeded" : id === 6 ? "Compilation Error" : "Runtime Error";
-      return {
-        stdout: (s.stdout || "").trim(),
-        stderr: (s.stderr || s.compile_output || "").trim(),
-        exitCode: id === 3 ? 0 : 1,
-        statusLabel,
-        runtime: `${elapsed}ms`,
-        runtimeMs: elapsed
-      };
-    });
+    return {
+      stdout: "",
+      stderr: err.response?.data?.error || err.message || "API Error",
+      exitCode: 1,
+      statusLabel: "Runtime Error",
+      runtime: `${elapsed}ms`,
+      runtimeMs: elapsed
+    };
+  }
+}
+async function runBatch(code, language, inputs) {
+  const langKey = language === "c++" ? "cpp" : language;
+  const compiler = OC_COMPILERS[langKey];
+  const apiKey = ocApiKey();
+  if (!apiKey || !compiler) {
+    return await runLocalBatch(code, language, inputs);
+  }
+  try {
+    const results = await Promise.all(
+      inputs.map((stdin) => runOnlineCompiler(code, compiler, stdin))
+    );
+    const allApiFailed = results.every((r) => r.stderr.includes("API Error") || r.stderr.includes("not subscribed"));
+    if (allApiFailed) {
+      return await runLocalBatch(code, language, inputs);
+    }
+    return results;
   } catch (err) {
     return await runLocalBatch(code, language, inputs);
   }
