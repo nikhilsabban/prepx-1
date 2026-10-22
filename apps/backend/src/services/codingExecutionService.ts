@@ -265,7 +265,8 @@ export async function runLocalBatch(code: string, language: string, inputs: stri
 }
 
 // ── Execute code via OnlineCompiler.io API ──
-async function runOnlineCompiler(code: string, compiler: string, stdin: string, timeLimit: number = 10): Promise<ExecutionResult> {
+// Returns null if the API hit a rate-limit or infra error (caller should fallback to local)
+async function runOnlineCompiler(code: string, compiler: string, stdin: string, timeLimit: number = 10): Promise<ExecutionResult | null> {
   const start = Date.now();
   try {
     const response = await axios.post(
@@ -288,13 +289,19 @@ async function runOnlineCompiler(code: string, compiler: string, stdin: string, 
     const data = response.data;
     const elapsed = Date.now() - start;
 
+    // Detect rate-limit or infra errors returned inside the response body
+    const output = (data.output || '').trim();
+    const error = (data.error || '').trim();
+    if (output.includes('Too many runs') || error.includes('Too many runs') ||
+        output.includes('limit') && output.includes('at once')) {
+      return null; // signal caller to fallback
+    }
+
     const exitCode = data.exit_code ?? (data.status === 'success' ? 0 : 1);
-    const stdout = (data.output || '').trim();
-    const stderr = (data.error || '').trim();
 
     let statusLabel = 'Accepted';
     if (exitCode !== 0) {
-      if (stderr.includes('Compilation') || stderr.includes('SyntaxError')) {
+      if (error.includes('Compilation') || error.includes('SyntaxError')) {
         statusLabel = 'Compilation Error';
       } else if (data.signal === 'SIGKILL' || data.signal === 'SIGXCPU') {
         statusLabel = 'Time Limit Exceeded';
@@ -304,24 +311,21 @@ async function runOnlineCompiler(code: string, compiler: string, stdin: string, 
     }
 
     return {
-      stdout,
-      stderr,
+      stdout: output,
+      stderr: error,
       exitCode,
       statusLabel,
-      runtime: data.time ? `${parseFloat(data.time) * 1000}ms` : `${elapsed}ms`,
+      runtime: data.time ? `${Math.round(parseFloat(data.time) * 1000)}ms` : `${elapsed}ms`,
       runtimeMs: data.time ? parseFloat(data.time) * 1000 : elapsed,
     };
   } catch (err: any) {
-    const elapsed = Date.now() - start;
-    // If the API itself fails, return error
-    return {
-      stdout: '',
-      stderr: err.response?.data?.error || err.message || 'API Error',
-      exitCode: 1,
-      statusLabel: 'Runtime Error',
-      runtime: `${elapsed}ms`,
-      runtimeMs: elapsed,
-    };
+    // HTTP-level errors (429, 503, network errors) → return null to trigger fallback
+    const status = err.response?.status;
+    if (status === 429 || status === 503 || status === 502 || !err.response) {
+      return null;
+    }
+    // Other API errors (auth, bad request) → also fallback
+    return null;
   }
 }
 
@@ -336,20 +340,28 @@ export async function runBatch(code: string, language: string, inputs: string[])
     return await runLocalBatch(code, language, inputs);
   }
 
-  try {
-    // Run all test cases in parallel via OnlineCompiler.io
-    const results = await Promise.all(
-      inputs.map(stdin => runOnlineCompiler(code, compiler, stdin))
-    );
+  // Run test cases SEQUENTIALLY to respect API concurrency limits
+  const results: ExecutionResult[] = [];
+  let useLocal = false; // once we hit a rate-limit, switch all remaining to local
 
-    // If every result has an API-level error (not code error), fallback to local
-    const allApiFailed = results.every(r => r.stderr.includes('API Error') || r.stderr.includes('not subscribed'));
-    if (allApiFailed) {
-      return await runLocalBatch(code, language, inputs);
+  for (const stdin of inputs) {
+    if (useLocal) {
+      // Already hit rate-limit, run remaining locally
+      const localResults = await runLocalBatch(code, language, [stdin]);
+      results.push(localResults[0]);
+      continue;
     }
 
-    return results;
-  } catch (err) {
-    return await runLocalBatch(code, language, inputs);
+    const result = await runOnlineCompiler(code, compiler, stdin);
+    if (result === null) {
+      // API failed (rate-limit / infra error) → fallback to local for this + all remaining
+      useLocal = true;
+      const localResults = await runLocalBatch(code, language, [stdin]);
+      results.push(localResults[0]);
+    } else {
+      results.push(result);
+    }
   }
+
+  return results;
 }

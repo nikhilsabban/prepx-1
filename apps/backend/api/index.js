@@ -4010,12 +4010,15 @@ async function runOnlineCompiler(code, compiler, stdin, timeLimit = 10) {
     );
     const data = response.data;
     const elapsed = Date.now() - start;
+    const output = (data.output || "").trim();
+    const error = (data.error || "").trim();
+    if (output.includes("Too many runs") || error.includes("Too many runs") || output.includes("limit") && output.includes("at once")) {
+      return null;
+    }
     const exitCode = data.exit_code ?? (data.status === "success" ? 0 : 1);
-    const stdout = (data.output || "").trim();
-    const stderr = (data.error || "").trim();
     let statusLabel = "Accepted";
     if (exitCode !== 0) {
-      if (stderr.includes("Compilation") || stderr.includes("SyntaxError")) {
+      if (error.includes("Compilation") || error.includes("SyntaxError")) {
         statusLabel = "Compilation Error";
       } else if (data.signal === "SIGKILL" || data.signal === "SIGXCPU") {
         statusLabel = "Time Limit Exceeded";
@@ -4024,23 +4027,19 @@ async function runOnlineCompiler(code, compiler, stdin, timeLimit = 10) {
       }
     }
     return {
-      stdout,
-      stderr,
+      stdout: output,
+      stderr: error,
       exitCode,
       statusLabel,
-      runtime: data.time ? `${parseFloat(data.time) * 1e3}ms` : `${elapsed}ms`,
+      runtime: data.time ? `${Math.round(parseFloat(data.time) * 1e3)}ms` : `${elapsed}ms`,
       runtimeMs: data.time ? parseFloat(data.time) * 1e3 : elapsed
     };
   } catch (err) {
-    const elapsed = Date.now() - start;
-    return {
-      stdout: "",
-      stderr: err.response?.data?.error || err.message || "API Error",
-      exitCode: 1,
-      statusLabel: "Runtime Error",
-      runtime: `${elapsed}ms`,
-      runtimeMs: elapsed
-    };
+    const status = err.response?.status;
+    if (status === 429 || status === 503 || status === 502 || !err.response) {
+      return null;
+    }
+    return null;
   }
 }
 async function runBatch(code, language, inputs) {
@@ -4050,18 +4049,24 @@ async function runBatch(code, language, inputs) {
   if (!apiKey || !compiler) {
     return await runLocalBatch(code, language, inputs);
   }
-  try {
-    const results = await Promise.all(
-      inputs.map((stdin) => runOnlineCompiler(code, compiler, stdin))
-    );
-    const allApiFailed = results.every((r) => r.stderr.includes("API Error") || r.stderr.includes("not subscribed"));
-    if (allApiFailed) {
-      return await runLocalBatch(code, language, inputs);
+  const results = [];
+  let useLocal = false;
+  for (const stdin of inputs) {
+    if (useLocal) {
+      const localResults = await runLocalBatch(code, language, [stdin]);
+      results.push(localResults[0]);
+      continue;
     }
-    return results;
-  } catch (err) {
-    return await runLocalBatch(code, language, inputs);
+    const result = await runOnlineCompiler(code, compiler, stdin);
+    if (result === null) {
+      useLocal = true;
+      const localResults = await runLocalBatch(code, language, [stdin]);
+      results.push(localResults[0]);
+    } else {
+      results.push(result);
+    }
   }
+  return results;
 }
 
 // src/utils/seedCodingProblems.ts
