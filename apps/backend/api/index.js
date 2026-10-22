@@ -4054,14 +4054,24 @@ async function runBatch(code, language, inputs) {
   for (const stdin of inputs) {
     if (useLocal) {
       const localResults = await runLocalBatch(code, language, [stdin]);
-      results.push(localResults[0] ?? { stdout: "", stderr: "Execution failed", exitCode: 1, statusLabel: "Runtime Error", runtime: "0ms", runtimeMs: 0 });
+      const res = localResults[0];
+      if (res) {
+        results.push(res);
+      } else {
+        results.push({ stdout: "", stderr: "Execution failed", exitCode: 1, statusLabel: "Runtime Error", runtime: "0ms", runtimeMs: 0 });
+      }
       continue;
     }
     const result = await runOnlineCompiler(code, compiler, stdin);
     if (result === null) {
       useLocal = true;
       const localResults = await runLocalBatch(code, language, [stdin]);
-      results.push(localResults[0] ?? { stdout: "", stderr: "Execution failed", exitCode: 1, statusLabel: "Runtime Error", runtime: "0ms", runtimeMs: 0 });
+      const res = localResults[0];
+      if (res) {
+        results.push(res);
+      } else {
+        results.push({ stdout: "", stderr: "Execution failed", exitCode: 1, statusLabel: "Runtime Error", runtime: "0ms", runtimeMs: 0 });
+      }
     } else {
       results.push(result);
     }

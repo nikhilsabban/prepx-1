@@ -348,7 +348,12 @@ export async function runBatch(code: string, language: string, inputs: string[])
     if (useLocal) {
       // Already hit rate-limit, run remaining locally
       const localResults = await runLocalBatch(code, language, [stdin]);
-      results.push(localResults[0] ?? { stdout: '', stderr: 'Execution failed', exitCode: 1, statusLabel: 'Runtime Error', runtime: '0ms', runtimeMs: 0 });
+      const res = localResults[0];
+      if (res) {
+        results.push(res);
+      } else {
+        results.push({ stdout: '', stderr: 'Execution failed', exitCode: 1, statusLabel: 'Runtime Error', runtime: '0ms', runtimeMs: 0 });
+      }
       continue;
     }
 
@@ -357,7 +362,12 @@ export async function runBatch(code: string, language: string, inputs: string[])
       // API failed (rate-limit / infra error) → fallback to local for this + all remaining
       useLocal = true;
       const localResults = await runLocalBatch(code, language, [stdin]);
-      results.push(localResults[0] ?? { stdout: '', stderr: 'Execution failed', exitCode: 1, statusLabel: 'Runtime Error', runtime: '0ms', runtimeMs: 0 });
+      const res = localResults[0];
+      if (res) {
+        results.push(res);
+      } else {
+        results.push({ stdout: '', stderr: 'Execution failed', exitCode: 1, statusLabel: 'Runtime Error', runtime: '0ms', runtimeMs: 0 });
+      }
     } else {
       results.push(result);
     }
