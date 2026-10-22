@@ -22,6 +22,30 @@ function generateToken(id: string): string {
   });
 }
 
+function getClientUrl(req: Request): string {
+  // 1. Check req.headers.origin or referer (dynamically matches whatever frontend called the API)
+  const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : "");
+  if (origin && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
+    return origin.replace(/\/$/, "");
+  }
+
+  // 2. Check CLIENT_URL or FRONTEND_URL environment variables
+  if (process.env.CLIENT_URL && !process.env.CLIENT_URL.includes("localhost")) {
+    return process.env.CLIENT_URL.replace(/\/$/, "");
+  }
+  if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes("localhost")) {
+    return process.env.FRONTEND_URL.replace(/\/$/, "");
+  }
+
+  // 3. Fallback to origin if set (e.g. localhost in local dev)
+  if (origin) {
+    return origin.replace(/\/$/, "");
+  }
+
+  // 4. Default to live production deployment
+  return "https://prepx-one.vercel.app";
+}
+
 /**
  * @route   POST /api/auth/signup
  * @desc    Register a new user
@@ -96,7 +120,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
     });
 
     // 6. Send verification email
-    const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+    const clientUrl = getClientUrl(req);
     const verifyUrl = `${clientUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(user.email)}`;
 
     console.log(`\n\n[GMAIL VERIFICATION LINK FOR ${user.email}]:\n${verifyUrl}\n\n`);
@@ -642,7 +666,8 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     await user.save();
 
     // Create reset URL (pointing to frontend)
-    const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
+    const clientUrl = getClientUrl(req);
+    const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
 
     // Log for dev purposes
     console.log(`\n\n[RESET PASSWORD LINK FOR ${user.email}]:\n${resetUrl}\n\n`);
@@ -813,7 +838,7 @@ export async function linkedinLogin(req: Request, res: Response): Promise<void> 
       new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: redirectUri || "http://localhost:5173/auth/callback",
+        redirect_uri: redirectUri || `${getClientUrl(req)}/auth/callback`,
         client_id: clientId,
         client_secret: clientSecret,
       }),

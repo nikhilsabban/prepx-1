@@ -871,6 +871,22 @@ function generateToken(id) {
     expiresIn: "7d"
   });
 }
+function getClientUrl(req) {
+  const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : "");
+  if (origin && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
+    return origin.replace(/\/$/, "");
+  }
+  if (process.env.CLIENT_URL && !process.env.CLIENT_URL.includes("localhost")) {
+    return process.env.CLIENT_URL.replace(/\/$/, "");
+  }
+  if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes("localhost")) {
+    return process.env.FRONTEND_URL.replace(/\/$/, "");
+  }
+  if (origin) {
+    return origin.replace(/\/$/, "");
+  }
+  return "https://prepx-one.vercel.app";
+}
 async function signup(req, res) {
   try {
     const {
@@ -926,7 +942,7 @@ async function signup(req, res) {
       verificationToken,
       verificationTokenExpire
     });
-    const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+    const clientUrl = getClientUrl(req);
     const verifyUrl = `${clientUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(user.email)}`;
     console.log(`
 
@@ -1352,7 +1368,8 @@ async function forgotPassword(req, res) {
     user.resetPasswordToken = resetPasswordToken;
     user.resetPasswordExpire = resetPasswordExpire;
     await user.save();
-    const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
+    const clientUrl = getClientUrl(req);
+    const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
     console.log(`
 
 [RESET PASSWORD LINK FOR ${user.email}]:
@@ -1478,7 +1495,7 @@ async function linkedinLogin(req, res) {
       new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: redirectUri || "http://localhost:5173/auth/callback",
+        redirect_uri: redirectUri || `${getClientUrl(req)}/auth/callback`,
         client_id: clientId,
         client_secret: clientSecret
       }),
