@@ -127,7 +127,7 @@ export const CodingProblemsPage: React.FC = () => {
         </div>
 
         {/* Search & Filter Toolbar */}
-        <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between shadow-xl backdrop-blur-xl">
+        <div className="glass-card rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row gap-4 items-center justify-between shadow-2xl border border-white/10">
           {/* Search Input */}
           <form onSubmit={handleSearchSubmit} className="relative w-full md:w-96">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -136,23 +136,23 @@ export const CodingProblemsPage: React.FC = () => {
               placeholder="Search by title, tag, or topic..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-zinc-950/90 border border-zinc-800 rounded-lg text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full pl-10 pr-4 py-2.5 bg-black/50 border border-white/10 rounded-xl text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors shadow-inner"
             />
           </form>
 
           {/* Difficulty & Bookmark Filters */}
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto pb-2 md:pb-0">
             <span className="text-xs text-zinc-400 font-medium flex items-center gap-1 mr-1">
-              <Filter className="w-3.5 h-3.5" /> Filters:
+              <Filter className="w-3.5 h-3.5 text-indigo-400" /> Filters:
             </span>
             {["all", "Easy", "Medium", "Hard"].map((diff) => (
               <button
                 key={diff}
                 onClick={() => setSelectedDifficulty(diff)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
                   selectedDifficulty === diff
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 font-semibold"
-                    : "bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/30 font-semibold"
+                    : "glass-pill text-zinc-400 hover:text-white"
                 }`}
               >
                 {diff}
@@ -161,10 +161,10 @@ export const CodingProblemsPage: React.FC = () => {
 
             <button
               onClick={() => setShowBookmarkedOnly(!showBookmarkedOnly)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                 showBookmarkedOnly
-                  ? "bg-amber-500 text-zinc-950 font-bold shadow-md shadow-amber-500/30"
-                  : "bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  ? "bg-amber-500 text-zinc-950 font-bold shadow-lg shadow-amber-500/30"
+                  : "glass-pill text-zinc-400 hover:text-white"
               }`}
             >
               <Bookmark className={`w-3.5 h-3.5 ${showBookmarkedOnly ? "fill-zinc-950" : ""}`} />
@@ -174,7 +174,7 @@ export const CodingProblemsPage: React.FC = () => {
         </div>
 
         {/* Problem List */}
-        <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl backdrop-blur-xl">
+        <div className="glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10">
           {loading ? (
             <div className="p-6 space-y-4">
               {[...Array(6)].map((_, i) => (
@@ -206,50 +206,62 @@ export const CodingProblemsPage: React.FC = () => {
               {filteredProblems.map((prob) => (
                 <div
                   key={prob._id || prob.slug}
-                  className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-zinc-800/40 transition-colors group"
+                  className="flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 px-4 sm:px-6 py-4 items-start md:items-center hover:bg-zinc-800/40 transition-colors group"
                 >
-                  <div className="col-span-1 text-zinc-500 text-sm font-medium">
-                    #{prob.number}
+                  {/* Problem Number & Title */}
+                  <div className="md:col-span-1 text-zinc-500 text-xs sm:text-sm font-medium flex items-center justify-between w-full md:w-auto">
+                    <span>#{prob.number}</span>
+                    <div className="flex md:hidden items-center gap-2">
+                      {getDifficultyBadge(prob.difficulty)}
+                      <span className="text-zinc-500 text-xs font-mono">
+                        {prob.acceptance ? `${prob.acceptance.toFixed(1)}%` : "50.0%"}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="col-span-5 space-y-1">
+                  <div className="md:col-span-5 space-y-1.5 w-full">
                     <Link
                       to={`/coding/problem/${prob.slug}`}
-                      className="font-semibold text-zinc-100 group-hover:text-blue-400 transition-colors text-base flex items-center gap-2"
+                      className="font-semibold text-zinc-100 group-hover:text-blue-400 transition-colors text-sm sm:text-base flex items-center gap-2"
                     >
                       {prob.title}
                     </Link>
                     <div className="flex flex-wrap gap-1.5">
                       {prob.tags?.slice(0, 3).map((t) => (
-                        <span key={t} className="px-2 py-0.5 rounded text-[11px] bg-zinc-800 text-zinc-400 border border-zinc-700/50">
+                        <span key={t} className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] bg-zinc-800 text-zinc-400 border border-zinc-700/50">
                           {t}
                         </span>
                       ))}
                     </div>
                   </div>
 
-                  <div className="col-span-2">
+                  <div className="hidden md:block md:col-span-2">
                     {getDifficultyBadge(prob.difficulty)}
                   </div>
 
-                  <div className="col-span-2 text-zinc-400 text-sm font-mono">
+                  <div className="hidden md:block md:col-span-2 text-zinc-400 text-sm font-mono">
                     {prob.acceptance ? `${prob.acceptance.toFixed(1)}%` : "50.0%"}
                   </div>
 
-                  <div className="col-span-2 text-right flex items-center justify-end gap-2">
-                    <button
-                      onClick={(e) => handleToggleBookmark(e, prob._id)}
-                      title={bookmarkedIds.includes(prob._id) ? "Remove Bookmark" : "Bookmark Problem"}
-                      className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 transition-colors"
-                    >
-                      <Bookmark className={`w-4 h-4 ${bookmarkedIds.includes(prob._id) ? "text-amber-400 fill-amber-400" : ""}`} />
-                    </button>
-                    <Link
-                      to={`/coding/problem/${prob.slug}`}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-md shadow-blue-600/20 transition-all group-hover:scale-105"
-                    >
-                      Solve <ChevronRight className="w-3.5 h-3.5" />
-                    </Link>
+                  <div className="md:col-span-2 w-full md:w-auto text-right flex items-center justify-between md:justify-end gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-zinc-800/60">
+                    <span className="md:hidden text-zinc-500 text-xs">
+                      Acceptance: <span className="text-zinc-300 font-mono">{prob.acceptance ? `${prob.acceptance.toFixed(1)}%` : "50.0%"}</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => handleToggleBookmark(e, prob._id)}
+                        title={bookmarkedIds.includes(prob._id) ? "Remove Bookmark" : "Bookmark Problem"}
+                        className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
+                      >
+                        <Bookmark className={`w-4 h-4 ${bookmarkedIds.includes(prob._id) ? "text-amber-400 fill-amber-400" : ""}`} />
+                      </button>
+                      <Link
+                        to={`/coding/problem/${prob.slug}`}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-md shadow-blue-600/20 transition-all group-hover:scale-105"
+                      >
+                        Solve <ChevronRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               ))}

@@ -246,26 +246,26 @@ export function GDHubPage() {
             </p>
 
             {/* Quick Action Buttons */}
-            <div className="flex flex-wrap items-center gap-4 pt-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 pt-2">
               <Button
                 onClick={() => {
                   if (topic) setCustomQuestion(topic.question);
                   setShowCreateModal(true);
                 }}
-                className="h-13 px-8 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500 text-white font-bold text-base shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer flex items-center gap-3"
+                className="min-h-[48px] px-4 sm:px-8 py-3 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500 text-white font-bold text-sm sm:text-base shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2.5"
               >
-                <Plus className="size-5" />
-                Create Discussion Room (Host as Admin)
-                <ArrowRight className="size-5" />
+                <Plus className="size-4 sm:size-5 shrink-0" />
+                <span>Create Room (Host as Admin)</span>
+                <ArrowRight className="size-4 sm:size-5 shrink-0" />
               </Button>
 
               <button
                 onClick={() => handleCreateRoomSubmit()}
                 disabled={isCreatingRoom || !topic}
-                className="h-13 px-6 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white font-medium text-sm transition flex items-center gap-2 cursor-pointer active:scale-95"
+                className="min-h-[48px] px-4 sm:px-6 py-3 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white font-medium text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
               >
-                <Flame className="size-4 text-amber-300" />
-                Quick Launch with Live Topic
+                <Flame className="size-4 text-amber-300 shrink-0" />
+                <span>Quick Launch with Live Topic</span>
               </button>
             </div>
           </div>
@@ -537,8 +537,8 @@ export function GDHubPage() {
 
         {/* Create Room Modal */}
         {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 max-w-2xl w-full space-y-6 shadow-2xl relative">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 max-w-2xl w-full space-y-5 sm:space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="absolute top-5 right-5 text-zinc-400 hover:text-white"

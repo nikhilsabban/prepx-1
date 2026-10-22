@@ -43,21 +43,21 @@ export function Result() {
     const ready = result.status === "Done";
 
     return (
-        <main className="mx-auto min-h-[calc(100vh-4rem)] w-full max-w-3xl px-6 py-10">
-            <header className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <main className="mx-auto min-h-[calc(100vh-4rem)] w-full max-w-3xl px-4 sm:px-6 py-6 sm:py-10">
+            <header className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground">Interview Results</h1>
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Interview Results</h1>
                     <p className="mt-1 text-xs text-muted-foreground">
                         Your score, feedback, and question breakdown.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {isAuthenticated && (
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => navigate(user?.id ? `/${user.id}/history` : "/history")}
-                            className="gap-1.5 text-xs border-border/80 cursor-pointer"
+                            className="flex-1 sm:flex-initial gap-1.5 text-xs border-border/80 cursor-pointer justify-center"
                         >
                             <History className="size-3.5" />
                             Interview History
@@ -66,7 +66,7 @@ export function Result() {
                     <Button
                         size="sm"
                         onClick={() => navigate("/")}
-                        className="gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white"
+                        className="flex-1 sm:flex-initial gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white justify-center"
                     >
                         <ArrowLeft className="size-3.5" />
                         Start New Interview
@@ -85,49 +85,49 @@ export function Result() {
                     </div>
                 </div>
             ) : (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-5 sm:gap-6">
                     {/* Overall Score + Feedback */}
-                    <section className="rounded-2xl border border-border bg-card/60 p-6 sm:p-8 shadow-md backdrop-blur">
-                        <div className="flex items-start justify-between gap-6 border-b border-border/60 pb-5">
+                    <section className="rounded-2xl border border-border bg-card/60 p-4 sm:p-6 md:p-8 shadow-md backdrop-blur">
+                        <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-4 sm:pb-5">
                             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                                 <Sparkles className="size-4 text-violet-400" />
                                 Performance Summary
                             </div>
-                            <div className="flex shrink-0 items-baseline gap-1 bg-violet-500/10 px-3 py-1 rounded-xl border border-violet-500/20">
-                                <span className="text-2xl font-black tracking-tight text-violet-300">
+                            <div className="flex shrink-0 items-baseline gap-1 bg-violet-500/10 px-2.5 sm:px-3 py-1 rounded-xl border border-violet-500/20">
+                                <span className="text-xl sm:text-2xl font-black tracking-tight text-violet-300">
                                     {result.evaluationData?.overallScore || result.score}
                                 </span>
                                 <span className="text-xs text-muted-foreground">/ 10</span>
                             </div>
                         </div>
-                        <p className="mt-5 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90 font-normal">
+                        <p className="mt-4 sm:mt-5 whitespace-pre-wrap text-xs sm:text-sm leading-relaxed text-foreground/90 font-normal">
                             {result.evaluationData?.overallFeedback || result.feedback || "Great job completing your interview!"}
                         </p>
                     </section>
 
                     {/* Speech & Delivery Analysis Metrics */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="rounded-2xl border border-border bg-card/60 p-4 text-center backdrop-blur">
-                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Speech Clarity</p>
-                            <p className="text-xl font-bold text-emerald-400 mt-1">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
+                        <div className="rounded-2xl border border-border bg-card/60 p-3 sm:p-4 text-center backdrop-blur">
+                            <p className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Speech Clarity</p>
+                            <p className="text-lg sm:text-xl font-bold text-emerald-400 mt-1">
                                 {result.evaluationData?.speechMetrics?.speechClarity || "8/10"}
                             </p>
                         </div>
-                        <div className="rounded-2xl border border-border bg-card/60 p-4 text-center backdrop-blur">
-                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Filler Words</p>
-                            <p className="text-xl font-bold text-amber-400 mt-1">
+                        <div className="rounded-2xl border border-border bg-card/60 p-3 sm:p-4 text-center backdrop-blur">
+                            <p className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Filler Words</p>
+                            <p className="text-lg sm:text-xl font-bold text-amber-400 mt-1">
                                 {result.evaluationData?.speechMetrics?.fillerWords ?? 12}
                             </p>
                         </div>
-                        <div className="rounded-2xl border border-border bg-card/60 p-4 text-center backdrop-blur">
-                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Mumbling</p>
-                            <p className="text-xl font-bold text-blue-400 mt-1">
+                        <div className="rounded-2xl border border-border bg-card/60 p-3 sm:p-4 text-center backdrop-blur">
+                            <p className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Mumbling</p>
+                            <p className="text-lg sm:text-xl font-bold text-blue-400 mt-1">
                                 {result.evaluationData?.speechMetrics?.mumbling || "Low"}
                             </p>
                         </div>
-                        <div className="rounded-2xl border border-border bg-card/60 p-4 text-center backdrop-blur">
-                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Speaking Pace</p>
-                            <p className="text-xl font-bold text-purple-400 mt-1">
+                        <div className="rounded-2xl border border-border bg-card/60 p-3 sm:p-4 text-center backdrop-blur">
+                            <p className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Speaking Pace</p>
+                            <p className="text-lg sm:text-xl font-bold text-purple-400 mt-1">
                                 {result.evaluationData?.speechMetrics?.speakingPace || "Good"}
                             </p>
                         </div>
@@ -135,8 +135,8 @@ export function Result() {
 
                     {/* Detailed Ratings & Improvement Areas (Only shown if rich data exists) */}
                     {result.evaluationData && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <section className="rounded-2xl border border-border bg-card/60 p-6 shadow-md backdrop-blur">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                            <section className="rounded-2xl border border-border bg-card/60 p-4 sm:p-6 shadow-md backdrop-blur">
                                 <h3 className="mb-4 text-sm font-bold text-foreground">Performance Metrics</h3>
                                 <div className="flex flex-col gap-4">
                                     {[

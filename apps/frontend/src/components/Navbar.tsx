@@ -121,12 +121,16 @@ export function Navbar() {
               {dropdownOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-60 rounded-2xl border border-zinc-800 bg-[#0c0c0e]/95 backdrop-blur-xl shadow-2xl shadow-black/80 overflow-hidden z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-zinc-800 bg-[#0c0c0e]/95 backdrop-blur-xl shadow-2xl shadow-black/80 overflow-hidden z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-150">
                     <div className="px-4 py-3 border-b border-zinc-800/80 bg-zinc-950/40">
                       <p className="text-sm font-bold text-white truncate">{user.fullName}</p>
                       <p className="text-xs text-zinc-400 truncate mt-0.5">{user.email}</p>
                     </div>
                     <div className="py-1">
+                      <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
+                        <LayoutDashboard className="size-4 text-indigo-400" />
+                        Dashboard
+                      </Link>
                       <Link onClick={() => setDropdownOpen(false)} to="/ai-interview" className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
                         <Sparkles className="size-4 text-purple-400" />
                         Start Mock Interview
@@ -142,6 +146,14 @@ export function Navbar() {
                       <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}/resume`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
                         <FileText className="size-4 text-emerald-400" />
                         Resume Review
+                      </Link>
+                      <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}/history`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
+                        <History className="size-4 text-cyan-400" />
+                        Interview History
+                      </Link>
+                      <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}/bookmarks`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
+                        <Bookmark className="size-4 text-amber-400" />
+                        Saved Bookmarks
                       </Link>
                       <Link onClick={() => setDropdownOpen(false)} to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
                         <User className="size-4 text-zinc-400" />
@@ -162,13 +174,13 @@ export function Navbar() {
             <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 onClick={() => navigate("/login")}
-                className="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-semibold rounded-xl px-4 h-9 text-xs sm:text-sm transition-all cursor-pointer"
+                className="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-semibold rounded-xl px-3 sm:px-4 h-9 text-xs sm:text-sm transition-all cursor-pointer"
               >
                 Sign in
               </Button>
               <Button
                 onClick={() => navigate("/signup")}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl px-4 h-9 text-xs sm:text-sm shadow-md shadow-indigo-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl px-3 sm:px-4 h-9 text-xs sm:text-sm shadow-md shadow-indigo-600/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
                 Sign up
               </Button>
@@ -188,31 +200,46 @@ export function Navbar() {
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-b border-zinc-800 bg-[#09090b]/95 backdrop-blur-2xl px-6 py-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+        <div className="lg:hidden border-b border-zinc-800 bg-[#09090b]/98 backdrop-blur-2xl px-5 py-4 space-y-2 animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-4.5rem)] overflow-y-auto">
           {!isAuthenticated ? (
-            <>
-              <Link to="/" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2">Home</Link>
-              <Link to="/about" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2">About Us</Link>
-              <a href="/#features" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2">Features</a>
-              <a href="/#interview-types" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2">Interview Modes</a>
-            </>
+            <div className="space-y-1">
+              <Link to="/" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2.5 border-b border-zinc-800/50">Home</Link>
+              <Link to="/about" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2.5 border-b border-zinc-800/50">About Us</Link>
+              <a href="/#features" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2.5 border-b border-zinc-800/50">Features</a>
+              <a href="/#interview-types" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-zinc-300 hover:text-white py-2.5">Interview Modes</a>
+            </div>
           ) : user && (
-            <div className="space-y-2 py-1">
-              <Link to="/ai-interview" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2 border-b border-zinc-800/50">
+            <div className="space-y-1 py-1">
+              <Link to={`/${user.id}`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
+                <LayoutDashboard className="size-4 text-indigo-400" /> Dashboard
+              </Link>
+              <Link to="/ai-interview" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
                 <Sparkles className="size-4 text-purple-400" /> Mock Interview
               </Link>
-              <Link to="/group-discussion" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2 border-b border-zinc-800/50">
+              <Link to="/group-discussion" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
                 <Users className="size-4 text-pink-400" /> Group Discussion
               </Link>
-              <Link to={`/${user.id}/coding`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2 border-b border-zinc-800/50">
+              <Link to={`/${user.id}/coding`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
                 <BookOpenCheck className="size-4 text-blue-400" /> Coding Practice
               </Link>
-              <Link to={`/${user.id}/resume`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2 border-b border-zinc-800/50">
+              <Link to={`/${user.id}/resume`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
                 <FileText className="size-4 text-emerald-400" /> Resume Review
               </Link>
-              <Link to="/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2">
+              <Link to={`/${user.id}/history`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
+                <History className="size-4 text-cyan-400" /> Interview History
+              </Link>
+              <Link to={`/${user.id}/bookmarks`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
+                <Bookmark className="size-4 text-amber-400" /> Saved Bookmarks
+              </Link>
+              <Link to="/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
                 <User className="size-4 text-zinc-400" /> Profile & Settings
               </Link>
+              <button 
+                onClick={() => { setMobileMenuOpen(false); handleLogout(); }} 
+                className="w-full flex items-center gap-3 text-sm font-medium text-rose-400 hover:text-rose-300 py-2.5 text-left cursor-pointer"
+              >
+                <LogOut className="size-4" /> Sign out
+              </button>
             </div>
           )}
         </div>

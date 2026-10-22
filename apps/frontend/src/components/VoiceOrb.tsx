@@ -38,33 +38,43 @@ export function VoiceOrb({ level, speaking, label, sublabel, icon: Icon, accent 
     const Icon_ = Icon;
 
     return (
-        <div className="flex flex-col items-center gap-5">
-            <div className="relative grid h-52 w-52 place-items-center">
+        <div className="flex flex-col items-center gap-3 sm:gap-5">
+            <div className="relative grid size-32 sm:size-44 md:size-52 place-items-center">
+                {/* Ambient glow mesh backdrop */}
+                <div 
+                    className="absolute inset-0 rounded-full blur-2xl transition-all duration-300 pointer-events-none"
+                    style={{
+                        background: `radial-gradient(circle, rgba(${a.glow}, ${speaking ? 0.35 + clamped * 0.4 : 0.12}) 0%, transparent 70%)`,
+                        transform: `scale(${1 + clamped * 0.4})`
+                    }}
+                />
+
                 {/* Outer reactive ring */}
                 <div
                     className={cn(
-                        "absolute inset-0 rounded-full border transition-opacity duration-150",
+                        "absolute inset-0 rounded-full border transition-all duration-200",
                         a.ring,
+                        speaking && "animate-pulse"
                     )}
-                    style={{ transform: `scale(${1 + clamped * 0.25})`, opacity: 0.3 + clamped * 0.5 }}
+                    style={{ transform: `scale(${1 + clamped * 0.28})`, opacity: 0.35 + clamped * 0.55 }}
                 />
                 {/* Secondary ring */}
                 <div
-                    className={cn("absolute h-40 w-40 rounded-full border", a.ring)}
-                    style={{ transform: `scale(${1 + clamped * 0.15})`, opacity: 0.4 + clamped * 0.4 }}
+                    className={cn("absolute size-24 sm:size-34 md:size-40 rounded-full border transition-all duration-150", a.ring)}
+                    style={{ transform: `scale(${1 + clamped * 0.18})`, opacity: 0.45 + clamped * 0.45 }}
                 />
                 {/* Core orb */}
                 <div
                     className={cn(
-                        "relative grid h-28 w-28 place-items-center rounded-full bg-gradient-to-br text-white transition-transform duration-100",
+                        "relative grid size-16 sm:size-22 md:size-28 place-items-center rounded-full bg-gradient-to-br text-white transition-transform duration-100 shadow-2xl",
                         a.core,
                     )}
                     style={{
                         transform: `scale(${scale})`,
-                        boxShadow: `0 0 ${glowSize}px rgba(${a.glow}, ${0.35 + clamped * 0.5})`,
+                        boxShadow: `0 0 ${glowSize}px rgba(${a.glow}, ${0.45 + clamped * 0.55}), inset 0 2px 4px rgba(255, 255, 255, 0.4)`,
                     }}
                 >
-                    <Icon_ className="size-10" strokeWidth={1.75} />
+                    <Icon_ className="size-6 sm:size-8 md:size-10 drop-shadow" strokeWidth={1.75} />
                 </div>
             </div>
 

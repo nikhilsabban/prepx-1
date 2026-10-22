@@ -254,15 +254,15 @@ export function Signup() {
         }}
       />
       
-      <main className="flex-1 flex flex-col items-center justify-center pt-24 pb-32 px-6 relative z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)]">
+      <main className="flex-1 flex flex-col items-center justify-center pt-8 sm:pt-24 pb-16 sm:pb-32 px-4 sm:px-6 relative z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)]">
         <div className="w-full max-w-xl bg-[#0F0F12] border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl relative">
           
-          <div className="p-8 pb-6 text-center">
-            <h1 className="text-2xl font-bold text-white mb-2">Create your <span className="text-[#2563EB]">prepX</span> account</h1>
-            <p className="text-sm text-[#A3A3A3]">Start practicing mock interviews and preparing for placements.</p>
+          <div className="p-5 sm:p-8 pb-4 sm:pb-6 text-center">
+            <h1 className="text-xl sm:text-2xl font-bold text-white mb-1.5 sm:mb-2">Create your <span className="text-[#2563EB]">prepX</span> account</h1>
+            <p className="text-xs sm:text-sm text-[#A3A3A3]">Start practicing mock interviews and preparing for placements.</p>
           </div>
 
-          <div className="p-8 pt-2">
+          <div className="p-4 sm:p-8 pt-2">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="username" className="text-xs font-medium text-white">Username *</Label>
@@ -565,14 +565,14 @@ export function Signup() {
                           navigate("/");
                         }
                       } catch (error: any) {
-                        toast.error(error.response?.data?.message || "Google authentication failed");
+                        toast.error(getErrorMessage(error, "Unable to sign up with Google. Please try again or use the signup form."));
                       } finally {
                         setLoading(false);
                       }
                     }
                   }}
                   onError={() => {
-                    toast.error("Google origin error: Add http://localhost:5173 to Authorized JavaScript origins in Google Cloud Console");
+                    toast.error("Unable to initialize Google Sign-Up. Please use the signup form.");
                   }}
 
                   theme="filled_black"

@@ -141,11 +141,9 @@ export function Login() {
       }
     } catch (error: any) {
       if (error.response?.status === 403 || error.response?.data?.requiresVerification) {
-        toast.warn(error.response?.data?.message || "Please verify your Gmail address before logging in. Check your inbox for the verification link.");
-      } else if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
+        toast.warn("Please verify your email address before logging in. Check your inbox for the verification link.");
       } else {
-        toast.error(getErrorMessage(error, "Email or password is wrong. Please verify it and try again."));
+        toast.error(getErrorMessage(error, "Email or password is incorrect. Please verify and try again."));
       }
     } finally {
       setLoading(false);
@@ -162,15 +160,15 @@ export function Login() {
         }}
       />
       
-      <main className="flex-1 flex flex-col items-center justify-center pt-24 pb-32 px-6 relative z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)]">
+      <main className="flex-1 flex flex-col items-center justify-center pt-8 sm:pt-24 pb-16 sm:pb-32 px-4 sm:px-6 relative z-10 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)]">
         <div className="w-full max-w-[420px] bg-[#0F0F12] border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl relative">
           
-          <div className="p-8 pb-6 text-center">
-            <h1 className="text-2xl font-bold text-white mb-2">Welcome to <span className="text-[#2563EB]">prepX</span></h1>
-            <p className="text-sm text-[#A3A3A3]">Log in to access your dashboard!</p>
+          <div className="p-5 sm:p-8 pb-4 sm:pb-6 text-center">
+            <h1 className="text-xl sm:text-2xl font-bold text-white mb-1.5 sm:mb-2">Welcome to <span className="text-[#2563EB]">prepX</span></h1>
+            <p className="text-xs sm:text-sm text-[#A3A3A3]">Log in to access your dashboard!</p>
           </div>
 
-          <div className="flex bg-[#1A1A1A] mx-8 rounded-lg p-1 text-xs font-medium border border-zinc-800/50">
+          <div className="flex bg-[#1A1A1A] mx-4 sm:mx-8 rounded-lg p-1 text-xs font-medium border border-zinc-800/50">
             <button 
               onClick={() => handleMethodChange("password")}
               className={`flex-1 py-2 rounded-md transition-colors cursor-pointer ${loginMethod === "password" ? "bg-[#2a2a2a] text-white shadow-sm" : "text-[#A3A3A3] hover:text-white"}`}
@@ -187,7 +185,7 @@ export function Login() {
             </button>
           </div>
 
-          <div className="p-8 pt-6">
+          <div className="p-4 sm:p-8 pt-4 sm:pt-6">
             <form onSubmit={handleSubmit} className="space-y-5">
               
               <div className="space-y-2">
@@ -305,14 +303,14 @@ export function Login() {
                           navigate("/", { replace: true });
                         }
                       } catch (error: any) {
-                        toast.error(error.response?.data?.message || "Google authentication failed");
+                        toast.error(getErrorMessage(error, "Unable to sign in with Google. Please try again or use email sign-in."));
                       } finally {
                         setLoading(false);
                       }
                     }
                   }}
                   onError={() => {
-                    toast.error("Google origin error: Add http://localhost:5173 to Authorized JavaScript origins in Google Cloud Console");
+                    toast.error("Unable to initialize Google Sign-In. Please use email sign-in.");
                   }}
 
                   theme="filled_black"

@@ -4,6 +4,7 @@ import { fetchAnalysisHistoryApi, deleteAnalysisApi } from "../services/resumeAn
 import { Button } from "../../../components/ui/button";
 import { toast } from "react-toastify";
 import { History, Trash2, Eye, Calendar, FileText } from "lucide-react";
+import { getErrorMessage } from "../../../lib/utils";
 
 export function AnalysisHistory() {
   const { history, setHistory, setResult, setResumeFile, setUploadStatus, setJobDescription } = useResumeStore();
@@ -21,7 +22,7 @@ export function AnalysisHistory() {
         setTotalPages(res.pagination.totalPages);
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to load analysis history.");
+      toast.error(getErrorMessage(err, "Unable to load analysis history right now."));
     } finally {
       setLoading(false);
     }
@@ -39,7 +40,7 @@ export function AnalysisHistory() {
         setHistory(history.filter((item) => item.analysisId !== analysisId && (item as any)._id !== analysisId));
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to delete analysis.");
+      toast.error(getErrorMessage(err, "Unable to delete analysis record. Please try again."));
     }
   };
 
@@ -97,9 +98,9 @@ export function AnalysisHistory() {
   };
 
   return (
-    <div className="p-6 rounded-2xl bg-[#0D0D14] border border-zinc-800 space-y-4">
+    <div className="p-4 sm:p-6 rounded-2xl bg-[#0D0D14] border border-zinc-800 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
+        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
           <History className="size-4 text-blue-400" /> Analysis History
         </h3>
         <Button
@@ -127,16 +128,16 @@ export function AnalysisHistory() {
                 className="p-3.5 sm:p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-500/30 transition-all overflow-hidden"
               >
                 <div className="space-y-1.5 min-w-0 flex-1">
-                  <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     <FileText className="size-3.5 text-blue-400 shrink-0" />
-                    <span className="text-xs font-bold text-white truncate max-w-[140px] sm:max-w-[200px]" title={fileName}>
+                    <span className="text-xs font-bold text-white truncate max-w-[160px] sm:max-w-[220px]" title={fileName}>
                       {fileName}
                     </span>
-                    <span className="text-[10px] text-zinc-400 font-mono whitespace-nowrap truncate max-w-[110px] shrink-0" title={jobTitle}>
+                    <span className="text-[10px] text-zinc-400 font-mono whitespace-nowrap truncate max-w-[140px]" title={jobTitle}>
                       ({jobTitle})
                     </span>
                   </div>
-                  <div className="flex items-center gap-2.5 text-[11px] text-zinc-400 flex-wrap">
+                  <div className="flex items-center gap-2 sm:gap-2.5 text-[10px] sm:text-[11px] text-zinc-400 flex-wrap">
                     <span className="flex items-center gap-1 shrink-0">
                       <Calendar className="size-3" /> {dateStr}
                     </span>

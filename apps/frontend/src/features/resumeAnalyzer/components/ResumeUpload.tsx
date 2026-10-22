@@ -76,19 +76,19 @@ export function ResumeUpload() {
   };
 
   return (
-    <div className="p-6 rounded-2xl bg-[#0D0D14] border border-zinc-800 space-y-4">
+    <div className="p-4 sm:p-6 rounded-2xl bg-[#0D0D14] border border-zinc-800 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
+        <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
           <FileText className="size-4 text-blue-400" /> Upload Resume
         </h3>
-        <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-mono">PDF, DOCX (Max 10MB)</span>
+        <span className="text-[9px] sm:text-[10px] text-zinc-400 uppercase tracking-widest font-mono">PDF, DOCX (Max 10MB)</span>
       </div>
 
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+        className={`relative border-2 border-dashed rounded-xl p-5 sm:p-8 text-center cursor-pointer transition-all ${
           resumeFile
             ? "border-emerald-500/40 bg-emerald-500/5"
             : uploadStatus === "uploading"
@@ -113,12 +113,12 @@ export function ResumeUpload() {
           <div className="flex flex-col items-center gap-2 py-2">
             <CheckCircle2 className="size-9 text-emerald-400" />
             <div>
-              <p className="text-sm font-bold text-white">{resumeFile.originalFileName}</p>
+              <p className="text-sm font-bold text-white break-all">{resumeFile.originalFileName}</p>
               <p className="text-xs text-zinc-400 mt-0.5">
                 {(resumeFile.fileSize / 1024).toFixed(1)} KB • Extracted {resumeFile.structuredData?.skills?.length || 0} skills
               </p>
             </div>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
               <Button
                 type="button"
                 variant="outline"
@@ -147,8 +147,8 @@ export function ResumeUpload() {
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3 py-4">
-            <div className="size-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
-              <Upload className="size-6" />
+            <div className="size-11 sm:size-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+              <Upload className="size-5 sm:size-6" />
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Drag & Drop your resume file here</p>
@@ -160,22 +160,30 @@ export function ResumeUpload() {
 
       {/* Resume Document Viewer Modal */}
       {showPreviewModal && resumeFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#0F0F16] border border-zinc-800 rounded-2xl w-full max-w-4xl h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-              <div className="flex items-center gap-3">
-                <FileText className="size-5 text-blue-400" />
-                <div>
-                  <h3 className="font-bold text-white text-base leading-tight">Resume Document Viewer</h3>
-                  <p className="text-xs text-zinc-400 font-mono">{resumeFile.originalFileName}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#0F0F16] border border-zinc-800 rounded-xl sm:rounded-2xl w-full max-w-4xl h-[92vh] sm:h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-3 sm:p-4 border-b border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/50">
+              <div className="flex items-center justify-between sm:justify-start gap-3">
+                <div className="flex items-center gap-2.5">
+                  <FileText className="size-5 text-blue-400 shrink-0" />
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-white text-sm sm:text-base leading-tight">Resume Document Viewer</h3>
+                    <p className="text-xs text-zinc-400 font-mono truncate max-w-[200px] sm:max-w-xs">{resumeFile.originalFileName}</p>
+                  </div>
                 </div>
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="sm:hidden text-zinc-400 hover:text-white p-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
+                >
+                  <X className="size-5" />
+                </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between sm:justify-end gap-2">
                 <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs">
                   <button
                     onClick={() => setPreviewTab("document")}
-                    className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 text-xs ${
                       previewTab === "document" ? "bg-blue-600 text-white shadow-sm" : "text-zinc-400 hover:text-white"
                     }`}
                   >
@@ -183,7 +191,7 @@ export function ResumeUpload() {
                   </button>
                   <button
                     onClick={() => setPreviewTab("text")}
-                    className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1.5 text-xs ${
                       previewTab === "text" ? "bg-blue-600 text-white shadow-sm" : "text-zinc-400 hover:text-white"
                     }`}
                   >
@@ -193,7 +201,7 @@ export function ResumeUpload() {
 
                 <button
                   onClick={() => setShowPreviewModal(false)}
-                  className="text-zinc-400 hover:text-white p-1.5 rounded-lg hover:bg-zinc-800 transition-colors ml-2"
+                  className="hidden sm:flex text-zinc-400 hover:text-white p-1.5 rounded-lg hover:bg-zinc-800 transition-colors ml-2"
                 >
                   <X className="size-5" />
                 </button>

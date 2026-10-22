@@ -102,8 +102,8 @@ export function Dashboard() {
   return (
     <div className="min-h-screen bg-[#050507] text-white flex font-sans">
       
-      {/* Left Sidebar */}
-      <aside className="w-16 md:w-20 fixed inset-y-0 left-0 bg-[#0A0A0E] border-r border-zinc-800/60 flex flex-col items-center py-6 z-40 pt-24">
+      {/* Left Sidebar - Hidden on mobile, visible on desktop */}
+      <aside className="hidden md:flex w-16 md:w-20 fixed inset-y-0 left-0 bg-[#0A0A0E] border-r border-zinc-800/60 flex-col items-center py-6 z-40 pt-24">
         <div className="flex flex-col gap-6 w-full items-center">
           {navItems.map((item, index) => {
             const isActive = location.pathname === item.href || (index === 0 && location.pathname === `/${userId}`);
@@ -136,81 +136,81 @@ export function Dashboard() {
       </aside>
 
       {/* Main Logged-In Workspace */}
-      <main className="flex-1 ml-16 md:ml-20 pt-24 pb-24 px-4 sm:px-6 lg:px-10 flex justify-center">
-        <div className="w-full max-w-6xl space-y-10">
+      <main className="flex-1 ml-0 md:ml-20 pt-6 sm:pt-10 md:pt-24 pb-20 md:pb-24 px-3 sm:px-6 lg:px-10 flex justify-center min-w-0 overflow-x-hidden">
+        <div className="w-full max-w-6xl space-y-6 sm:space-y-10">
           
           {/* Welcome Banner Header */}
-          <div className="relative rounded-3xl bg-gradient-to-r from-blue-950/50 via-indigo-950/40 to-purple-950/30 border border-blue-500/20 p-8 md:p-10 overflow-hidden shadow-2xl">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+          <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-r from-blue-950/60 via-indigo-950/50 to-purple-950/40 border border-indigo-500/30 p-5 sm:p-8 md:p-10 overflow-hidden shadow-2xl backdrop-blur-xl">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20 animate-pulse-subtle"></div>
             
             <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider border border-blue-500/30">
-                  <Flame className="size-3.5 fill-blue-400 text-blue-400" />
-                  Placement Preparation
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass-pill text-indigo-300 text-xs font-bold uppercase tracking-wider border border-indigo-500/30">
+                  <Flame className="size-3.5 fill-amber-400 text-amber-400 animate-pulse" />
+                  Placement Preparation Workspace
                 </div>
                 <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">
-                  Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">{firstName}</span>
+                  Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300">{firstName}</span>
                 </h1>
-                <p className="text-zinc-400 text-sm md:text-base max-w-xl">
+                <p className="text-zinc-300 text-sm md:text-base max-w-xl leading-relaxed">
                   Ready for another round? Start a mock interview, review your resume, or practice coding problems.
                 </p>
               </div>
 
               {/* Quick Action Button */}
               <Link to="/ai-interview">
-                <Button className="h-12 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer">
+                <Button className="h-12 px-7 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold rounded-xl shadow-xl shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer border border-white/10">
                   <Play className="size-4 fill-white" /> Start interview
                 </Button>
               </Link>
             </div>
 
             {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/10 text-xs">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/10 text-xs">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 shrink-0">
                   <Award className="size-4" />
                 </div>
-                <div>
-                  <div className="text-zinc-400 font-medium">Completed Rounds</div>
-                  <div className="text-base font-bold text-white">4 Sessions</div>
+                <div className="min-w-0">
+                  <div className="text-zinc-400 font-medium truncate text-[11px] sm:text-xs">Completed</div>
+                  <div className="text-sm sm:text-base font-bold text-white">4 Sessions</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shrink-0">
                   <Target className="size-4" />
                 </div>
-                <div>
-                  <div className="text-zinc-400 font-medium">Average Score</div>
-                  <div className="text-base font-bold text-white">88% Match</div>
+                <div className="min-w-0">
+                  <div className="text-zinc-400 font-medium truncate text-[11px] sm:text-xs">Average Score</div>
+                  <div className="text-sm sm:text-base font-bold text-emerald-400">88% Match</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 sm:p-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 shrink-0">
                   <Clock className="size-4" />
                 </div>
-                <div>
-                  <div className="text-zinc-400 font-medium">Practice Time</div>
-                  <div className="text-base font-bold text-white">3.5 Hours</div>
+                <div className="min-w-0">
+                  <div className="text-zinc-400 font-medium truncate text-[11px] sm:text-xs">Practice Time</div>
+                  <div className="text-sm sm:text-base font-bold text-purple-300">3.5 Hours</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                  <Zap className="size-4" />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-2 sm:p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
+                  <Zap className="size-4 text-amber-400" />
                 </div>
-                <div>
-                  <div className="text-zinc-400 font-medium">Current Streak</div>
-                  <div className="text-base font-bold text-white">3 Days</div>
+                <div className="min-w-0">
+                  <div className="text-zinc-400 font-medium truncate text-[11px] sm:text-xs">Streak</div>
+                  <div className="text-sm sm:text-base font-bold text-amber-300">3 Days 🔥</div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Instant Interview Launcher Widget */}
-          <div className="p-6 md:p-8 rounded-3xl bg-[#0C0C12] border border-zinc-800 shadow-xl space-y-4">
+          <div className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl glass-card space-y-4">
             <div className="flex items-center gap-2">
-              <Sparkles className="size-5 text-blue-400" />
-              <h2 className="text-lg font-bold text-white">Quick Practice with GitHub Repository</h2>
+              <Sparkles className="size-5 text-indigo-400 animate-pulse" />
+              <h2 className="text-base sm:text-lg font-bold text-white">Quick Practice with GitHub Repository</h2>
             </div>
             <p className="text-xs text-zinc-400">
               Paste a public GitHub repository link below to generate questions based on your project code.
@@ -222,12 +222,12 @@ export function Dashboard() {
                 onChange={(e) => setRepoUrl(e.target.value)}
                 placeholder="https://github.com/username/repository"
                 required
-                className="flex-1 bg-zinc-900 border border-zinc-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors shadow-inner"
               />
               <Button 
                 type="submit" 
                 disabled={loading}
-                className="h-11 px-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all cursor-pointer shrink-0"
+                className="h-11 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl transition-all cursor-pointer shrink-0 shadow-lg shadow-indigo-500/20"
               >
                 {loading ? "Preparing..." : "Start interview"}
               </Button>
@@ -237,20 +237,20 @@ export function Dashboard() {
           {/* Logged-In Workspace Hub Tools Grid */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">prepX Practice Suite</h2>
-              <span className="text-xs text-zinc-500">Choose your prep focus</span>
+              <h2 className="text-lg sm:text-xl font-bold text-white">prepX Practice Suite</h2>
+              <span className="text-xs text-zinc-400 glass-pill px-3 py-1 rounded-full border border-white/10">Choose your prep focus</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               
               {/* Card 1: AI Mock Interviews */}
-              <div className="rounded-2xl bg-[#0D0D14] border border-zinc-800/80 p-6 flex flex-col justify-between hover:border-blue-500/40 transition-all group">
+              <div className="rounded-2xl glass-card p-5 sm:p-6 flex flex-col justify-between hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-500/10 transition-all group">
                 <div className="space-y-4">
-                  <div className="size-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="size-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md shadow-blue-500/10">
                     <GraduationCap className="size-6" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white">AI Voice & Video Interviews</h3>
+                    <h3 className="text-lg font-bold text-white group-hover:text-blue-300 transition-colors">AI Voice & Video Interviews</h3>
                     <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
                       Practice Technical, System Design, HR, and Behavioral rounds with conversational AI audio evaluation.
                     </p>
@@ -265,20 +265,20 @@ export function Dashboard() {
                   </div>
                 </div>
                 <Link to="/ai-interview" className="mt-6">
-                  <Button className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-semibold h-10 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <Button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2">
                     Enter AI Interview <ArrowRight className="size-3.5" />
                   </Button>
                 </Link>
               </div>
 
               {/* Card 2: AI Assisted Coding */}
-              <div className="rounded-2xl bg-[#0D0D14] border border-zinc-800/80 p-6 flex flex-col justify-between hover:border-purple-500/40 transition-all group">
+              <div className="rounded-2xl glass-card p-5 sm:p-6 flex flex-col justify-between hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-500/10 transition-all group">
                 <div className="space-y-4">
-                  <div className="size-12 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="size-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 border border-purple-500/30 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md shadow-purple-500/10">
                     <Code2 className="size-6" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white">AI Coding Arena</h3>
+                    <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition-colors">AI Coding Arena</h3>
                     <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
                       Solve DSA, Algorithms, and System Design problems with interactive hints and complexity analysis.
                     </p>
@@ -293,20 +293,20 @@ export function Dashboard() {
                   </div>
                 </div>
                 <Link to={`/${userId}/coding`} className="mt-6">
-                  <Button className="w-full bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-semibold h-10 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <Button className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center justify-center gap-2">
                     Open Coding Platform <ArrowRight className="size-3.5" />
                   </Button>
                 </Link>
               </div>
 
               {/* Card 3: ATS Resume Analyze */}
-              <div className="rounded-2xl bg-[#0D0D14] border border-zinc-800/80 p-6 flex flex-col justify-between hover:border-emerald-500/40 transition-all group">
+              <div className="rounded-2xl glass-card p-5 sm:p-6 flex flex-col justify-between hover:border-emerald-500/50 hover:shadow-xl hover:shadow-emerald-500/10 transition-all group">
                 <div className="space-y-4">
-                  <div className="size-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="size-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md shadow-emerald-500/10">
                     <FileText className="size-6" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white">Resume Analyze</h3>
+                    <h3 className="text-lg font-bold text-white group-hover:text-emerald-300 transition-colors">Resume Analyze</h3>
                     <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
                       Scan your CV against target tech company job descriptions to get instant ATS scores and keyword fixes.
                     </p>
@@ -321,20 +321,20 @@ export function Dashboard() {
                   </div>
                 </div>
                 <Link to={`/${userId}/resume`} className="mt-6">
-                  <Button className="w-full bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-semibold h-10 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <Button className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2">
                     Analyze Resume <ArrowRight className="size-3.5" />
                   </Button>
                 </Link>
               </div>
 
               {/* Card 4: AI Group Discussion */}
-              <div className="rounded-2xl bg-[#0D0D14] border border-zinc-800/80 p-6 flex flex-col justify-between hover:border-pink-500/40 transition-all group">
+              <div className="rounded-2xl glass-card p-5 sm:p-6 flex flex-col justify-between hover:border-pink-500/50 hover:shadow-xl hover:shadow-pink-500/10 transition-all group">
                 <div className="space-y-4">
-                  <div className="size-12 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="size-12 rounded-xl bg-gradient-to-br from-pink-500/20 to-rose-500/20 border border-pink-500/30 text-pink-400 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md shadow-pink-500/10">
                     <Users className="size-6" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white">AI Group Discussion</h3>
+                    <h3 className="text-lg font-bold text-white group-hover:text-pink-300 transition-colors">AI Group Discussion</h3>
                     <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
                       Live 5-participant GD arena with automated web topic discovery, speaking metrics, and Groq evaluations.
                     </p>
@@ -349,7 +349,7 @@ export function Dashboard() {
                   </div>
                 </div>
                 <Link to="/group-discussion" className="mt-6">
-                  <Button className="w-full bg-pink-600/20 hover:bg-pink-600 text-pink-300 hover:text-white border border-pink-500/30 text-xs font-semibold h-10 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <Button className="w-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-pink-500/20 flex items-center justify-center gap-2">
                     Enter GD Arena <ArrowRight className="size-3.5" />
                   </Button>
                 </Link>
@@ -383,14 +383,14 @@ export function Dashboard() {
               const nextTitle = levelTitles[Math.min(levelTitles.length - 1, levelNumber)];
 
               return (
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#0D0D14] to-[#12121D] border border-zinc-800 space-y-5 lg:col-span-2 shadow-xl">
-                  <div className="flex items-center justify-between">
+                <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#0D0D14] to-[#12121D] border border-zinc-800 space-y-5 lg:col-span-2 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="size-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-black text-lg">
+                      <div className="size-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-black text-lg shrink-0">
                         L{levelNumber}
                       </div>
                       <div>
-                        <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <h3 className="text-sm sm:text-base font-bold text-white flex flex-wrap items-center gap-2">
                           Level {levelNumber}: {levelTitle}
                           <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] uppercase font-bold tracking-wider">
                             Rank #{Math.max(1, 15 - levelNumber)}
@@ -399,9 +399,9 @@ export function Dashboard() {
                         <p className="text-xs text-zinc-400">Earn +150 XP per completed AI Interview round</p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <span className="text-xs text-zinc-400">Total XP</span>
-                      <div className="text-lg font-extrabold text-amber-400">{currentXp.toLocaleString()} / {levelXpCeil.toLocaleString()} XP</div>
+                      <div className="text-base sm:text-lg font-extrabold text-amber-400">{currentXp.toLocaleString()} / {levelXpCeil.toLocaleString()} XP</div>
                     </div>
                   </div>
 

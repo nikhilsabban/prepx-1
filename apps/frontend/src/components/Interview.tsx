@@ -564,10 +564,10 @@ export function Interview() {
   const userSpeaking = userLevel > 0.05 && !aiSpeaking;
 
   return (
-    <main className="flex h-screen w-screen flex-col overflow-hidden bg-background">
+    <main className="flex h-screen w-full flex-col overflow-hidden bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border/40 bg-card/20 backdrop-blur shrink-0">
-        <div className="flex items-center gap-2 text-sm font-medium">
+      <header className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-border/40 bg-card/20 backdrop-blur shrink-0">
+        <div className="flex items-center gap-2 text-xs sm:text-sm font-medium">
           <span className="relative flex size-2.5">
             <span
               className={
@@ -589,17 +589,17 @@ export function Interview() {
       </header>
 
       {/* Stage */}
-      <div className="flex flex-1 flex-col items-center px-4 py-5 overflow-y-auto min-h-0">
+      <div className="flex flex-1 flex-col items-center px-3 sm:px-4 py-4 sm:py-5 overflow-y-auto min-h-0">
         {status === "connecting" ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
             <Loader2 className="size-8 animate-spin text-violet-500" />
-            <p className="text-sm font-medium">Setting up your voice interview &amp; microphone…</p>
+            <p className="text-xs sm:text-sm font-medium text-center">Setting up your voice interview &amp; microphone…</p>
           </div>
         ) : (
-          <div className="flex flex-col items-center w-full max-w-2xl gap-5">
+          <div className="flex flex-col items-center w-full max-w-2xl gap-4 sm:gap-5">
 
             {/* Visual Voice Orbs */}
-            <div className="flex w-full items-center justify-center gap-20 sm:gap-32">
+            <div className="flex w-full items-center justify-center gap-4 sm:gap-16 md:gap-32 py-2">
               <VoiceOrb
                 level={aiLevel}
                 speaking={aiSpeaking}

@@ -79,40 +79,41 @@ export function Form() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_50%,#000_70%,transparent_100%)]" />
       </div>
 
-      <main className="relative z-10 pt-20 pb-32 px-6 max-w-7xl mx-auto space-y-40">
+      <main className="relative z-10 pt-10 sm:pt-20 pb-16 sm:pb-32 px-4 sm:px-6 max-w-7xl mx-auto space-y-20 sm:space-y-32 md:space-y-40">
         
         {/* HERO SECTION */}
-        <section className="text-center space-y-8 flex flex-col items-center pt-10">
+        <section className="text-center space-y-6 sm:space-y-8 flex flex-col items-center pt-6 sm:pt-10">
           <motion.div 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-indigo-300 font-medium"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-pill text-xs sm:text-sm text-indigo-300 font-medium shadow-lg shadow-indigo-500/10 border border-indigo-500/20"
           >
-            <Sparkles className="size-4" /> Placement Interview Practice
+            <Sparkles className="size-4 text-indigo-400 animate-pulse" /> Placement Interview Practice & Voice AI
           </motion.div>
           
           <motion.h1 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-5xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white to-zinc-400 max-w-4xl leading-tight"
+            className="text-3xl sm:text-5xl md:text-7xl font-extrabold tracking-tight max-w-4xl leading-tight"
           >
-            Practice Interviews <br className="hidden md:block"/> for Your Next Placement
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-zinc-300">Practice Interviews</span> <br className="hidden md:block"/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">for Your Next Placement</span>
           </motion.h1>
           
           <motion.p 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto leading-relaxed"
+            className="text-base sm:text-lg md:text-xl text-zinc-300 max-w-2xl mx-auto leading-relaxed"
           >
             Practice realistic mock interviews tailored to your target role, with real-time feedback on your performance.
           </motion.p>
           
           <motion.div 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}
-            className="flex flex-col sm:flex-row items-center gap-4 pt-4"
+            className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 pt-2 sm:pt-4 w-full sm:w-auto"
           >
-            <Button onClick={() => navigate(isAuthenticated ? "/ai-interview" : "/login")} className="h-12 px-8 text-base font-semibold bg-white text-black hover:bg-zinc-200 rounded-xl transition-all hover:scale-105 active:scale-95 cursor-pointer">
+            <Button onClick={() => navigate(isAuthenticated ? "/ai-interview" : "/login")} className="w-full sm:w-auto h-12 px-8 text-base font-semibold bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 text-white rounded-xl transition-all shadow-xl shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-[1.03] active:scale-95 cursor-pointer">
               Start interview <ChevronRight className="ml-1 size-4" />
             </Button>
-            <a href="/#features">
-              <Button variant="ghost" className="h-12 px-8 text-base font-semibold text-zinc-300 hover:text-white rounded-xl hover:bg-white/5 transition-all">
+            <a href="/#features" className="w-full sm:w-auto">
+              <Button variant="ghost" className="w-full sm:w-auto h-12 px-8 text-base font-semibold text-zinc-300 hover:text-white rounded-xl glass-pill hover:bg-white/10 transition-all">
                 View Features
               </Button>
             </a>
@@ -121,11 +122,11 @@ export function Form() {
           {/* Stats Bar */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, delay: 0.4 }}
-            className="mt-12 md:mt-16 grid grid-cols-3 gap-2 sm:gap-8 p-4 sm:p-8 rounded-2xl md:rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl w-full max-w-4xl"
+            className="mt-8 sm:mt-12 md:mt-16 grid grid-cols-3 gap-2 sm:gap-8 p-3.5 sm:p-8 rounded-2xl md:rounded-3xl glass-card w-full max-w-4xl border border-white/10 shadow-2xl shadow-indigo-500/5"
           >
-            {[ { v: "10+", l: "Interview Types" }, { v: "7+", l: "Top Companies" }, { v: "∞", l: "Practice Sessions" } ].map((stat, i) => (
+            {[ { v: "10+", l: "Interview Types", c: "from-indigo-400 to-blue-400" }, { v: "7+", l: "Top Companies", c: "from-purple-400 to-pink-400" }, { v: "∞", l: "Practice Sessions", c: "from-cyan-400 to-emerald-400" } ].map((stat, i) => (
               <div key={i} className="flex flex-col items-center gap-1 text-center">
-                <span className="text-2xl sm:text-4xl font-black text-white">{stat.v}</span>
+                <span className={`text-xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r ${stat.c}`}>{stat.v}</span>
                 <span className="text-[10px] sm:text-sm font-medium text-zinc-400 uppercase tracking-wider">{stat.l}</span>
               </div>
             ))}
@@ -133,67 +134,66 @@ export function Form() {
         </section>
 
         {/* FEATURES SECTION */}
-        <section id="features" className="space-y-16 scroll-mt-24">
-          <div className="text-center space-y-4">
-            <h2 className="text-indigo-400 font-bold uppercase tracking-widest text-sm">Powerful Features</h2>
-            <h3 className="text-3xl md:text-5xl font-bold text-white">Everything You Need to Succeed</h3>
-            <p className="text-zinc-400 max-w-xl mx-auto text-lg">Practice realistic interviews powered by advanced AI technology</p>
+        <section id="features" className="space-y-10 sm:space-y-16 scroll-mt-24">
+          <div className="text-center space-y-3 sm:space-y-4">
+            <h2 className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 font-bold uppercase tracking-widest text-xs sm:text-sm">Powerful Features</h2>
+            <h3 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white">Everything You Need to Succeed</h3>
+            <p className="text-zinc-400 max-w-xl mx-auto text-sm sm:text-lg">Practice realistic interviews powered by advanced AI technology</p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-6xl mx-auto">
             {[
-              { icon: Mic, title: "Real-time Voice AI", desc: "Speak naturally and get instant responses from our advanced AI interviewer with human-like conversation flow." },
-              { icon: BarChart3, title: "Instant Feedback", desc: "Get detailed analysis of your responses with actionable tips to improve your interview performance." },
-              { icon: Target, title: "10+ Interview Types", desc: "From technical coding to behavioral, academic to visa interviews - practice for any career path." }
+              { icon: Mic, title: "Real-time Voice AI", desc: "Speak naturally and get instant responses from our advanced AI interviewer with human-like conversation flow.", glow: "from-indigo-500/20 to-blue-500/20", textGlow: "text-indigo-400" },
+              { icon: BarChart3, title: "Instant Feedback", desc: "Get detailed analysis of your responses with actionable tips to improve your interview performance.", glow: "from-purple-500/20 to-pink-500/20", textGlow: "text-purple-400" },
+              { icon: Target, title: "10+ Interview Types", desc: "From technical coding to behavioral, academic to visa interviews - practice for any career path.", glow: "from-cyan-500/20 to-emerald-500/20", textGlow: "text-cyan-400" }
             ].map((f, i) => (
               <motion.div 
                 key={i}
                 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}
-                whileHover={{ y: -5, backgroundColor: "rgba(255,255,255,0.05)" }}
-                className="p-8 rounded-3xl bg-zinc-900/50 border border-white/5 transition-colors cursor-default"
+                className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl glass-card cursor-default group"
               >
-                <div className="size-12 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-6">
-                  <f.icon className="size-6" />
+                <div className={`size-10 sm:size-12 rounded-xl sm:rounded-2xl bg-gradient-to-br ${f.glow} ${f.textGlow} flex items-center justify-center mb-4 sm:mb-6 border border-white/10 group-hover:scale-110 transition-transform`}>
+                  <f.icon className="size-5 sm:size-6" />
                 </div>
-                <h4 className="text-xl font-bold text-white mb-3">{f.title}</h4>
-                <p className="text-zinc-400 leading-relaxed">{f.desc}</p>
+                <h4 className="text-lg sm:text-xl font-bold text-white mb-2 sm:mb-3 group-hover:text-indigo-300 transition-colors">{f.title}</h4>
+                <p className="text-zinc-400 text-sm sm:text-base leading-relaxed">{f.desc}</p>
               </motion.div>
             ))}
           </div>
         </section>
 
         {/* INTERVIEW TYPES SECTION */}
-        <section id="interview-types" className="space-y-16 scroll-mt-24">
-          <div className="text-center space-y-4">
-            <h2 className="text-indigo-400 font-bold uppercase tracking-widest text-sm">Choose Your Path</h2>
-            <h3 className="text-3xl md:text-5xl font-bold text-white">Select Your Interview Type</h3>
-            <p className="text-zinc-400 max-w-xl mx-auto text-lg">Customized practice for every career path and interview stage</p>
+        <section id="interview-types" className="space-y-10 sm:space-y-16 scroll-mt-24">
+          <div className="text-center space-y-3 sm:space-y-4">
+            <h2 className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-bold uppercase tracking-widest text-xs sm:text-sm">Choose Your Path</h2>
+            <h3 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white">Select Your Interview Type</h3>
+            <p className="text-zinc-400 max-w-xl mx-auto text-sm sm:text-lg">Customized practice for every career path and interview stage</p>
           </div>
 
           {/* Highlight Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 max-w-5xl mx-auto">
             <motion.div 
               whileHover={{ scale: 1.02 }}
-              className="p-8 rounded-3xl bg-gradient-to-br from-indigo-900/40 to-black border border-indigo-500/30 flex flex-col justify-between"
+              className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-indigo-950/60 via-zinc-950/80 to-black border border-indigo-500/30 flex flex-col justify-between shadow-2xl shadow-indigo-500/10 backdrop-blur-xl"
             >
               <div>
                 <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2 block">Popular</span>
-                <h4 className="text-2xl font-bold text-white mb-2">Resume-Based Interview</h4>
-                <p className="text-indigo-200/70 mb-8">Upload your CV and get personalized interview questions based on your actual experience</p>
+                <h4 className="text-xl sm:text-2xl font-bold text-white mb-2">Resume-Based Interview</h4>
+                <p className="text-indigo-200/80 text-sm sm:text-base mb-6 sm:mb-8">Upload your CV and get personalized interview questions based on your actual experience</p>
               </div>
-              <Button onClick={openModal} className="w-fit bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl">Get Started</Button>
+              <Button onClick={openModal} className="w-full sm:w-fit bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl shadow-lg shadow-indigo-500/25">Get Started</Button>
             </motion.div>
 
             <motion.div 
               whileHover={{ scale: 1.02 }}
-              className="p-8 rounded-3xl bg-gradient-to-br from-purple-900/40 to-black border border-purple-500/30 flex flex-col justify-between"
+              className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-purple-950/60 via-zinc-950/80 to-black border border-purple-500/30 flex flex-col justify-between shadow-2xl shadow-purple-500/10 backdrop-blur-xl"
             >
               <div>
                 <span className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2 block">Advanced</span>
-                <h4 className="text-2xl font-bold text-white mb-2">Job Description Interview</h4>
-                <p className="text-purple-200/70 mb-8">Paste a real job description and get a highly targeted interview matching the exact requirements</p>
+                <h4 className="text-xl sm:text-2xl font-bold text-white mb-2">Job Description Interview</h4>
+                <p className="text-purple-200/80 text-sm sm:text-base mb-6 sm:mb-8">Paste a real job description and get a highly targeted interview matching the exact requirements</p>
               </div>
-              <Button onClick={openModal} className="w-fit bg-purple-600 hover:bg-purple-500 text-white rounded-xl">Get Started</Button>
+              <Button onClick={openModal} className="w-full sm:w-fit bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl shadow-lg shadow-purple-500/25">Get Started</Button>
             </motion.div>
           </div>
 
@@ -261,19 +261,19 @@ export function Form() {
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg bg-[#111] border border-white/10 rounded-3xl shadow-2xl p-8 overflow-hidden z-10"
+              className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#111] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-8 z-10"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
-              <button onClick={closeModal} className="absolute top-6 right-6 text-zinc-500 hover:text-white transition-colors">
+              <button onClick={closeModal} className="absolute top-4 sm:top-6 right-4 sm:right-6 text-zinc-500 hover:text-white transition-colors">
                 <X className="size-5" />
               </button>
               
-              <div className="mb-8">
-                <div className="size-12 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-4">
-                  <Terminal className="size-6" />
+              <div className="mb-6 sm:mb-8">
+                <div className="size-10 sm:size-12 rounded-xl sm:rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-3 sm:mb-4">
+                  <Terminal className="size-5 sm:size-6" />
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Configure Your Interview</h3>
-                <p className="text-zinc-400 text-sm">Enter a GitHub repository URL to provide context to your AI interviewer. We will analyze the repo and ask relevant technical questions.</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">Configure Your Interview</h3>
+                <p className="text-zinc-400 text-xs sm:text-sm">Enter a GitHub repository URL to provide context to your AI interviewer. We will analyze the repo and ask relevant technical questions.</p>
               </div>
 
               <form onSubmit={handleStartInterview} className="space-y-6">

@@ -116,28 +116,28 @@ export function AIInterview() {
         <div className="absolute bottom-[0%] right-[10%] w-[400px] h-[400px] bg-purple-600/8 rounded-full blur-[120px]" />
       </div>
 
-      <div className="relative z-10 max-w-5xl mx-auto px-6 pt-12 pb-24">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pt-6 sm:pt-12 pb-16 sm:pb-24">
 
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="mb-10"
+          className="mb-6 sm:mb-10"
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold uppercase tracking-wider mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold uppercase tracking-wider mb-3 sm:mb-4">
             <Sparkles className="size-3.5" />
             Mock Interview Setup
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight">
             Hey {firstName}, ready to practice?
           </h1>
-          <p className="mt-2 text-zinc-400 text-base max-w-2xl">
+          <p className="mt-2 text-zinc-400 text-sm sm:text-base max-w-2xl">
             Choose an interview mode below to start your mock interview session.
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8 items-start">
 
           {/* LEFT — Main Form Card */}
           <motion.div
@@ -146,52 +146,52 @@ export function AIInterview() {
             transition={{ duration: 0.4, delay: 0.1 }}
             className="lg:col-span-3"
           >
-            <div className="rounded-3xl border border-white/10 bg-zinc-900/60 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/40">
+            <div className="rounded-2xl sm:rounded-3xl border border-white/10 bg-zinc-900/60 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/40">
               {/* Top accent bar */}
               <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
 
-              <div className="p-8">
+              <div className="p-4 sm:p-8">
                 {/* MODE SELECTOR TABS */}
-                <div className="mb-8">
+                <div className="mb-6 sm:mb-8">
                   <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block mb-3">
                     Choose Interview Type
                   </label>
-                  <div className="grid grid-cols-3 gap-2 bg-black/40 p-1.5 rounded-2xl border border-white/10">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-black/40 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-white/10">
                     <button
                       type="button"
                       onClick={() => setMode("github")}
-                      className={`flex flex-col sm:flex-row items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2 sm:py-3 px-1 sm:px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center ${
                         mode === "github"
                           ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
                           : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
-                      <Github className="size-4" />
-                      <span>GitHub Repo</span>
+                      <Github className="size-3.5 sm:size-4 shrink-0" />
+                      <span className="truncate">GitHub Repo</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setMode("role")}
-                      className={`flex flex-col sm:flex-row items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2 sm:py-3 px-1 sm:px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center ${
                         mode === "role"
                           ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
                           : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
-                      <Briefcase className="size-4" />
-                      <span>Role Based</span>
+                      <Briefcase className="size-3.5 sm:size-4 shrink-0" />
+                      <span className="truncate">Role Based</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setMode("jd")}
-                      className={`flex flex-col sm:flex-row items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2 sm:py-3 px-1 sm:px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center ${
                         mode === "jd"
                           ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
                           : "text-zinc-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
-                      <FileText className="size-4" />
-                      <span>Job Description</span>
+                      <FileText className="size-3.5 sm:size-4 shrink-0" />
+                      <span className="truncate">Job Descr.</span>
                     </button>
                   </div>
                 </div>

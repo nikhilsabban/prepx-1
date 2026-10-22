@@ -44,23 +44,23 @@ export function BookmarksPage() {
   };
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10 min-h-screen space-y-8">
+    <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-10 min-h-screen space-y-6 sm:space-y-8">
       {/* Header */}
-      <div className="border-b border-zinc-800 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="border-b border-zinc-800 pb-5 sm:pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
               <Bookmark className="size-5" />
             </span>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">Saved Bookmarks</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Saved Bookmarks</h1>
           </div>
           <p className="text-xs text-zinc-400 mt-1.5">
             Quickly revisit and practice your bookmarked AI interview sessions, question sets, and custom roles.
           </p>
         </div>
 
-        <Link to="/">
-          <Button className="gap-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl h-10 px-4 shadow-lg shadow-purple-500/20 cursor-pointer">
+        <Link to="/" className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto gap-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl h-10 px-4 shadow-lg shadow-purple-500/20 cursor-pointer justify-center">
             <Sparkles className="size-3.5" /> Start New Interview
           </Button>
         </Link>
@@ -103,7 +103,7 @@ export function BookmarksPage() {
             return (
               <div
                 key={item._id}
-                className="group relative p-6 rounded-2xl bg-[#0D0D14] border border-zinc-800/80 hover:border-purple-500/40 transition-all shadow-xl flex flex-col justify-between space-y-5"
+                className="group relative p-4 sm:p-6 rounded-2xl bg-[#0D0D14] border border-zinc-800/80 hover:border-purple-500/40 transition-all shadow-xl flex flex-col justify-between space-y-4 sm:space-y-5"
               >
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">

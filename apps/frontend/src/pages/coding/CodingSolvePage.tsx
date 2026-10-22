@@ -5,6 +5,7 @@ import { codingApi } from "../../services/codingApi";
 import type { Problem, Submission } from "../../services/codingApi";
 import { Play, Send, RotateCcw, CheckCircle, XCircle, AlertTriangle, Clock, Code2, ArrowLeft, History, FileText, Check, Bot, Sparkles, Loader2, Bookmark } from "lucide-react";
 import { toast } from "react-toastify";
+import { getErrorMessage } from "../../lib/utils";
 
 const DEFAULT_STARTERS: Record<string, string> = {
   javascript: "// Write your solution here\nvar solve = function() {\n  \n};",
@@ -22,6 +23,7 @@ export const CodingSolvePage: React.FC = () => {
   const [code, setCode] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"description" | "submissions" | "ai">("description");
   const [activeTestTab, setActiveTestTab] = useState<"testcases" | "results">("testcases");
+  const [mobileTab, setMobileTab] = useState<"problem" | "code">("problem");
 
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -162,6 +164,7 @@ export const CodingSolvePage: React.FC = () => {
     }
     setAiLoading(true);
     setActiveTab("ai");
+    setMobileTab("problem");
     setAiMessages((prev) => [
       ...prev,
       { role: "user", text: "🔍 Requesting AI Code Review for my current solution..." },
@@ -194,6 +197,7 @@ export const CodingSolvePage: React.FC = () => {
       toast.error("Please write code before running!");
       return;
     }
+    setMobileTab("code");
     setRunning(true);
     setRunResults(null);
     setSubmissionResult(null);
@@ -208,7 +212,7 @@ export const CodingSolvePage: React.FC = () => {
       setRunResults(res.results || []);
       toast.success("Test execution completed");
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Execution failed");
+      toast.error(getErrorMessage(error, "Execution error. Please check your syntax and test cases."));
     } finally {
       setRunning(false);
     }
@@ -221,6 +225,7 @@ export const CodingSolvePage: React.FC = () => {
     }
     if (!problem?._id) return;
 
+    setMobileTab("code");
     setSubmitting(true);
     setSubmissionResult(null);
     setActiveTestTab("results");
@@ -239,7 +244,7 @@ export const CodingSolvePage: React.FC = () => {
       }
       fetchSubmissions(problem._id);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Submission failed");
+      toast.error(getErrorMessage(error, "Submission error. Please check your code and try again."));
     } finally {
       setSubmitting(false);
     }
@@ -271,15 +276,15 @@ export const CodingSolvePage: React.FC = () => {
     <div className="h-[calc(100vh-64px)] bg-[#09090b] text-zinc-100 flex flex-col overflow-hidden">
       
       {/* Top Action Bar */}
-      <div className="h-12 border-b border-zinc-800 bg-zinc-900/95 px-4 flex items-center justify-between shrink-0 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <Link to="/coding/problems" className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
+      <div className="min-h-12 border-b border-zinc-800 bg-zinc-900/95 px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2.5 shrink-0 backdrop-blur-md">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <Link to="/coding/problems" className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </Link>
-          <span className="font-semibold text-sm text-zinc-200 truncate max-w-xs sm:max-w-md">
+          <span className="font-semibold text-xs sm:text-sm text-zinc-200 truncate max-w-[130px] xs:max-w-[180px] sm:max-w-md">
             #{problem.number}. {problem.title}
           </span>
-          <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+          <span className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-semibold shrink-0 ${
             problem.difficulty === "Easy" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
             problem.difficulty === "Medium" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
             "bg-rose-500/10 text-rose-400 border border-rose-500/20"
@@ -289,30 +294,30 @@ export const CodingSolvePage: React.FC = () => {
           <button
             onClick={handleToggleBookmark}
             title={isBookmarked ? "Remove Bookmark" : "Bookmark Problem"}
-            className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 transition-colors shrink-0 cursor-pointer"
           >
             <Bookmark className={`w-4 h-4 ${isBookmarked ? "text-amber-400 fill-amber-400" : ""}`} />
           </button>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
           {/* Language Picker */}
           <select
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
-            className="bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500 font-mono"
+            className="bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-500 font-mono"
           >
-            <option value="javascript">JavaScript (Node.js)</option>
+            <option value="javascript">JavaScript</option>
             <option value="python">Python 3</option>
-            <option value="cpp">C++ (GCC 10)</option>
+            <option value="cpp">C++</option>
             <option value="java">Java 15</option>
-            <option value="c">C (GCC 10)</option>
+            <option value="c">C</option>
           </select>
 
           <button
             onClick={handleResetCode}
             title="Reset code template"
-            className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -321,37 +326,61 @@ export const CodingSolvePage: React.FC = () => {
             onClick={handleAIReview}
             disabled={aiLoading}
             title="Ask AI to review your current code"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>AI Review</span>
+            <span className="hidden xs:inline">AI Review</span>
           </button>
 
           <button
             onClick={handleRun}
             disabled={running || submitting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
           >
             <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
-            {running ? "Running..." : "Run"}
+            {running ? "..." : "Run"}
           </button>
 
           <button
             onClick={handleSubmit}
             disabled={running || submitting}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/30 transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/30 transition-all disabled:opacity-50 cursor-pointer"
           >
             <Send className="w-3.5 h-3.5" />
-            {submitting ? "Submitting..." : "Submit"}
+            {submitting ? "..." : "Submit"}
           </button>
         </div>
+      </div>
+
+      {/* Mobile Tab Switcher */}
+      <div className="lg:hidden flex border-b border-zinc-800 bg-zinc-950 px-2 py-1.5 gap-1 shrink-0">
+        <button
+          onClick={() => setMobileTab("problem")}
+          className={`flex-1 py-1.5 px-3 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+            mobileTab === "problem"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5" /> Problem &amp; AI
+        </button>
+        <button
+          onClick={() => setMobileTab("code")}
+          className={`flex-1 py-1.5 px-3 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+            mobileTab === "code"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+          }`}
+        >
+          <Code2 className="w-3.5 h-3.5" /> Code &amp; Test
+        </button>
       </div>
 
       {/* Main Split Layout */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
         
         {/* Left Side: Problem Spec & Submissions */}
-        <div className="lg:col-span-5 border-r border-zinc-800 bg-zinc-900/60 flex flex-col overflow-hidden">
+        <div className={`lg:col-span-5 border-r border-zinc-800 bg-zinc-900/60 flex-col overflow-hidden ${mobileTab === "problem" ? "flex flex-1" : "hidden lg:flex"}`}>
           {/* Tabs */}
           <div className="flex items-center border-b border-zinc-800 bg-zinc-950 px-2">
             <button
@@ -583,7 +612,7 @@ export const CodingSolvePage: React.FC = () => {
         </div>
 
         {/* Right Side: Code Editor & Execution Results */}
-        <div className="lg:col-span-7 flex flex-col bg-[#09090b] overflow-hidden">
+        <div className={`lg:col-span-7 flex-col bg-[#09090b] overflow-hidden ${mobileTab === "code" ? "flex flex-1" : "hidden lg:flex"}`}>
           
           {/* Monaco Editor Pane */}
           <div className="flex-1 border-b border-zinc-800 relative">

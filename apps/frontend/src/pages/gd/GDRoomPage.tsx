@@ -42,6 +42,7 @@ import {
   type IGDCurrentTurn,
 } from "../../services/gdService";
 import { toast } from "react-toastify";
+import { getErrorMessage } from "../../lib/utils";
 
 // Public STUN server configuration for WebRTC peer-to-peer mesh
 const RTC_CONFIG: RTCConfiguration = {
@@ -159,7 +160,7 @@ export function GDRoomPage() {
       initWebSocket(joinRes.participant, joinRes.session);
     } catch (err: any) {
       console.error("Failed to join GD room:", err);
-      toast.error(err.response?.data?.message || "Could not join discussion room");
+      toast.error(getErrorMessage(err, "Unable to join the group discussion room. Please try again."));
       navigate("/group-discussion");
     } finally {
       setLoading(false);
@@ -963,7 +964,7 @@ export function GDRoomPage() {
       setManualText("");
       toast.success("Contribution recorded in discussion transcript!");
     } catch (err: any) {
-      toast.error(err.message || "Failed to submit contribution");
+      toast.error(getErrorMessage(err, "Unable to record your contribution right now. Please try again."));
     } finally {
       setIsSendingText(false);
     }
@@ -986,7 +987,7 @@ export function GDRoomPage() {
       }
       toast.success("Turn finished! Handing floor to next participant...");
     } catch (err: any) {
-      toast.error(err.message || "Could not finish turn");
+      toast.error(getErrorMessage(err, "Unable to complete your turn right now. Please try again."));
     }
   }
 
@@ -1006,7 +1007,7 @@ export function GDRoomPage() {
       }
       toast.info("Turn voluntarily passed to next eligible participant");
     } catch (err: any) {
-      toast.error(err.message || "Could not pass turn");
+      toast.error(getErrorMessage(err, "Unable to pass turn right now. Please try again."));
     }
   }
 
@@ -1026,7 +1027,7 @@ export function GDRoomPage() {
       }
       toast.info("Turn skipped by Moderator");
     } catch (err: any) {
-      toast.error(err.message || "Could not skip turn");
+      toast.error(getErrorMessage(err, "Unable to skip turn. Please try again."));
     }
   }
 
@@ -1102,7 +1103,7 @@ export function GDRoomPage() {
       const updated = await fetchGDSession(sessionId);
       setSession(updated);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to send invitation");
+      toast.error(getErrorMessage(err, "Unable to send invitation right now. Please try again."));
     }
   }
 
@@ -1411,10 +1412,10 @@ export function GDRoomPage() {
 
             {/* Turn Action Controls (Finish / Pass Turn) */}
             {isMyTurn && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
                 <Button
                   onClick={handleFinishTurn}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center gap-2"
+                  className="flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <CheckCircle2 className="size-4" />
                   Finish My Turn
@@ -1423,7 +1424,7 @@ export function GDRoomPage() {
                 <Button
                   onClick={handlePassTurn}
                   variant="outline"
-                  className="px-5 py-2.5 rounded-xl border-amber-500/40 text-amber-300 hover:bg-amber-500/10 text-xs font-semibold flex items-center gap-2"
+                  className="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl border-amber-500/40 text-amber-300 hover:bg-amber-500/10 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <SkipForward className="size-4" />
                   Pass Turn
@@ -1439,7 +1440,7 @@ export function GDRoomPage() {
         </div>
 
         {/* Right Column: Real-time Transcript & Participants (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950/70 h-[680px] overflow-hidden">
+        <div className="lg:col-span-4 flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950/70 h-[420px] lg:h-[680px] overflow-hidden">
           {/* Tabs */}
           <div className="flex border-b border-zinc-800 text-xs font-bold">
             <button

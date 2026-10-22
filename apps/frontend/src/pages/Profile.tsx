@@ -72,7 +72,7 @@ export function Profile() {
         await updateUser({ profilePicture: res.url });
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to upload avatar");
+      toast.error(getErrorMessage(err, "Unable to update profile photo right now. Please try again."));
     } finally {
       setUploadingAvatar(false);
     }
@@ -281,13 +281,13 @@ export function Profile() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(data.message || "Verification code sent");
+        toast.success("Verification code sent to your email.");
         setCodeSent(true);
       } else {
-        toast.error(data.message || "Failed to send verification code");
+        toast.error(getErrorMessage(data.message, "Unable to send verification code. Please try again."));
       }
     } catch (err) {
-      toast.error("Error sending verification code");
+      toast.error("Unable to send verification code right now. Please try again.");
     }
   };
 
@@ -301,13 +301,13 @@ export function Profile() {
       });
       const data = await res.json();
       if (data.success && data.verified) {
-        toast.success(data.message || "Code verified");
+        toast.success("Code verified successfully.");
         setCodeVerified(true);
       } else {
-        toast.error(data.message || "Invalid verification code");
+        toast.error(getErrorMessage(data.message, "The verification code is incorrect or expired."));
       }
     } catch (err) {
-      toast.error("Error verifying code");
+      toast.error("Unable to verify code right now. Please try again.");
     }
   };
 
@@ -401,20 +401,20 @@ export function Profile() {
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
+    <main className="mx-auto min-h-screen w-full max-w-6xl px-4 sm:px-6 py-6 sm:py-10">
       {/* Page Header */}
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/60 pb-6">
+      <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/60 pb-5 sm:pb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">User Profile</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">User Profile</h1>
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
             Manage your account settings, academic background, and interview history.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
             variant="outline"
             onClick={() => navigate("/")}
-            className="gap-2 border-border/80 hover:bg-card text-xs"
+            className="flex-1 sm:flex-initial gap-2 border-border/80 hover:bg-card text-xs justify-center"
           >
             <History className="size-3.5" />
             Start New Interview
@@ -423,7 +423,7 @@ export function Profile() {
             variant="destructive"
             size="sm"
             onClick={handleLogout}
-            className="gap-2 text-xs"
+            className="flex-1 sm:flex-initial gap-2 text-xs justify-center"
           >
             <LogOut className="size-3.5" />
             Sign Out
@@ -431,7 +431,7 @@ export function Profile() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Left Column: Profile Card & Password */}
         <div className="space-y-6">
           {/* Identity Card */}
