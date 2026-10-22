@@ -37,6 +37,7 @@ import {
 import { SkeletonProfile } from "../components/ui/skeleton";
 import { GLOBAL_COLLEGES } from "../constants/colleges";
 import { uploadAvatar } from "../services/authService";
+import { api } from "../services/api";
 
 export function Profile() {
   const { user, updateUser, changePassword, logout, refreshProfile } = useAuth();
@@ -137,10 +138,9 @@ export function Profile() {
 
       // Stage 1: Fast Database Search (<50ms)
       try {
-        const dbRes = await fetch(`/api/auth/search-colleges-db?q=${encodeURIComponent(query)}`);
-        const dbData = await dbRes.json();
-        if (dbData?.success) {
-          setCollegeDbResults(dbData.dbResults || []);
+        const dbRes = await api.get(`/api/auth/search-colleges-db?q=${encodeURIComponent(query)}`);
+        if (dbRes.data?.success) {
+          setCollegeDbResults(dbRes.data.dbResults || []);
         }
       } catch (err) {
         console.warn("College DB search error in profile:", err);
@@ -148,10 +148,9 @@ export function Profile() {
 
       // Stage 2: Silent AI Recommendation Search in Background
       try {
-        const aiRes = await fetch(`/api/auth/search-colleges-ai?q=${encodeURIComponent(query)}`);
-        const aiData = await aiRes.json();
-        if (aiData?.success) {
-          setCollegeAiSuggestions(aiData.aiSuggestions || []);
+        const aiRes = await api.get(`/api/auth/search-colleges-ai?q=${encodeURIComponent(query)}`);
+        if (aiRes.data?.success) {
+          setCollegeAiSuggestions(aiRes.data.aiSuggestions || []);
         }
       } catch (err) {
         console.warn("College AI search error in profile:", err);
@@ -186,20 +185,18 @@ export function Profile() {
     branchDebounceTimerRef.current = setTimeout(async () => {
       const query = val.trim();
       try {
-        const dbRes = await fetch(`/api/auth/search-branches-db?q=${encodeURIComponent(query)}`);
-        const dbData = await dbRes.json();
-        if (dbData?.success) {
-          setBranchDbResults(dbData.dbResults || []);
+        const dbRes = await api.get(`/api/auth/search-branches-db?q=${encodeURIComponent(query)}`);
+        if (dbRes.data?.success) {
+          setBranchDbResults(dbRes.data.dbResults || []);
         }
       } catch (err) {
         console.warn("Branch DB search error in profile:", err);
       }
 
       try {
-        const aiRes = await fetch(`/api/auth/search-branches-ai?q=${encodeURIComponent(query)}`);
-        const aiData = await aiRes.json();
-        if (aiData?.success) {
-          setBranchAiSuggestions(aiData.aiSuggestions || []);
+        const aiRes = await api.get(`/api/auth/search-branches-ai?q=${encodeURIComponent(query)}`);
+        if (aiRes.data?.success) {
+          setBranchAiSuggestions(aiRes.data.aiSuggestions || []);
         }
       } catch (err) {
         console.warn("Branch AI search error in profile:", err);
@@ -232,20 +229,18 @@ export function Profile() {
     degreeDebounceTimerRef.current = setTimeout(async () => {
       const query = val.trim();
       try {
-        const dbRes = await fetch(`/api/auth/search-degrees-db?q=${encodeURIComponent(query)}`);
-        const dbData = await dbRes.json();
-        if (dbData?.success) {
-          setDegreeDbResults(dbData.dbResults || []);
+        const dbRes = await api.get(`/api/auth/search-degrees-db?q=${encodeURIComponent(query)}`);
+        if (dbRes.data?.success) {
+          setDegreeDbResults(dbRes.data.dbResults || []);
         }
       } catch (err) {
         console.warn("Degree DB search error in profile:", err);
       }
 
       try {
-        const aiRes = await fetch(`/api/auth/search-degrees-ai?q=${encodeURIComponent(query)}`);
-        const aiData = await aiRes.json();
-        if (aiData?.success) {
-          setDegreeAiSuggestions(aiData.aiSuggestions || []);
+        const aiRes = await api.get(`/api/auth/search-degrees-ai?q=${encodeURIComponent(query)}`);
+        if (aiRes.data?.success) {
+          setDegreeAiSuggestions(aiRes.data.aiSuggestions || []);
         }
       } catch (err) {
         console.warn("Degree AI search error in profile:", err);
@@ -274,40 +269,33 @@ export function Profile() {
   // Send verification code
   const handleSendCode = async () => {
     try {
-      const res = await fetch("/api/auth/request-password-change-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user?.email }),
-      });
-      const data = await res.json();
-      if (data.success) {
+      const res = await api.post("/api/auth/request-password-change-otp", { email: user?.email });
+      if (res.data?.success) {
         toast.success("Verification code sent to your email.");
         setCodeSent(true);
       } else {
-        toast.error(getErrorMessage(data.message, "Unable to send verification code. Please try again."));
+        toast.error(getErrorMessage(res.data?.message, "Unable to send verification code. Please try again."));
       }
-    } catch (err) {
-      toast.error("Unable to send verification code right now. Please try again.");
+    } catch (err: any) {
+      toast.error(getErrorMessage(err, "Unable to send verification code right now. Please try again."));
     }
   };
 
   // Verify the entered code
   const handleVerifyCode = async () => {
     try {
-      const res = await fetch("/api/auth/verify-password-change-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user?.email, code: verificationCode }),
+      const res = await api.post("/api/auth/verify-password-change-otp", {
+        email: user?.email,
+        code: verificationCode,
       });
-      const data = await res.json();
-      if (data.success && data.verified) {
+      if (res.data?.success && res.data?.verified) {
         toast.success("Code verified successfully.");
         setCodeVerified(true);
       } else {
-        toast.error(getErrorMessage(data.message, "The verification code is incorrect or expired."));
+        toast.error(getErrorMessage(res.data?.message, "The verification code is incorrect or expired."));
       }
-    } catch (err) {
-      toast.error("Unable to verify code right now. Please try again.");
+    } catch (err: any) {
+      toast.error(getErrorMessage(err, "Unable to verify code right now. Please try again."));
     }
   };
 
