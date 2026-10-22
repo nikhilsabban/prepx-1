@@ -43,6 +43,7 @@ import {
 } from "../../services/gdService";
 import { toast } from "react-toastify";
 import { getErrorMessage } from "../../lib/utils";
+import { BACKEND_URL } from "../../lib/config";
 
 // Public STUN server configuration for WebRTC peer-to-peer mesh
 const RTC_CONFIG: RTCConfiguration = {
@@ -80,6 +81,7 @@ export function GDRoomPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [manualText, setManualText] = useState("");
   const [isSendingText, setIsSendingText] = useState(false);
+  const [liveTranscriptPreview, setLiveTranscriptPreview] = useState("");
 
   // Refs
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -307,7 +309,67 @@ export function GDRoomPage() {
     }
   }
 
-  // 4. Speech Recognition (Web Speech API) for attributed transcript
+  // Resilient transcript dispatcher: sends via WebSocket if connected, otherwise submits via REST API and updates local state optimistically
+  async function dispatchTranscriptSegment(text: string, durationSeconds?: number) {
+    const textToSubmit = text.trim();
+    if (!textToSubmit || !sessionId) return;
+
+    const participant = currentParticipantRef.current || currentParticipant;
+    if (!participant) return;
+
+    const calculatedDuration = durationSeconds || Math.max(2, Math.round(textToSubmit.split(/\s+/).filter(Boolean).length / 2.5));
+    const language = sessionRef.current?.expectedLanguage || "en";
+
+    const payload = {
+      participantId: participant.id,
+      participantName: participant.name,
+      username: participant.username,
+      text: textToSubmit,
+      durationSeconds: calculatedDuration,
+      language,
+    };
+
+    let sentViaWs = false;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(
+          JSON.stringify({
+            type: "transcript_segment",
+            sessionId,
+            payload,
+          })
+        );
+        sentViaWs = true;
+      } catch (wsErr) {
+        console.warn("WebSocket send transcript segment error, falling back to REST:", wsErr);
+      }
+    }
+
+    // If WebSocket is not open or sending threw an error, fall back to REST endpoint immediately
+    if (!sentViaWs) {
+      try {
+        const res = await submitTranscriptSegment(sessionId, payload);
+        if (res?.lastSegment) {
+          setSession((prev) => {
+            if (!prev) return prev;
+            const exists = prev.transcript.some(
+              (s) => s.id === res.lastSegment.id || (s.text === res.lastSegment.text && Math.abs(new Date(s.timestamp || "").getTime() - new Date(res.lastSegment.timestamp || "").getTime()) < 3000)
+            );
+            if (exists) return prev;
+            return {
+              ...prev,
+              transcript: [...prev.transcript, res.lastSegment],
+              participants: res.participants || prev.participants,
+            };
+          });
+        }
+      } catch (err: any) {
+        console.warn("Failed to record transcript segment via REST:", err);
+      }
+    }
+  }
+
+  // 4. Speech Recognition (Web Speech API) for real-time attributed transcript
   function startSpeechRecognition() {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -331,74 +393,87 @@ export function GDRoomPage() {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      const targetLang = sessionRef.current?.expectedLanguage === "Hindi" ? "hi-IN" : "en-US";
-      recognition.lang = targetLang;
+      recognition.maxAlternatives = 1;
+
+      const expectedLang = (sessionRef.current?.expectedLanguage || "").toLowerCase();
+      recognition.lang = expectedLang.includes("hindi") ? "hi-IN" : "en-US";
 
       recognition.onstart = () => {
         isSpeechActiveRef.current = true;
       };
 
-      let accumulatedText = "";
+      let accumulatedFinalText = "";
+      let latestInterimText = "";
       let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
       const flushTranscript = () => {
-        const textToSubmit = accumulatedText.trim();
-        if (textToSubmit.length >= 2) {
-          accumulatedText = "";
-          const participant = currentParticipantRef.current;
-          if (wsRef.current?.readyState === WebSocket.OPEN && participant) {
-            wsRef.current.send(
-              JSON.stringify({
-                type: "transcript_segment",
-                sessionId,
-                payload: {
-                  participantId: participant.id,
-                  participantName: participant.name,
-                  username: participant.username,
-                  text: textToSubmit,
-                  durationSeconds: Math.max(2, Math.round(textToSubmit.split(" ").length / 2.5)),
-                  language: sessionRef.current?.expectedLanguage || "en",
-                },
-              })
-            );
-          }
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+          debounceTimer = null;
+        }
+
+        const candidateText = (accumulatedFinalText.trim() || latestInterimText.trim());
+        if (candidateText.length >= 2) {
+          accumulatedFinalText = "";
+          latestInterimText = "";
+          setLiveTranscriptPreview("");
+          dispatchTranscriptSegment(candidateText);
+        } else {
+          setLiveTranscriptPreview("");
         }
       };
 
       recognition.onresult = (event: any) => {
         if (!isMicOnRef.current) return;
 
+        let newFinalChunk = "";
+        let newInterimChunk = "";
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const text = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            accumulatedText += " " + text;
+          const item = event.results[i];
+          if (!item || !item[0]) continue;
+          const transcriptStr = item[0].transcript || "";
+          if (item.isFinal) {
+            newFinalChunk += " " + transcriptStr;
+          } else {
+            newInterimChunk += " " + transcriptStr;
           }
         }
 
+        if (newFinalChunk.trim()) {
+          accumulatedFinalText += " " + newFinalChunk.trim();
+        }
+        if (newInterimChunk.trim()) {
+          latestInterimText = newInterimChunk.trim();
+          setLiveTranscriptPreview(latestInterimText);
+        }
+
         if (debounceTimer) clearTimeout(debounceTimer);
-        if (accumulatedText.trim().length >= 10) {
+
+        // If user finished a substantive phrase or sentence, flush quickly
+        if (accumulatedFinalText.trim().length >= 8) {
           flushTranscript();
         } else {
-          debounceTimer = setTimeout(flushTranscript, 1400);
+          // Pause debounce: if user speaks and pauses, commit candidate text
+          debounceTimer = setTimeout(flushTranscript, 1200);
         }
       };
 
-      let hasFatalError = false;
+      let hasFatalPermissionError = false;
 
       recognition.onerror = (err: any) => {
         if (err.error === "no-speech" || err.error === "aborted") {
-          // Normal speech events - ignore silently
           return;
         }
 
         if (err.error === "network") {
-          console.warn("Speech recognition network notice (Google Cloud speech unavailable). You can use manual text input below.");
+          console.warn("Speech recognition network notice (Cloud speech recognition unavailable). Manual input is active.");
           return;
         }
 
         if (err.error === "not-allowed" || err.error === "service-not-allowed") {
-          hasFatalError = true;
-          console.warn("Speech recognition permission denied by browser.");
+          hasFatalPermissionError = true;
+          console.warn("Speech recognition microphone permission denied by browser.");
           return;
         }
 
@@ -409,24 +484,24 @@ export function GDRoomPage() {
         isSpeechActiveRef.current = false;
         flushTranscript();
 
-        if (hasFatalError || !isMicOnRef.current) return;
+        if (hasFatalPermissionError || !isMicOnRef.current) return;
 
-        // Controlled restart with 1.8s backoff to avoid rapid tight loops
+        // Clean cross-browser restart with 600ms backoff
         if (speechRestartTimeoutRef.current) {
           clearTimeout(speechRestartTimeoutRef.current);
         }
         speechRestartTimeoutRef.current = setTimeout(() => {
           if (isMicOnRef.current && !isSpeechActiveRef.current) {
-            try {
-              recognition.start();
-            } catch {}
+            startSpeechRecognition();
           }
-        }, 1800);
+        }, 600);
       };
 
       try {
         recognition.start();
-      } catch {}
+      } catch (startErr) {
+        console.warn("Speech recognition start warning:", startErr);
+      }
 
       recognitionRef.current = recognition;
     } catch (e) {
@@ -436,12 +511,27 @@ export function GDRoomPage() {
 
   // 5. WebSocket Connection & WebRTC Signaling
   function initWebSocket(participant: IGDParticipant, currentSession: IGDSession) {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host.includes("localhost") ? "localhost:3003" : window.location.host;
-    const wsUrl = `${protocol}//${host}/api/v1/gd/ws`;
+    let wsUrl: string;
+    if (BACKEND_URL && BACKEND_URL.startsWith("http")) {
+      const parsed = new URL(BACKEND_URL);
+      const wsProtocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+      wsUrl = `${wsProtocol}//${parsed.host}/api/v1/gd/ws`;
+    } else {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host.includes("localhost") ? "localhost:3003" : window.location.host;
+      wsUrl = `${protocol}//${host}/api/v1/gd/ws`;
+    }
 
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
+
+    socket.onerror = (e) => {
+      console.warn("GD WebSocket notice. HTTP fallback polling is active:", e);
+    };
+
+    socket.onclose = () => {
+      console.warn("GD WebSocket closed. HTTP fallback polling is active.");
+    };
 
     socket.onopen = () => {
       socket.send(
@@ -536,10 +626,13 @@ export function GDRoomPage() {
 
           case "new_transcript_segment": {
             setSession((prev) => {
-              if (!prev) return prev;
+              if (!prev || !payload.segment) return prev;
+              const exists = prev.transcript.some(
+                (s) => s.id === payload.segment.id || (s.text === payload.segment.text && Math.abs(new Date(s.timestamp || "").getTime() - new Date(payload.segment.timestamp || "").getTime()) < 3000)
+              );
               return {
                 ...prev,
-                transcript: [...prev.transcript, payload.segment],
+                transcript: exists ? prev.transcript : [...prev.transcript, payload.segment],
                 participants: payload.participants || prev.participants,
                 currentTurn: payload.currentTurn || prev.currentTurn,
               };
@@ -771,6 +864,45 @@ export function GDRoomPage() {
     }
   }, [session?.transcript]);
 
+  // Resilient fallback sync: polls session state if WebSocket is closed or in serverless environments
+  useEffect(() => {
+    if (!sessionId || isEnding) return;
+
+    const interval = setInterval(async () => {
+      const isWsOpen = wsRef.current?.readyState === WebSocket.OPEN;
+      if (!isWsOpen) {
+        try {
+          const freshSession = await fetchGDSession(sessionId);
+          if (freshSession) {
+            setSession((prev) => {
+              if (!prev) return freshSession;
+              const hasNewTranscript = (freshSession.transcript?.length || 0) !== (prev.transcript?.length || 0);
+              const hasTurnChange = freshSession.currentTurn?.participantId !== prev.currentTurn?.participantId;
+              const hasStatusChange = freshSession.status !== prev.status;
+
+              if (hasNewTranscript || hasTurnChange || hasStatusChange) {
+                return {
+                  ...prev,
+                  ...freshSession,
+                  transcript: freshSession.transcript || prev.transcript,
+                };
+              }
+              return prev;
+            });
+
+            if (freshSession.status === "completed") {
+              navigate(`/group-discussion/result/${sessionId}`);
+            }
+          }
+        } catch (e) {
+          // ignore transient poll errors
+        }
+      }
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [sessionId, isEnding, navigate]);
+
   // Cleanup on unmount
   function cleanupResources() {
     if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
@@ -907,9 +1039,12 @@ export function GDRoomPage() {
       setIsMicOn(audioTrack.enabled);
       isMicOnRef.current = audioTrack.enabled;
 
-      // Resume AudioContext if unmuting
-      if (audioTrack.enabled && audioContextRef.current?.state === "suspended") {
-        audioContextRef.current.resume().catch(() => {});
+      // Resume AudioContext & restart speech recognition if unmuting
+      if (audioTrack.enabled) {
+        if (audioContextRef.current?.state === "suspended") {
+          audioContextRef.current.resume().catch(() => {});
+        }
+        startSpeechRecognition();
       }
     }
 
@@ -935,32 +1070,7 @@ export function GDRoomPage() {
 
     setIsSendingText(true);
     try {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "transcript_segment",
-            sessionId,
-            payload: {
-              participantId: participant.id,
-              participantName: participant.name,
-              username: participant.username,
-              text,
-              durationSeconds: Math.max(3, Math.round(text.split(" ").length / 2.5)),
-              language: sessionRef.current?.expectedLanguage || "en",
-            },
-          })
-        );
-      } else {
-        await submitTranscriptSegment(sessionId, {
-          participantId: participant.id,
-          participantName: participant.name,
-          username: participant.username,
-          text,
-          durationSeconds: Math.max(3, Math.round(text.split(" ").length / 2.5)),
-          language: sessionRef.current?.expectedLanguage || "en",
-        });
-      }
-
+      await dispatchTranscriptSegment(text);
       setManualText("");
       toast.success("Contribution recorded in discussion transcript!");
     } catch (err: any) {
@@ -1257,6 +1367,13 @@ export function GDRoomPage() {
                   : "border-zinc-800"
               }`}
             >
+              {/* Real-time speech transcription badge */}
+              {liveTranscriptPreview && (
+                <div className="absolute top-2 left-2 max-w-[85%] px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-indigo-500/50 text-[11px] text-indigo-300 font-medium truncate animate-pulse pointer-events-none z-10 flex items-center gap-1.5 shadow-lg">
+                  <span className="size-1.5 rounded-full bg-indigo-400 animate-ping shrink-0" />
+                  <span className="truncate">🎙️ "{liveTranscriptPreview}"</span>
+                </div>
+              )}
               {isVideoOn ? (
                 <video
                   ref={localVideoRef}
@@ -1468,14 +1585,33 @@ export function GDRoomPage() {
           {/* Transcript Feed View */}
           {activeTab === "transcript" && (
             <div className="flex-1 flex flex-col min-h-0">
+              {/* Real-time speech transcription banner */}
+              {liveTranscriptPreview && (
+                <div className="mx-4 mt-3 p-2.5 rounded-xl bg-gradient-to-r from-indigo-500/15 via-purple-500/10 to-indigo-500/15 border border-indigo-500/40 text-indigo-200 text-xs flex items-center gap-2.5 animate-pulse shadow-sm shrink-0">
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+                  </span>
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
+                    <span className="font-bold text-indigo-300 shrink-0">Transcribing:</span>
+                    <span className="italic truncate text-zinc-100 font-medium">"{liveTranscriptPreview}"</span>
+                  </div>
+                </div>
+              )}
+
               <div
                 ref={transcriptScrollRef}
                 className="flex-1 p-4 space-y-3 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 text-xs"
               >
                 {session.transcript.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-zinc-500 p-6">
-                    <MessageSquare className="size-8 opacity-40" />
-                    <p>Discussion transcript will appear here in real time as participants speak.</p>
+                  <div className="h-full flex flex-col items-center justify-center text-center space-y-2.5 text-zinc-500 p-6">
+                    <div className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-indigo-400">
+                      <MessageSquare className="size-6" />
+                    </div>
+                    <p className="font-semibold text-zinc-300 text-xs">Live Attributed Transcript Active</p>
+                    <p className="text-[11px] text-zinc-400 max-w-xs leading-relaxed">
+                      Speak into your microphone or type a message below. Your spoken contributions will be transcribed and attributed to your profile in real time.
+                    </p>
                   </div>
                 ) : (
                   session.transcript.map((seg, idx) => {
@@ -1511,7 +1647,7 @@ export function GDRoomPage() {
                   type="text"
                   value={manualText}
                   onChange={(e) => setManualText(e.target.value)}
-                  placeholder="Speak or type your contribution..."
+                  placeholder="Speak into microphone or type contribution..."
                   className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition"
                 />
                 <Button
