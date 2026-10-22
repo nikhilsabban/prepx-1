@@ -98,12 +98,18 @@ export function ForgotPassword() {
                   <p className="text-xs text-blue-300 font-semibold uppercase tracking-wider mb-2">
                     Quick Reset (Direct Link)
                   </p>
-                  <a
-                    href={devLink}
-                    className="flex items-center justify-center w-full bg-[#2563EB] hover:bg-blue-600 text-white font-medium h-10 rounded-lg shadow-md transition-all text-sm"
+                  <Link
+                    to={(() => {
+                      try {
+                        return devLink.startsWith("http") ? new URL(devLink).pathname : devLink;
+                      } catch (e) {
+                        return devLink;
+                      }
+                    })()}
+                    className="flex items-center justify-center w-full bg-[#2563EB] hover:bg-blue-600 text-white font-medium h-10 rounded-lg shadow-md transition-all text-sm active:scale-95"
                   >
                     Click Here to Set New Password Now &rarr;
-                  </a>
+                  </Link>
                 </div>
               )}
 

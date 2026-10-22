@@ -872,18 +872,24 @@ function generateToken(id) {
   });
 }
 function getClientUrl(req) {
-  const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : "");
-  if (origin && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
-    return origin.replace(/\/$/, "");
+  if (req) {
+    let origin = req.headers.origin || "";
+    if (!origin && req.headers.referer) {
+      try {
+        origin = new URL(req.headers.referer).origin;
+      } catch (e) {
+        origin = "";
+      }
+    }
+    if (origin && !origin.includes("localhost") && !origin.includes("127.0.0.1") && !origin.includes("::1")) {
+      return origin.replace(/\/$/, "");
+    }
   }
-  if (process.env.CLIENT_URL && !process.env.CLIENT_URL.includes("localhost")) {
+  if (process.env.CLIENT_URL && !process.env.CLIENT_URL.includes("localhost") && !process.env.CLIENT_URL.includes("127.0.0.1")) {
     return process.env.CLIENT_URL.replace(/\/$/, "");
   }
-  if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes("localhost")) {
+  if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes("localhost") && !process.env.FRONTEND_URL.includes("127.0.0.1")) {
     return process.env.FRONTEND_URL.replace(/\/$/, "");
-  }
-  if (origin) {
-    return origin.replace(/\/$/, "");
   }
   return "https://prepx-one.vercel.app";
 }

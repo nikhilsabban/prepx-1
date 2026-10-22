@@ -22,27 +22,31 @@ function generateToken(id: string): string {
   });
 }
 
-function getClientUrl(req: Request): string {
-  // 1. Check req.headers.origin or referer (dynamically matches whatever frontend called the API)
-  const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : "");
-  if (origin && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
-    return origin.replace(/\/$/, "");
+function getClientUrl(req?: Request): string {
+  // 1. If req has a genuine public domain origin (e.g. https://prepx-one.vercel.app), use it
+  if (req) {
+    let origin = req.headers.origin || "";
+    if (!origin && req.headers.referer) {
+      try {
+        origin = new URL(req.headers.referer).origin;
+      } catch (e) {
+        origin = "";
+      }
+    }
+    if (origin && !origin.includes("localhost") && !origin.includes("127.0.0.1") && !origin.includes("::1")) {
+      return origin.replace(/\/$/, "");
+    }
   }
 
-  // 2. Check CLIENT_URL or FRONTEND_URL environment variables
-  if (process.env.CLIENT_URL && !process.env.CLIENT_URL.includes("localhost")) {
+  // 2. Check CLIENT_URL or FRONTEND_URL environment variables if set to a public URL
+  if (process.env.CLIENT_URL && !process.env.CLIENT_URL.includes("localhost") && !process.env.CLIENT_URL.includes("127.0.0.1")) {
     return process.env.CLIENT_URL.replace(/\/$/, "");
   }
-  if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes("localhost")) {
+  if (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes("localhost") && !process.env.FRONTEND_URL.includes("127.0.0.1")) {
     return process.env.FRONTEND_URL.replace(/\/$/, "");
   }
 
-  // 3. Fallback to origin if set (e.g. localhost in local dev)
-  if (origin) {
-    return origin.replace(/\/$/, "");
-  }
-
-  // 4. Default to live production deployment
+  // 3. ALWAYS default to the live production URL (https://prepx-one.vercel.app) so email links NEVER point to localhost!
   return "https://prepx-one.vercel.app";
 }
 
