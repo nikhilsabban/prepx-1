@@ -6,6 +6,8 @@ import type { Problem, Submission } from "../../services/codingApi";
 import { Play, Send, RotateCcw, CheckCircle, XCircle, AlertTriangle, Clock, Code2, ArrowLeft, History, FileText, Check, Bot, Sparkles, Loader2, Bookmark } from "lucide-react";
 import { toast } from "react-toastify";
 import { getErrorMessage } from "../../lib/utils";
+import { SkeletonCodingWorkspace } from "../../components/ui/skeleton";
+import { useAuth } from "../../context/AuthContext";
 
 const DEFAULT_STARTERS: Record<string, string> = {
   javascript: "// Write your solution here\nvar solve = function() {\n  \n};",
@@ -17,6 +19,7 @@ const DEFAULT_STARTERS: Record<string, string> = {
 
 export const CodingSolvePage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const { refreshProfile } = useAuth();
   const [problem, setProblem] = useState<Problem | null>(null);
   const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<string>("javascript");
@@ -238,7 +241,16 @@ export const CodingSolvePage: React.FC = () => {
       });
       setSubmissionResult(res);
       if (res.verdict === "Accepted") {
-        toast.success("🎉 Solution Accepted!");
+        const xpEarned = res.gamification?.xpEarned;
+        if (xpEarned && xpEarned > 0) {
+          toast.success(`🎉 Solution Accepted! +${xpEarned} XP! (Total XP: ${res.gamification.newXP || ""})`);
+        } else {
+          toast.success("🎉 Solution Accepted!");
+        }
+        if (res.gamification?.newBadgesAwarded && res.gamification.newBadgesAwarded.length > 0) {
+          toast.info(`🎖️ New Badge Unlocked: ${res.gamification.newBadgesAwarded.join(", ")}!`);
+        }
+        refreshProfile?.().catch(() => {});
       } else {
         toast.warn(`Verdict: ${res.verdict}`);
       }
@@ -251,14 +263,7 @@ export const CodingSolvePage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-300">
-        <div className="flex flex-col items-center gap-3">
-          <Code2 className="w-10 h-10 animate-pulse text-blue-500" />
-          <p className="text-sm font-medium">Loading problem workspace...</p>
-        </div>
-      </div>
-    );
+    return <SkeletonCodingWorkspace />;
   }
 
   if (!problem) {

@@ -8,6 +8,7 @@ import type {
 } from "../../models/GroupDiscussion";
 import { gdGroqService } from "./gdGroqService";
 import { awardActivityXP } from "../gamificationService";
+import { User } from "../../models/User";
 
 export class GDEvaluationService {
   /**
@@ -174,38 +175,54 @@ export class GDEvaluationService {
 
     // Award gamification points idempotently via existing gamification service
     for (const studentEval of evaluations) {
-      if (!studentEval.gamificationAwardedAt && studentEval.userId) {
+      if (!studentEval.gamificationAwardedAt) {
         try {
-          // Point calculation:
-          // Base for verified contribution: 40 XP
-          // Performance tier: +30 XP for score >= 80, +15 XP for score >= 60
-          // Winner bonus: +20 XP for Rank 1
-          let points = 40;
-          if (studentEval.overallScore >= 80) points += 30;
-          else if (studentEval.overallScore >= 60) points += 15;
-          if (studentEval.rank === 1) points += 20;
-
-          // If student was completely silent or had 0 words, no positive speaking XP
-          if (studentEval.overallScore <= 15) {
-            points = 5; // Minimal attendance credit
+          let targetUserId = studentEval.userId;
+          if (!targetUserId) {
+            const participant = students.find((s) => s.id === studentEval.participantId || s.username === studentEval.username);
+            if (participant?.userId) {
+              targetUserId = participant.userId.toString();
+            } else if (participant?.id && participant.id.length === 24) {
+              targetUserId = participant.id;
+            } else if (studentEval.username) {
+              const u = await User.findOne({ username: studentEval.username.toLowerCase().trim() });
+              if (u) targetUserId = u._id.toString();
+            }
           }
 
-          const badge =
-            studentEval.overallScore >= 85
-              ? "PrepX Champion"
-              : studentEval.overallScore >= 70
-              ? "Rising Star"
-              : undefined;
+          if (targetUserId) {
+            studentEval.userId = targetUserId;
+            // Point calculation:
+            // Base for verified contribution: 50 XP
+            // Performance tier: +30 XP for score >= 80, +15 XP for score >= 60
+            // Winner bonus: +25 XP for Rank 1
+            let points = 50;
+            if (studentEval.overallScore >= 80) points += 30;
+            else if (studentEval.overallScore >= 60) points += 15;
+            if (studentEval.rank === 1) points += 25;
 
-          await awardActivityXP(
-            studentEval.userId,
-            points,
-            `AI Group Discussion: "${topic.question.slice(0, 40)}..."`,
-            badge
-          );
+            // If student was completely silent or had 0 words, minimal credit
+            if (studentEval.overallScore <= 15) {
+              points = 10;
+            }
 
-          studentEval.gamificationPointsAwarded = points;
-          studentEval.gamificationAwardedAt = new Date();
+            const badge =
+              studentEval.overallScore >= 85
+                ? "PrepX Champion"
+                : studentEval.overallScore >= 70
+                ? "Rising Star"
+                : "GD Orator";
+
+            await awardActivityXP(
+              targetUserId,
+              points,
+              `AI Group Discussion: "${topic.question.slice(0, 40)}..."`,
+              badge
+            );
+
+            studentEval.gamificationPointsAwarded = points;
+            studentEval.gamificationAwardedAt = new Date();
+          }
         } catch (err) {
           console.error(`[GD Evaluation] Failed to award gamification points to ${studentEval.username}:`, err);
         }

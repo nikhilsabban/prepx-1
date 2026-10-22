@@ -16,6 +16,8 @@ import {
   appendTranscriptSegment,
   endGDSession,
   getMyGDSessions,
+  toggleGDBookmark,
+  getGDBookmarks,
 } from "../controllers/gdController";
 import { protect, optionalAuth } from "../middleware/authMiddleware";
 
@@ -55,7 +57,10 @@ router.post("/rooms/:roomId/transcript", optionalAuth as any, appendTranscriptSe
 router.post("/rooms/:roomId/end", protect as any, endGDSession as any);
 router.post("/sessions/:sessionId/end", protect as any, endGDSession as any);
 
-// History route (authenticated)
+// History & Bookmarks routes (authenticated)
 router.get("/my-sessions", protect as any, getMyGDSessions as any);
+router.post("/rooms/:roomId/bookmark", protect as any, toggleGDBookmark as any);
+router.post("/sessions/:sessionId/bookmark", protect as any, toggleGDBookmark as any);
+router.get("/bookmarks", protect as any, getGDBookmarks as any);
 
 export default router;

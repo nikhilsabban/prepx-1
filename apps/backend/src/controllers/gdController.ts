@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
+import mongoose from "mongoose";
 import { gdTopicDiscoveryService } from "../services/gd/gdTopicDiscoveryService";
 import { gdSessionService } from "../services/gd/gdSessionService";
 import { GroupDiscussion } from "../models/GroupDiscussion";
+import { User } from "../models/User";
 
 export interface AuthRequest extends Request {
   user?: any;
@@ -496,5 +498,86 @@ export async function getMyGDSessions(req: AuthRequest, res: Response): Promise<
       success: false,
       message: "Failed to fetch discussion history",
     });
+  }
+}
+
+/**
+ * Toggles bookmark for a GD room/session
+ */
+export async function toggleGDBookmark(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const roomId = getParam(req.params.roomId || req.params.sessionId);
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Authentication required" });
+      return;
+    }
+    if (!roomId) {
+      res.status(400).json({ success: false, message: "Room/Session ID is required" });
+      return;
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    if (!user.gdBookmarks) user.gdBookmarks = [];
+
+    const index = user.gdBookmarks.findIndex((id) => id.toString() === roomId);
+    let bookmarked = false;
+
+    if (index > -1) {
+      user.gdBookmarks.splice(index, 1);
+      bookmarked = false;
+    } else {
+      user.gdBookmarks.push(new mongoose.Types.ObjectId(roomId));
+      bookmarked = true;
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      bookmarked,
+      gdBookmarks: user.gdBookmarks,
+      message: bookmarked ? "Group Discussion bookmarked!" : "Bookmark removed",
+    });
+  } catch (error: any) {
+    console.error("[GD Controller] Toggle bookmark error:", error);
+    res.status(500).json({ success: false, message: "Failed to toggle bookmark" });
+  }
+}
+
+/**
+ * Retrieves all bookmarked GD sessions for the current user
+ */
+export async function getGDBookmarks(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Authentication required" });
+      return;
+    }
+
+    const user = await User.findById(userId).populate({
+      path: "gdBookmarks",
+      select: "topic adminUsername status participants round createdAt endedAt evaluations",
+    });
+
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    res.json({
+      success: true,
+      bookmarks: user.gdBookmarks || [],
+    });
+  } catch (error: any) {
+    console.error("[GD Controller] Get bookmarks error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch bookmarked discussions" });
   }
 }

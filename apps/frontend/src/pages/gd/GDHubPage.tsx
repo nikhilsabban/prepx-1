@@ -22,6 +22,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
+import { SkeletonGDList } from "../../components/ui/skeleton";
 import {
   fetchRandomTopic,
   createGDRoom,
@@ -217,6 +218,10 @@ export function GDHubPage() {
     } catch (err: any) {
       toast.error(err.response?.data?.message || `Failed to ${action} invitation`);
     }
+  }
+
+  if (loadingTopic && loadingHistory) {
+    return <SkeletonGDList />;
   }
 
   return (

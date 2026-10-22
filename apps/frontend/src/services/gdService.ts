@@ -381,3 +381,22 @@ export async function fetchMyGDSessions(): Promise<IGDSession[]> {
   const res = await api.get("/api/v1/gd/my-sessions");
   return res.data.sessions || [];
 }
+
+/**
+ * Toggles bookmark status of a GD room/session.
+ */
+export async function toggleGDBookmark(
+  sessionId: string
+): Promise<{ success: boolean; bookmarked: boolean; message: string }> {
+  const res = await api.post(`/api/v1/gd/rooms/${sessionId}/bookmark`);
+  return res.data;
+}
+
+/**
+ * Fetches all bookmarked GD sessions for the current authenticated user.
+ */
+export async function fetchGDBookmarks(): Promise<IGDSession[]> {
+  const res = await api.get("/api/v1/gd/bookmarks");
+  return res.data.bookmarks || [];
+}
+

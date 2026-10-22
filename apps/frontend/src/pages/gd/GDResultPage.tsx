@@ -21,13 +21,18 @@ import {
   Radio,
   BookOpen,
   Plus,
+  Bookmark,
+  BookmarkCheck,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import {
   fetchGDSession,
+  toggleGDBookmark,
+  fetchGDBookmarks,
   type IGDSession,
   type IGDStudentEvaluation,
 } from "../../services/gdService";
+import { SkeletonResult } from "../../components/ui/skeleton";
 import { toast } from "react-toastify";
 
 export function GDResultPage() {
@@ -38,11 +43,41 @@ export function GDResultPage() {
   const [loading, setLoading] = useState(true);
   const [selectedStudentIndex, setSelectedStudentIndex] = useState(0);
   const [showFullTranscript, setShowFullTranscript] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isTogglingBookmark, setIsTogglingBookmark] = useState(false);
 
   useEffect(() => {
     if (!sessionId) return;
     loadSession();
+    checkBookmark();
   }, [sessionId]);
+
+  async function checkBookmark() {
+    try {
+      const bms = await fetchGDBookmarks();
+      if (Array.isArray(bms)) {
+        setIsBookmarked(bms.some((b: any) => b.roomId === sessionId || b._id === sessionId));
+      }
+    } catch (e) {}
+  }
+
+  async function handleToggleBookmark() {
+    if (!sessionId) return;
+    setIsTogglingBookmark(true);
+    try {
+      const res = await toggleGDBookmark(sessionId);
+      setIsBookmarked(res.bookmarked);
+      if (res.bookmarked) {
+        toast.success("Discussion evaluation bookmarked!");
+      } else {
+        toast.info("Bookmark removed");
+      }
+    } catch (e: any) {
+      toast.error("Failed to update bookmark");
+    } finally {
+      setIsTogglingBookmark(false);
+    }
+  }
 
   async function loadSession() {
     try {
@@ -57,12 +92,7 @@ export function GDResultPage() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center space-y-4 text-white">
-        <RefreshCw className="size-10 text-indigo-500 animate-spin" />
-        <p className="text-zinc-400 font-medium text-sm">Compiling placement metrics and evaluations...</p>
-      </div>
-    );
+    return <SkeletonResult />;
   }
 
   if (!session) {
@@ -95,17 +125,36 @@ export function GDResultPage() {
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* Top Breadcrumb */}
-        <div className="flex items-center justify-between">
+        {/* Top Breadcrumb & Bookmark */}
+        <div className="flex items-center justify-between gap-4">
           <Link
             to="/group-discussion"
             className="text-xs font-semibold text-zinc-400 hover:text-white transition flex items-center gap-1.5"
           >
             ← Back to Group Discussion Arena
           </Link>
-          <span className="text-xs text-zinc-500">
-            Concluded on {new Date(session.createdAt).toLocaleDateString()}
-          </span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleToggleBookmark}
+              disabled={isTogglingBookmark}
+              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
+                isBookmarked
+                  ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+              }`}
+              title={isBookmarked ? "Remove Bookmark" : "Bookmark Evaluation"}
+            >
+              {isBookmarked ? (
+                <BookmarkCheck className="size-3.5 fill-cyan-400/20" />
+              ) : (
+                <Bookmark className="size-3.5" />
+              )}
+              <span>{isBookmarked ? "Bookmarked" : "Bookmark"}</span>
+            </button>
+            <span className="text-xs text-zinc-500">
+              Concluded on {new Date(session.createdAt).toLocaleDateString()}
+            </span>
+          </div>
         </div>
 
         {/* Discussion Topic Card */}

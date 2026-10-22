@@ -149,6 +149,10 @@ var init_User = __esm({
           type: Schema.Types.ObjectId,
           ref: "CodingProblem"
         }],
+        gdBookmarks: [{
+          type: Schema.Types.ObjectId,
+          ref: "GroupDiscussion"
+        }],
         codingStreak: {
           type: Number,
           default: 0
@@ -544,8 +548,323 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
 import crypto from "crypto";
-import nodemailer from "nodemailer";
+import "nodemailer";
 import axios from "axios";
+
+// src/services/emailService.ts
+import nodemailer from "nodemailer";
+function getTransporter() {
+  if (!process.env.SMTP_EMAIL || !process.env.SMTP_PASSWORD) {
+    return null;
+  }
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.SMTP_EMAIL,
+      pass: process.env.SMTP_PASSWORD
+    }
+  });
+}
+function buildCommercialEmailTemplate(params) {
+  const { preheader, badgeText, title, description, contentHtml, calloutNote, expiryMinutes } = params;
+  const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>${title}</title>
+  <!--[if mso]>
+  <style type="text/css">
+    body, table, td {font-family: Arial, Helvetica, sans-serif !important;}
+  </style>
+  <![endif]-->
+  <style>
+    @media only screen and (max-width: 620px) {
+      .email-container { width: 100% !important; padding: 16px !important; }
+      .card-body { padding: 24px 20px !important; }
+      .code-display { font-size: 28px !important; letter-spacing: 6px !important; padding: 14px 16px !important; }
+      .action-btn { width: 100% !important; display: block !important; text-align: center !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; color: #f4f4f5;">
+  <!-- Preview Text Spacing -->
+  <div style="display: none; max-height: 0px; overflow: hidden; opacity: 0; font-size: 1px; line-height: 1px; color: #09090b;">
+    ${preheader} &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;
+  </div>
+
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #09090b; padding: 40px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Email Container -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="email-container" style="max-width: 560px; margin: 0 auto;">
+          
+          <!-- Brand Header -->
+          <tr>
+            <td align="center" style="padding-bottom: 24px;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; padding: 8px 16px; border-radius: 9999px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%); border: 1px solid rgba(168, 85, 247, 0.3);">
+                      <span style="font-size: 18px; font-weight: 900; letter-spacing: -0.5px; background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%); -webkit-background-clip: text; color: #c084fc;">
+                        \u26A1 prepX
+                      </span>
+                      <span style="font-size: 11px; font-weight: 700; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1.5px; margin-left: 6px;">
+                        Placement & Coding
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Card -->
+          <tr>
+            <td>
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #121217; border: 1px solid #27272a; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px -15px rgba(0,0,0,0.7);">
+                
+                <!-- Glowing Top Accent Line -->
+                <tr>
+                  <td height="3" style="background: linear-gradient(90deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);"></td>
+                </tr>
+
+                <!-- Content Area -->
+                <tr>
+                  <td class="card-body" style="padding: 36px 32px 32px 32px;">
+                    
+                    <!-- Pill Badge -->
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                      <tr>
+                        <td style="padding: 4px 10px; border-radius: 6px; background-color: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); font-size: 11px; font-weight: 700; color: #818cf8; text-transform: uppercase; letter-spacing: 0.8px;">
+                          ${badgeText}
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Headline -->
+                    <h1 style="margin: 0 0 12px 0; font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.4px; line-height: 1.3;">
+                      ${title}
+                    </h1>
+
+                    <!-- Description -->
+                    <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #a1a1aa;">
+                      ${description}
+                    </p>
+
+                    <!-- Custom Content (OTP or Button) -->
+                    ${contentHtml}
+
+                    ${expiryMinutes ? `
+                    <!-- Expiry Notice -->
+                    <div style="margin-top: 20px; padding: 10px 14px; background-color: rgba(39, 39, 42, 0.5); border: 1px solid #27272a; border-radius: 10px; font-size: 12px; color: #71717a; text-align: center;">
+                      \u23F1\uFE0F This authentication token will expire in <strong style="color: #e4e4e7;">${expiryMinutes} minutes</strong>.
+                    </div>
+                    ` : ""}
+
+                    ${calloutNote ? `
+                    <!-- Security Notice -->
+                    <div style="margin-top: 24px; padding: 12px 16px; background-color: rgba(24, 24, 27, 0.8); border-left: 3px solid #6366f1; border-radius: 4px 8px 8px 4px; font-size: 12px; line-height: 1.5; color: #71717a;">
+                      ${calloutNote}
+                    </div>
+                    ` : ""}
+
+                  </td>
+                </tr>
+
+                <!-- Security Verification Footer Bar -->
+                <tr>
+                  <td style="background-color: #0e0e13; border-top: 1px solid #1f1f23; padding: 14px 32px; font-size: 11px; color: #52525b;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td align="left">
+                          \u{1F512} 256-bit Secure Authentication
+                        </td>
+                        <td align="right">
+                          Official PrepX Notification
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer Legal & Links -->
+          <tr>
+            <td align="center" style="padding: 24px 16px 0 16px; font-size: 11px; line-height: 1.6; color: #52525b;">
+              <p style="margin: 0 0 8px 0;">
+                If you did not initiate this request, no action is needed \u2014 your account remains completely secure.
+              </p>
+              <p style="margin: 0;">
+                &copy; ${currentYear} PrepX AI Placement & Coding Platform. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+}
+async function sendOtpEmail(toEmail, otp, purpose = "login") {
+  const isLogin = purpose === "login";
+  const title = isLogin ? "Your One-Time Login Code" : "Password Change Verification";
+  const badgeText = isLogin ? "Account Security" : "Password Verification";
+  const description = isLogin ? "Enter the 6-digit verification code below on PrepX to complete your secure passwordless sign-in." : "You requested to change your PrepX account password. Enter the 6-digit security code below to authorize this update.";
+  const contentHtml = `
+    <!-- OTP Code Display Card -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 8px 0;">
+      <tr>
+        <td align="center" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%); border: 1.5px dashed rgba(168, 85, 247, 0.4); border-radius: 14px; padding: 20px;">
+          <div style="font-size: 11px; font-weight: 700; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;">
+            One-Time Security Passcode
+          </div>
+          <div class="code-display" style="font-family: 'Courier New', Courier, monospace, monospace; font-size: 36px; font-weight: 900; letter-spacing: 10px; color: #ffffff; text-shadow: 0 0 20px rgba(168, 85, 247, 0.4);">
+            ${otp}
+          </div>
+          <div style="font-size: 11px; color: #71717a; margin-top: 8px;">
+            Copy and paste this code into your PrepX verification screen.
+          </div>
+        </td>
+      </tr>
+    </table>
+  `;
+  const html = buildCommercialEmailTemplate({
+    preheader: `Your PrepX verification code is: ${otp}. Valid for 10 minutes.`,
+    badgeText,
+    title,
+    description,
+    contentHtml,
+    expiryMinutes: 10,
+    calloutNote: "Never share this code with anyone. PrepX staff will never ask for your verification code."
+  });
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.log(`
+\u{1F4E7} [DEV SIMULATED EMAIL - NO SMTP]: OTP for ${toEmail} is: ${otp}
+`);
+    return true;
+  }
+  try {
+    await transporter.sendMail({
+      from: `"PrepX Security" <${process.env.SMTP_EMAIL}>`,
+      to: toEmail,
+      subject: isLogin ? `${otp} is your prepX login code` : `${otp} is your prepX verification code`,
+      html
+    });
+    return true;
+  } catch (err) {
+    console.error("Failed to send OTP email via SMTP:", err);
+    return false;
+  }
+}
+async function sendVerificationEmail(toEmail, fullName, verifyUrl) {
+  const contentHtml = `
+    <!-- Action Button -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 16px 0 8px 0;">
+      <tr>
+        <td align="center">
+          <a href="${verifyUrl}" class="action-btn" target="_blank" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); color: #ffffff; text-decoration: none; border-radius: 12px; font-size: 14px; font-weight: 700; letter-spacing: 0.2px; box-shadow: 0 8px 24px -6px rgba(99, 102, 241, 0.5);">
+            Verify My Email Address &rarr;
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <div style="margin-top: 18px; font-size: 11px; color: #71717a; word-break: break-all; text-align: center;">
+      Or copy and paste this verification URL into your browser:<br>
+      <a href="${verifyUrl}" style="color: #818cf8; text-decoration: underline;">${verifyUrl}</a>
+    </div>
+  `;
+  const html = buildCommercialEmailTemplate({
+    preheader: `Welcome to PrepX, ${fullName}! Please verify your email address to activate your account.`,
+    badgeText: "Welcome to PrepX",
+    title: `Verify your account, ${fullName}`,
+    description: "Thank you for joining PrepX \u2014 India's premier AI placement preparation and coding accelerator. Click the button below to confirm your email and access mock interviews, coding labs, and group discussions.",
+    contentHtml,
+    expiryMinutes: 1440,
+    // 24 hours
+    calloutNote: "If you did not register for a PrepX account, please safely ignore this email."
+  });
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.log(`
+\u{1F4E7} [DEV SIMULATED EMAIL - NO SMTP]: Verify URL for ${toEmail} is: ${verifyUrl}
+`);
+    return true;
+  }
+  try {
+    await transporter.sendMail({
+      from: `"PrepX Welcome" <${process.env.SMTP_EMAIL}>`,
+      to: toEmail,
+      subject: "Verify your email address \u2014 PrepX Placement Platform",
+      html
+    });
+    return true;
+  } catch (err) {
+    console.error("Failed to send verification email via SMTP:", err);
+    return false;
+  }
+}
+async function sendPasswordResetEmail(toEmail, resetUrl) {
+  const contentHtml = `
+    <!-- Action Button -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 16px 0 8px 0;">
+      <tr>
+        <td align="center">
+          <a href="${resetUrl}" class="action-btn" target="_blank" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); color: #ffffff; text-decoration: none; border-radius: 12px; font-size: 14px; font-weight: 700; letter-spacing: 0.2px; box-shadow: 0 8px 24px -6px rgba(99, 102, 241, 0.5);">
+            Reset My Password &rarr;
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <div style="margin-top: 18px; font-size: 11px; color: #71717a; word-break: break-all; text-align: center;">
+      Or copy and paste this URL into your browser:<br>
+      <a href="${resetUrl}" style="color: #818cf8; text-decoration: underline;">${resetUrl}</a>
+    </div>
+  `;
+  const html = buildCommercialEmailTemplate({
+    preheader: "Reset your PrepX password. This secure link is valid for 15 minutes.",
+    badgeText: "Password Recovery",
+    title: "Reset Your Password",
+    description: "We received a request to reset your PrepX account password. Click the button below to choose a strong, new password.",
+    contentHtml,
+    expiryMinutes: 15,
+    calloutNote: "If you did not request a password reset, please ignore this email or review your account security."
+  });
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.log(`
+\u{1F4E7} [DEV SIMULATED EMAIL - NO SMTP]: Reset URL for ${toEmail} is: ${resetUrl}
+`);
+    return true;
+  }
+  try {
+    await transporter.sendMail({
+      from: `"PrepX Security" <${process.env.SMTP_EMAIL}>`,
+      to: toEmail,
+      subject: "Password Reset Request \u2014 PrepX",
+      html
+    });
+    return true;
+  } catch (err) {
+    console.error("Failed to send password reset email via SMTP:", err);
+    return false;
+  }
+}
+
+// src/controllers/authController.ts
 function generateToken(id) {
   const secret = process.env.JWT_SECRET || "default_jwt_secret_dev_key_12345";
   return jwt.sign({ id }, secret, {
@@ -615,35 +934,7 @@ async function signup(req, res) {
 ${verifyUrl}
 
 `);
-    if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      try {
-        const transporter = nodemailer.createTransport({
-          service: "gmail",
-          auth: {
-            user: process.env.SMTP_EMAIL,
-            pass: process.env.SMTP_PASSWORD
-          }
-        });
-        await transporter.sendMail({
-          from: process.env.SMTP_EMAIL,
-          to: user.email,
-          subject: "Verify your Gmail address \u2014 PrepX Placement Platform",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; rounded: 10px;">
-              <h2 style="color: #2563EB;">Welcome to PrepX!</h2>
-              <p>Hi <strong>${user.fullName}</strong>,</p>
-              <p>Thank you for signing up. Please click the button below to verify your Gmail address and activate your account:</p>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${verifyUrl}" style="display: inline-block; padding: 12px 24px; background-color: #2563EB; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Verify Gmail Address</a>
-              </div>
-              <p style="color: #666; font-size: 12px;">This link will expire in 24 hours. If you did not create a PrepX account, please ignore this email.</p>
-            </div>
-          `
-        });
-      } catch (mailErr) {
-        console.error("Failed to send verification email:", mailErr);
-      }
-    }
+    await sendVerificationEmail(user.email, user.fullName, verifyUrl);
     res.status(201).json({
       success: true,
       message: "Account created successfully! A verification link has been sent to your Gmail. Please verify your email before logging in.",
@@ -1068,27 +1359,7 @@ async function forgotPassword(req, res) {
 ${resetUrl}
 
 `);
-    if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.SMTP_EMAIL,
-          pass: process.env.SMTP_PASSWORD
-        }
-      });
-      await transporter.sendMail({
-        from: process.env.SMTP_EMAIL,
-        to: user.email,
-        subject: "Password Reset Request",
-        html: `
-          <h2>Password Reset Request</h2>
-          <p>You requested a password reset. Click the button below to create a new password:</p>
-          <a href="${resetUrl}" style="display:inline-block;padding:10px 20px;background-color:#2563EB;color:white;text-decoration:none;border-radius:5px;">Reset Password</a>
-          <p>If you didn't request this, please ignore this email.</p>
-          <p>This link is valid for 15 minutes.</p>
-        `
-      });
-    }
+    await sendPasswordResetEmail(user.email, resetUrl);
     res.json({
       success: true,
       message: "If that email exists, a reset link was sent.",
@@ -1308,26 +1579,7 @@ async function sendEmailOtp(req, res) {
 [EMAIL OTP FOR ${normalizedEmail}]: ${otp}
 
 `);
-    if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.SMTP_EMAIL,
-          pass: process.env.SMTP_PASSWORD
-        }
-      });
-      await transporter.sendMail({
-        from: process.env.SMTP_EMAIL,
-        to: normalizedEmail,
-        subject: "Your prepX Login OTP Code",
-        html: `
-          <h2>prepX Email Login</h2>
-          <p>Your one-time login OTP code is:</p>
-          <h1 style="font-size:32px;letter-spacing:4px;color:#2563EB;">${otp}</h1>
-          <p>This code will expire in 10 minutes. If you did not request this, please ignore this email.</p>
-        `
-      });
-    }
+    await sendOtpEmail(normalizedEmail, otp, "login");
     res.json({
       success: true,
       message: `OTP sent successfully to ${normalizedEmail}`,
@@ -1389,26 +1641,7 @@ async function requestPasswordChangeOtp(req, res) {
 [PASSWORD CHANGE OTP FOR ${normalizedEmail}]: ${otp}
 
 `);
-    if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.SMTP_EMAIL,
-          pass: process.env.SMTP_PASSWORD
-        }
-      });
-      await transporter.sendMail({
-        from: process.env.SMTP_EMAIL,
-        to: normalizedEmail,
-        subject: "Your prepX Password Change Verification Code",
-        html: `
-          <h2>prepX Password Verification</h2>
-          <p>Your one-time verification code to change your password is:</p>
-          <h1 style="font-size:32px;letter-spacing:4px;color:#2563EB;">${otp}</h1>
-          <p>This code will expire in 10 minutes. If you did not request this, please secure your account immediately.</p>
-        `
-      });
-    }
+    await sendOtpEmail(normalizedEmail, otp, "password_change");
     res.json({
       success: true,
       message: `Verification code sent to ${normalizedEmail}`,
@@ -6486,8 +6719,8 @@ var submitCode = async (req, res) => {
         stderr: result ? result.stderr : ""
       });
       await sub2.save();
-      await updateUserCodingStats(userId.toString(), problem, verdict2 === "Accepted");
-      res.json({ ...sub2.toObject(), beats: 85, failCase: null });
+      const gamification2 = await updateUserCodingStats(userId.toString(), problem, verdict2 === "Accepted");
+      res.json({ ...sub2.toObject(), beats: 85, failCase: null, gamification: gamification2 });
       return;
     }
     const inputs = testCases.map((tc) => fixInput(tc.input));
@@ -6539,11 +6772,12 @@ var submitCode = async (req, res) => {
       stderr: firstFail?.stderr || ""
     });
     await sub.save();
-    await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
+    const gamification = await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
     res.json({
       ...sub.toObject(),
       beats: verdict === "Accepted" ? Math.floor(Math.random() * 30 + 65) : null,
-      failCase: firstFail
+      failCase: firstFail,
+      gamification
     });
   } catch (error) {
     res.status(500).json({ message: "Submission failed. Please try again." });
@@ -6792,16 +7026,18 @@ var getUserBookmarks = async (req, res) => {
 async function updateUserCodingStats(userId, problem, accepted) {
   try {
     const user = await User.findById(userId);
-    if (!user) return;
+    if (!user) return null;
     if (!user.solved) user.solved = [];
     if (!user.attempted) user.attempted = [];
+    if (!user.badges) user.badges = [];
     const pid = problem._id;
     const isSolved = user.solved.some((s) => s.toString() === pid.toString());
     const isAttempted = user.attempted.some((a) => a.toString() === pid.toString());
-    const { awardActivityXP: awardActivityXP2 } = await Promise.resolve().then(() => (init_gamificationService(), gamificationService_exports));
+    let xpToAward = 0;
+    const prevBadges = [...user.badges];
     if (!isAttempted) {
       user.attempted.push(pid);
-      await awardActivityXP2(userId, 25, `Attempted Problem: ${problem.title}`);
+      xpToAward += 25;
     }
     if (accepted && !isSolved) {
       user.solved.push(pid);
@@ -6818,11 +7054,37 @@ async function updateUserCodingStats(userId, problem, accepted) {
         user.codingStreak = 1;
       }
       user.codingStreakLast = today;
-      await awardActivityXP2(userId, addedPoints, `Solved Problem: ${problem.title}`, "Algorithm Ace");
+      xpToAward += addedPoints;
+      if (!user.badges.includes("Algorithm Ace")) {
+        user.badges.push("Algorithm Ace");
+      }
+    }
+    if (xpToAward > 0) {
+      user.xp = (user.xp || 0) + xpToAward;
+      if (user.xp >= 100 && !user.badges.includes("Fast Learner")) {
+        user.badges.push("Fast Learner");
+      }
+      if (user.xp >= 500 && !user.badges.includes("Rising Star")) {
+        user.badges.push("Rising Star");
+      }
+      if (user.xp >= 1e3 && !user.badges.includes("PrepX Champion")) {
+        user.badges.push("PrepX Champion");
+      }
+      console.log(`\u{1F3AE} [Coding Gamification] +${xpToAward} XP awarded to ${user.fullName}. Total XP: ${user.xp}`);
     }
     await user.save();
+    const newBadgesAwarded = user.badges.filter((b) => !prevBadges.includes(b));
+    return {
+      xpEarned: xpToAward,
+      newXP: user.xp,
+      rating: user.rating,
+      streakDays: user.codingStreak || user.streakDays || 1,
+      badges: user.badges,
+      newBadgesAwarded
+    };
   } catch (err) {
     console.error("updateUserCodingStats error:", err);
+    return null;
   }
 }
 function getRatingTitle(r) {
@@ -6853,6 +7115,9 @@ var codingRoutes_default = router4;
 
 // src/routes/gdRoutes.ts
 import { Router as Router5 } from "express";
+
+// src/controllers/gdController.ts
+import mongoose13 from "mongoose";
 
 // src/services/gd/gdTopicDiscoveryService.ts
 import { XMLParser } from "fast-xml-parser";
@@ -7931,6 +8196,7 @@ var gdTranscriptMetricsService = new GDTranscriptMetricsService();
 
 // src/services/gd/gdEvaluationService.ts
 init_gamificationService();
+init_User();
 var GDEvaluationService = class {
   /**
    * Backward-compatible single evaluation helper for legacy scripts and endpoints.
@@ -8054,24 +8320,39 @@ var GDEvaluationService = class {
       evalItem.rank = index + 1;
     });
     for (const studentEval of evaluations) {
-      if (!studentEval.gamificationAwardedAt && studentEval.userId) {
+      if (!studentEval.gamificationAwardedAt) {
         try {
-          let points = 40;
-          if (studentEval.overallScore >= 80) points += 30;
-          else if (studentEval.overallScore >= 60) points += 15;
-          if (studentEval.rank === 1) points += 20;
-          if (studentEval.overallScore <= 15) {
-            points = 5;
+          let targetUserId = studentEval.userId;
+          if (!targetUserId) {
+            const participant = students.find((s) => s.id === studentEval.participantId || s.username === studentEval.username);
+            if (participant?.userId) {
+              targetUserId = participant.userId.toString();
+            } else if (participant?.id && participant.id.length === 24) {
+              targetUserId = participant.id;
+            } else if (studentEval.username) {
+              const u = await User.findOne({ username: studentEval.username.toLowerCase().trim() });
+              if (u) targetUserId = u._id.toString();
+            }
           }
-          const badge = studentEval.overallScore >= 85 ? "PrepX Champion" : studentEval.overallScore >= 70 ? "Rising Star" : void 0;
-          await awardActivityXP(
-            studentEval.userId,
-            points,
-            `AI Group Discussion: "${topic.question.slice(0, 40)}..."`,
-            badge
-          );
-          studentEval.gamificationPointsAwarded = points;
-          studentEval.gamificationAwardedAt = /* @__PURE__ */ new Date();
+          if (targetUserId) {
+            studentEval.userId = targetUserId;
+            let points = 50;
+            if (studentEval.overallScore >= 80) points += 30;
+            else if (studentEval.overallScore >= 60) points += 15;
+            if (studentEval.rank === 1) points += 25;
+            if (studentEval.overallScore <= 15) {
+              points = 10;
+            }
+            const badge = studentEval.overallScore >= 85 ? "PrepX Champion" : studentEval.overallScore >= 70 ? "Rising Star" : "GD Orator";
+            await awardActivityXP(
+              targetUserId,
+              points,
+              `AI Group Discussion: "${topic.question.slice(0, 40)}..."`,
+              badge
+            );
+            studentEval.gamificationPointsAwarded = points;
+            studentEval.gamificationAwardedAt = /* @__PURE__ */ new Date();
+          }
         } catch (err) {
           console.error(`[GD Evaluation] Failed to award gamification points to ${studentEval.username}:`, err);
         }
@@ -8995,6 +9276,7 @@ var GDSessionService = class {
 var gdSessionService = new GDSessionService();
 
 // src/controllers/gdController.ts
+init_User();
 function getParam(param) {
   if (Array.isArray(param)) return param[0] || "";
   return param || "";
@@ -9374,6 +9656,69 @@ async function getMyGDSessions(req, res) {
     });
   }
 }
+async function toggleGDBookmark(req, res) {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const roomId = getParam(req.params.roomId || req.params.sessionId);
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Authentication required" });
+      return;
+    }
+    if (!roomId) {
+      res.status(400).json({ success: false, message: "Room/Session ID is required" });
+      return;
+    }
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+    if (!user.gdBookmarks) user.gdBookmarks = [];
+    const index = user.gdBookmarks.findIndex((id) => id.toString() === roomId);
+    let bookmarked = false;
+    if (index > -1) {
+      user.gdBookmarks.splice(index, 1);
+      bookmarked = false;
+    } else {
+      user.gdBookmarks.push(new mongoose13.Types.ObjectId(roomId));
+      bookmarked = true;
+    }
+    await user.save();
+    res.json({
+      success: true,
+      bookmarked,
+      gdBookmarks: user.gdBookmarks,
+      message: bookmarked ? "Group Discussion bookmarked!" : "Bookmark removed"
+    });
+  } catch (error) {
+    console.error("[GD Controller] Toggle bookmark error:", error);
+    res.status(500).json({ success: false, message: "Failed to toggle bookmark" });
+  }
+}
+async function getGDBookmarks(req, res) {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Authentication required" });
+      return;
+    }
+    const user = await User.findById(userId).populate({
+      path: "gdBookmarks",
+      select: "topic adminUsername status participants round createdAt endedAt evaluations"
+    });
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+    res.json({
+      success: true,
+      bookmarks: user.gdBookmarks || []
+    });
+  } catch (error) {
+    console.error("[GD Controller] Get bookmarks error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch bookmarked discussions" });
+  }
+}
 
 // src/routes/gdRoutes.ts
 var router5 = Router5();
@@ -9400,6 +9745,9 @@ router5.post("/rooms/:roomId/transcript", optionalAuth, appendTranscriptSegment)
 router5.post("/rooms/:roomId/end", protect, endGDSession);
 router5.post("/sessions/:sessionId/end", protect, endGDSession);
 router5.get("/my-sessions", protect, getMyGDSessions);
+router5.post("/rooms/:roomId/bookmark", protect, toggleGDBookmark);
+router5.post("/sessions/:sessionId/bookmark", protect, toggleGDBookmark);
+router5.get("/bookmarks", protect, getGDBookmarks);
 var gdRoutes_default = router5;
 
 // src/services/gd/gdWebSocketService.ts

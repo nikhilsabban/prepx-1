@@ -31,6 +31,7 @@ export interface IUser extends Document {
   solved?: mongoose.Types.ObjectId[];
   attempted?: mongoose.Types.ObjectId[];
   bookmarks?: mongoose.Types.ObjectId[];
+  gdBookmarks?: mongoose.Types.ObjectId[];
   codingStreak?: number;
   codingStreakLast?: string;
   plan?: string;
@@ -176,6 +177,10 @@ const UserSchema = new Schema<IUser>(
     bookmarks: [{
       type: Schema.Types.ObjectId,
       ref: "CodingProblem",
+    }],
+    gdBookmarks: [{
+      type: Schema.Types.ObjectId,
+      ref: "GroupDiscussion",
     }],
     codingStreak: {
       type: Number,

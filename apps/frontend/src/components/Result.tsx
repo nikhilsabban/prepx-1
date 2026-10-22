@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
 import { fetchInterviewResult, type ResultResponse } from "../services/interviewService";
 import { useAuth } from "../context/AuthContext";
+import { SkeletonResult } from "./ui/skeleton";
 
 export function Result() {
     const { interviewId } = useParams();
@@ -75,14 +76,17 @@ export function Result() {
             </header>
 
             {!ready ? (
-                <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-border bg-card/50 py-20 text-center shadow-lg backdrop-blur">
-                    <Loader2 className="size-8 animate-spin text-violet-500" />
-                    <div>
-                        <p className="text-base font-semibold text-foreground">Reviewing your interview...</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            Preparing your scores and feedback.
-                        </p>
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between p-4 rounded-2xl border border-violet-500/30 bg-violet-500/10 text-violet-300">
+                        <div className="flex items-center gap-3">
+                            <Loader2 className="size-5 animate-spin text-violet-400" />
+                            <div>
+                                <p className="text-sm font-semibold text-white">Reviewing your interview...</p>
+                                <p className="text-xs text-violet-300/80">Evaluating transcript against campus rubrics & calculating your score.</p>
+                            </div>
+                        </div>
                     </div>
+                    <SkeletonResult />
                 </div>
             ) : (
                 <div className="flex flex-col gap-5 sm:gap-6">

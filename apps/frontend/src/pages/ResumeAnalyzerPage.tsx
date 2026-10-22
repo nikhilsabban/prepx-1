@@ -11,6 +11,7 @@ import { ResumeRecommendations } from "../features/resumeAnalyzer/components/Res
 import { FormattingAnalysis } from "../features/resumeAnalyzer/components/FormattingAnalysis";
 import { AnalysisHistory } from "../features/resumeAnalyzer/components/AnalysisHistory";
 import { Button } from "../components/ui/button";
+import { SkeletonResume } from "../components/ui/skeleton";
 import { toast } from "react-toastify";
 import { Sparkles, Loader2, RefreshCw } from "lucide-react";
 
@@ -126,7 +127,9 @@ export function ResumeAnalyzerPage() {
 
         {/* Right Dashboard Results Column */}
         <div className="lg:col-span-7 space-y-6">
-          {result ? (
+          {loading ? (
+            <SkeletonResume />
+          ) : result ? (
             <>
               <ATSScoreCard />
               <ScoreBreakdown />

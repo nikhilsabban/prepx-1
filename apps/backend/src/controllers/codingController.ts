@@ -168,8 +168,8 @@ export const submitCode = async (req: AuthRequest, res: Response): Promise<void>
         stderr: result ? result.stderr : "",
       });
       await sub.save();
-      await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
-      res.json({ ...sub.toObject(), beats: 85, failCase: null });
+      const gamification = await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
+      res.json({ ...sub.toObject(), beats: 85, failCase: null, gamification });
       return;
     }
 
@@ -232,12 +232,13 @@ export const submitCode = async (req: AuthRequest, res: Response): Promise<void>
     });
     await sub.save();
 
-    await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
+    const gamification = await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
 
     res.json({
       ...sub.toObject(),
       beats: verdict === "Accepted" ? Math.floor(Math.random() * 30 + 65) : null,
       failCase: firstFail,
+      gamification,
     });
   } catch (error: any) {
     res.status(500).json({ message: "Submission failed. Please try again." });
@@ -496,20 +497,22 @@ export const getUserBookmarks = async (req: AuthRequest, res: Response): Promise
 async function updateUserCodingStats(userId: string, problem: any, accepted: boolean) {
   try {
     const user = await User.findById(userId);
-    if (!user) return;
+    if (!user) return null;
 
     if (!user.solved) user.solved = [];
     if (!user.attempted) user.attempted = [];
+    if (!user.badges) user.badges = [];
 
     const pid = problem._id;
     const isSolved = user.solved.some((s) => s.toString() === pid.toString());
     const isAttempted = user.attempted.some((a) => a.toString() === pid.toString());
 
-    const { awardActivityXP } = await import("../services/gamificationService");
+    let xpToAward = 0;
+    const prevBadges = [...user.badges];
 
     if (!isAttempted) {
       user.attempted.push(pid);
-      await awardActivityXP(userId, 25, `Attempted Problem: ${problem.title}`);
+      xpToAward += 25; // First attempt bonus
     }
 
     if (accepted && !isSolved) {
@@ -530,13 +533,44 @@ async function updateUserCodingStats(userId: string, problem: any, accepted: boo
         user.codingStreak = 1;
       }
       user.codingStreakLast = today;
+      xpToAward += addedPoints;
 
-      await awardActivityXP(userId, addedPoints, `Solved Problem: ${problem.title}`, "Algorithm Ace");
+      if (!user.badges.includes("Algorithm Ace")) {
+        user.badges.push("Algorithm Ace");
+      }
+    }
+
+    if (xpToAward > 0) {
+      user.xp = (user.xp || 0) + xpToAward;
+
+      if (user.xp >= 100 && !user.badges.includes("Fast Learner")) {
+        user.badges.push("Fast Learner");
+      }
+      if (user.xp >= 500 && !user.badges.includes("Rising Star")) {
+        user.badges.push("Rising Star");
+      }
+      if (user.xp >= 1000 && !user.badges.includes("PrepX Champion")) {
+        user.badges.push("PrepX Champion");
+      }
+
+      console.log(`🎮 [Coding Gamification] +${xpToAward} XP awarded to ${user.fullName}. Total XP: ${user.xp}`);
     }
 
     await user.save();
+
+    const newBadgesAwarded = user.badges.filter((b) => !prevBadges.includes(b));
+
+    return {
+      xpEarned: xpToAward,
+      newXP: user.xp,
+      rating: user.rating,
+      streakDays: user.codingStreak || user.streakDays || 1,
+      badges: user.badges,
+      newBadgesAwarded,
+    };
   } catch (err) {
     console.error("updateUserCodingStats error:", err);
+    return null;
   }
 }
 

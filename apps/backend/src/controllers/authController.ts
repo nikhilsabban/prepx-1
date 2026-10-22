@@ -9,6 +9,11 @@ import { User } from "../models/User";
 import { processDailyLoginBonus } from "../services/gamificationService";
 import type { AuthRequest } from "../middleware/authMiddleware";
 import { callGroqWithFallback } from "../services/groqService";
+import {
+  sendOtpEmail,
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+} from "../services/emailService";
 
 function generateToken(id: string): string {
   const secret = process.env.JWT_SECRET || "default_jwt_secret_dev_key_12345";
@@ -96,36 +101,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
 
     console.log(`\n\n[GMAIL VERIFICATION LINK FOR ${user.email}]:\n${verifyUrl}\n\n`);
 
-    if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      try {
-        const transporter = nodemailer.createTransport({
-          service: "gmail",
-          auth: {
-            user: process.env.SMTP_EMAIL,
-            pass: process.env.SMTP_PASSWORD,
-          },
-        });
-
-        await transporter.sendMail({
-          from: process.env.SMTP_EMAIL,
-          to: user.email,
-          subject: "Verify your Gmail address — PrepX Placement Platform",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; rounded: 10px;">
-              <h2 style="color: #2563EB;">Welcome to PrepX!</h2>
-              <p>Hi <strong>${user.fullName}</strong>,</p>
-              <p>Thank you for signing up. Please click the button below to verify your Gmail address and activate your account:</p>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${verifyUrl}" style="display: inline-block; padding: 12px 24px; background-color: #2563EB; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Verify Gmail Address</a>
-              </div>
-              <p style="color: #666; font-size: 12px;">This link will expire in 24 hours. If you did not create a PrepX account, please ignore this email.</p>
-            </div>
-          `,
-        });
-      } catch (mailErr) {
-        console.error("Failed to send verification email:", mailErr);
-      }
-    }
+    await sendVerificationEmail(user.email, user.fullName, verifyUrl);
 
     res.status(201).json({
       success: true,
@@ -671,28 +647,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     // Log for dev purposes
     console.log(`\n\n[RESET PASSWORD LINK FOR ${user.email}]:\n${resetUrl}\n\n`);
 
-    if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.SMTP_EMAIL,
-          pass: process.env.SMTP_PASSWORD,
-        },
-      });
-
-      await transporter.sendMail({
-        from: process.env.SMTP_EMAIL,
-        to: user.email,
-        subject: "Password Reset Request",
-        html: `
-          <h2>Password Reset Request</h2>
-          <p>You requested a password reset. Click the button below to create a new password:</p>
-          <a href="${resetUrl}" style="display:inline-block;padding:10px 20px;background-color:#2563EB;color:white;text-decoration:none;border-radius:5px;">Reset Password</a>
-          <p>If you didn't request this, please ignore this email.</p>
-          <p>This link is valid for 15 minutes.</p>
-        `,
-      });
-    }
+    await sendPasswordResetEmail(user.email, resetUrl);
 
     res.json({
       success: true,
@@ -980,27 +935,7 @@ export async function sendEmailOtp(req: Request, res: Response): Promise<void> {
 
     console.log(`\n\n[EMAIL OTP FOR ${normalizedEmail}]: ${otp}\n\n`);
 
-    if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.SMTP_EMAIL,
-          pass: process.env.SMTP_PASSWORD,
-        },
-      });
-
-      await transporter.sendMail({
-        from: process.env.SMTP_EMAIL,
-        to: normalizedEmail,
-        subject: "Your prepX Login OTP Code",
-        html: `
-          <h2>prepX Email Login</h2>
-          <p>Your one-time login OTP code is:</p>
-          <h1 style="font-size:32px;letter-spacing:4px;color:#2563EB;">${otp}</h1>
-          <p>This code will expire in 10 minutes. If you did not request this, please ignore this email.</p>
-        `,
-      });
-    }
+    await sendOtpEmail(normalizedEmail, otp, "login");
 
     res.json({
       success: true,
@@ -1082,27 +1017,7 @@ export async function requestPasswordChangeOtp(req: Request, res: Response): Pro
 
     console.log(`\n\n[PASSWORD CHANGE OTP FOR ${normalizedEmail}]: ${otp}\n\n`);
 
-    if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.SMTP_EMAIL,
-          pass: process.env.SMTP_PASSWORD,
-        },
-      });
-
-      await transporter.sendMail({
-        from: process.env.SMTP_EMAIL,
-        to: normalizedEmail,
-        subject: "Your prepX Password Change Verification Code",
-        html: `
-          <h2>prepX Password Verification</h2>
-          <p>Your one-time verification code to change your password is:</p>
-          <h1 style="font-size:32px;letter-spacing:4px;color:#2563EB;">${otp}</h1>
-          <p>This code will expire in 10 minutes. If you did not request this, please secure your account immediately.</p>
-        `,
-      });
-    }
+    await sendOtpEmail(normalizedEmail, otp, "password_change");
 
     res.json({
       success: true,

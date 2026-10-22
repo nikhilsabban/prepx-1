@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { codingApi } from "../../services/codingApi";
 import type { Problem } from "../../services/codingApi";
 import { Search, Code2, Trophy, CheckCircle2, Flame, Sparkles, Filter, ChevronRight, Zap, Bookmark } from "lucide-react";
-import { Skeleton } from "../../components/ui/skeleton";
+import { Skeleton, SkeletonCodingList } from "../../components/ui/skeleton";
 import { toast } from "react-toastify";
 
 export const CodingProblemsPage: React.FC = () => {
@@ -94,6 +94,10 @@ export const CodingProblemsPage: React.FC = () => {
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">{diff}</span>;
     }
   };
+
+  if (loading && problems.length === 0) {
+    return <SkeletonCodingList />;
+  }
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 py-8 px-4 sm:px-6 lg:px-8">

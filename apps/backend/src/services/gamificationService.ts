@@ -17,6 +17,8 @@ const ALL_POSSIBLE_BADGES = [
   "Algorithm Ace",
   "Interview Pro",
   "Resume Strategist",
+  "GD Orator",
+  "Ace Candidate",
 ];
 
 /**

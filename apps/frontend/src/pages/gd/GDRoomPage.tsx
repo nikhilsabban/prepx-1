@@ -23,6 +23,8 @@ import {
   ExternalLink,
   ChevronRight,
   Send,
+  Bookmark,
+  BookmarkCheck,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import {
@@ -36,6 +38,8 @@ import {
   endGDSession,
   inviteParticipant,
   searchUsersByUsername,
+  toggleGDBookmark,
+  fetchGDBookmarks,
   type IGDSession,
   type IGDParticipant,
   type IGDTranscriptSegment,
@@ -44,6 +48,7 @@ import {
 import { toast } from "react-toastify";
 import { getErrorMessage } from "../../lib/utils";
 import { BACKEND_URL } from "../../lib/config";
+import { SkeletonGDRoom } from "../../components/ui/skeleton";
 
 // Public STUN server configuration for WebRTC peer-to-peer mesh
 const RTC_CONFIG: RTCConfiguration = {
@@ -62,6 +67,40 @@ export function GDRoomPage() {
   const [loading, setLoading] = useState(true);
   const [isEnding, setIsEnding] = useState(false);
   const [activeTab, setActiveTab] = useState<"transcript" | "participants">("transcript");
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isTogglingBookmark, setIsTogglingBookmark] = useState(false);
+
+  // Check initial bookmark status
+  useEffect(() => {
+    async function checkBookmark() {
+      if (!sessionId) return;
+      try {
+        const bms = await fetchGDBookmarks();
+        if (Array.isArray(bms)) {
+          setIsBookmarked(bms.some((b: any) => b.roomId === sessionId || b._id === sessionId));
+        }
+      } catch (e) {}
+    }
+    checkBookmark();
+  }, [sessionId]);
+
+  const handleToggleBookmark = async () => {
+    if (!sessionId) return;
+    setIsTogglingBookmark(true);
+    try {
+      const res = await toggleGDBookmark(sessionId);
+      setIsBookmarked(res.bookmarked);
+      if (res.bookmarked) {
+        toast.success("Discussion room bookmarked!");
+      } else {
+        toast.info("Bookmark removed");
+      }
+    } catch (err: any) {
+      toast.error("Failed to update bookmark");
+    } finally {
+      setIsTogglingBookmark(false);
+    }
+  };
 
   // Media streams & Controls
   const [isMicOn, setIsMicOn] = useState(true);
@@ -1218,12 +1257,7 @@ export function GDRoomPage() {
   }
 
   if (loading || !session) {
-    return (
-      <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center space-y-4 text-white">
-        <RefreshCw className="size-10 text-indigo-500 animate-spin" />
-        <p className="text-zinc-400 font-medium text-sm">Entering live discussion room...</p>
-      </div>
-    );
+    return <SkeletonGDRoom />;
   }
 
   const currentSpeaker = session.currentTurn;
@@ -1263,6 +1297,24 @@ export function GDRoomPage() {
 
           {/* AI Tutor Listening Status & Moderator Actions */}
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleToggleBookmark}
+              disabled={isTogglingBookmark}
+              className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
+                isBookmarked
+                  ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+              }`}
+              title={isBookmarked ? "Remove Bookmark" : "Bookmark Discussion"}
+            >
+              {isBookmarked ? (
+                <BookmarkCheck className="size-4 fill-cyan-400/20" />
+              ) : (
+                <Bookmark className="size-4" />
+              )}
+              <span className="hidden sm:inline">{isBookmarked ? "Bookmarked" : "Bookmark"}</span>
+            </button>
+
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-semibold">
               <Sparkles className="size-3.5 text-indigo-400 animate-spin" />
               AI Tutor Listening & Attributing
