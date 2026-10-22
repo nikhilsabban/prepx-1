@@ -40,10 +40,16 @@ export const CodingSolvePage: React.FC = () => {
   const [aiMessages, setAiMessages] = useState<Array<{ role: "user" | "ai"; text: string }>>([
     {
       role: "ai",
-      text: "👋 Hi! I am **CodeForge AI Tutor**. Need a hint, approach breakdown, or code review? Ask me anything about this problem!",
+      text: "👋 Hi! I am **CodeForge AI Tutor**. Need a hint, approach breakdown, code review, or automatic bug fix? Ask me anything about this problem!",
     },
   ]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [fixingCode, setFixingCode] = useState(false);
+  const [fixedCodeSuggestion, setFixedCodeSuggestion] = useState<{
+    explanation: string;
+    fixedCode: string;
+    keyFix?: string;
+  } | null>(null);
   const aiChatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -195,6 +201,53 @@ export const CodingSolvePage: React.FC = () => {
     }
   };
 
+  const handleAIFixCode = async (failedTestInfo?: any, errorOutputInfo?: string) => {
+    if (!code.trim()) {
+      toast.error("Please write some code before requesting an AI fix!");
+      return;
+    }
+    setFixingCode(true);
+    setActiveTab("ai");
+    setMobileTab("problem");
+    toast.info("Diagnosing error and generating verified code fix...");
+
+    try {
+      const res = await codingApi.fixCodeWithAI({
+        code,
+        language,
+        problemTitle: problem?.title,
+        description: problem?.description,
+        errorOutput: errorOutputInfo,
+        failedTest: failedTestInfo,
+      });
+
+      setFixedCodeSuggestion(res);
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          role: "user",
+          text: `🛠️ Please fix my ${language} code errors and show the correct working answer.`,
+        },
+        {
+          role: "ai",
+          text: `✨ **AI Code Fix Ready!**\n\n**Diagnosis & Solution:**\n${res.explanation}\n\n**Key Fix:** ${res.keyFix || "Corrected logic, loop bounds, and return statements."}\n\nClick **"Apply Fix to Editor"** to update your code editor instantly!`,
+        },
+      ]);
+      toast.success("Corrected solution generated! Check AI Tutor.");
+    } catch (err: any) {
+      toast.error(getErrorMessage(err, "Failed to generate AI fix. Please try again."));
+    } finally {
+      setFixingCode(false);
+    }
+  };
+
+  const handleApplyFixedCode = () => {
+    if (!fixedCodeSuggestion?.fixedCode) return;
+    setCode(fixedCodeSuggestion.fixedCode);
+    toast.success("✨ Corrected code applied to editor! Run tests to verify.");
+    setMobileTab("code");
+  };
+
   const handleRun = async () => {
     if (!code.trim()) {
       toast.error("Please write code before running!");
@@ -331,16 +384,30 @@ export const CodingSolvePage: React.FC = () => {
             onClick={handleAIReview}
             disabled={aiLoading}
             title="Ask AI to review your current code"
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer active:scale-95"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden xs:inline">AI Review</span>
           </button>
 
           <button
+            onClick={() => handleAIFixCode()}
+            disabled={fixingCode}
+            title="Auto-fix bugs, return statements, & get correct answer"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer active:scale-95 shadow-md shadow-emerald-500/10"
+          >
+            {fixingCode ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span className="hidden xs:inline">{fixingCode ? "Fixing..." : "Auto-Fix"}</span>
+          </button>
+
+          <button
             onClick={handleRun}
             disabled={running || submitting}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer active:scale-95"
           >
             <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
             {running ? "..." : "Run"}
@@ -511,10 +578,49 @@ export const CodingSolvePage: React.FC = () => {
                       <Loader2 className="w-4 h-4 animate-spin" /> CodeForge AI is thinking...
                     </div>
                   )}
+
+                  {/* AI Verified Fixed Code Suggestion Card */}
+                  {fixedCodeSuggestion && (
+                    <div className="p-3.5 rounded-xl border border-emerald-500/40 bg-gradient-to-br from-emerald-950/40 via-zinc-950 to-indigo-950/40 space-y-2.5 shadow-xl animate-in fade-in duration-300">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-emerald-400" /> AI Verified Fix Ready
+                        </span>
+                        <button
+                          onClick={handleApplyFixedCode}
+                          className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Apply Fix to Editor
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-zinc-300 font-sans leading-relaxed">
+                        {fixedCodeSuggestion.explanation}
+                      </p>
+                      {fixedCodeSuggestion.keyFix && (
+                        <div className="px-2 py-1 rounded bg-black/40 border border-emerald-500/20 text-[10px] text-emerald-300 font-mono">
+                          Key Fix: {fixedCodeSuggestion.keyFix}
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Corrected Code:</div>
+                        <pre className="max-h-44 overflow-y-auto p-2.5 bg-black/70 rounded-lg text-[11px] text-emerald-400 font-mono border border-zinc-800 leading-tight">
+                          <code>{fixedCodeSuggestion.fixedCode}</code>
+                        </pre>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 pt-2 border-t border-slate-800">
                   <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => handleAIFixCode()}
+                      disabled={fixingCode}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      Auto-Fix My Code
+                    </button>
                     {[
                       "Give Hint",
                       "Explain Approach",
@@ -689,11 +795,25 @@ export const CodingSolvePage: React.FC = () => {
                       </div>
 
                       {submissionResult.failCase && (
-                        <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-1">
+                        <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2">
                           <p className="text-rose-400 font-bold font-sans">First Failed Case:</p>
                           <div><span className="text-zinc-500">Input: </span>{submissionResult.failCase.input}</div>
                           <div><span className="text-zinc-500">Expected: </span>{submissionResult.failCase.expected}</div>
                           <div><span className="text-zinc-500">Actual: </span>{submissionResult.failCase.actual}</div>
+                        </div>
+                      )}
+
+                      {submissionResult.verdict !== "Accepted" && (
+                        <div className="flex items-center justify-between p-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10">
+                          <span className="text-xs text-indigo-200 font-sans">Tests failed or issue in return? Get the verified fix.</span>
+                          <button
+                            onClick={() => handleAIFixCode(submissionResult.failCase, submissionResult.stderr)}
+                            disabled={fixingCode}
+                            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-indigo-600/30 cursor-pointer disabled:opacity-50"
+                          >
+                            {fixingCode ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            ✨ Auto-Fix with AI
+                          </button>
                         </div>
                       )}
                     </div>
@@ -714,6 +834,23 @@ export const CodingSolvePage: React.FC = () => {
                           {r.expected && <div><span className="text-zinc-500">Expected: </span>{r.expected}</div>}
                         </div>
                       ))}
+
+                      {runResults.some((r) => !r.passed) && (
+                        <div className="flex items-center justify-between p-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10">
+                          <span className="text-xs text-indigo-200 font-sans">Some testcases failed. Diagnose & fix automatically?</span>
+                          <button
+                            onClick={() => {
+                              const firstFailed = runResults.find((r) => !r.passed);
+                              handleAIFixCode(firstFailed, firstFailed?.stderr);
+                            }}
+                            disabled={fixingCode}
+                            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-indigo-600/30 cursor-pointer disabled:opacity-50"
+                          >
+                            {fixingCode ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            ✨ Auto-Fix with AI
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="text-zinc-500 font-sans text-center py-6">

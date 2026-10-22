@@ -40,6 +40,16 @@ import { GDRoomPage } from "./pages/gd/GDRoomPage";
 import { GDResultPage } from "./pages/gd/GDResultPage";
 import { GOOGLE_CLIENT_ID } from "./lib/config";
 
+import { useLocation } from "react-router";
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   const googleClientId = GOOGLE_CLIENT_ID;
   const hasGoogleClientId = !!googleClientId && googleClientId !== "MOCK_CLIENT_ID";
@@ -47,6 +57,7 @@ export function App() {
   const appContent = (
     <AuthProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <div className="min-h-screen bg-background text-foreground flex flex-col antialiased">
 
             <Navbar />

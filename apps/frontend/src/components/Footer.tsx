@@ -3,12 +3,12 @@ import { Link, useLocation } from "react-router";
 import { Youtube, Twitter, Linkedin, MessageSquare } from "lucide-react";
 
 const aiFeatures = [
-  "AI Technical Interviews",
-  "System Design Practice",
-  "Resume Analyze & ATS Optimization",
-  "Behavioral & HR Prep",
-  "Real-time Voice Feedback",
-  "Mock Coding Challenges",
+  { label: "AI Technical Interviews", to: "/ai-interview" },
+  { label: "System Design Practice", to: "/ai-interview" },
+  { label: "Resume Analyze & ATS Optimization", to: "/resume" },
+  { label: "Mock Coding Challenges", to: "/coding" },
+  { label: "AI Group Discussion Arena", to: "/group-discussion" },
+  { label: "Saved Practice Bookmarks", to: "/bookmarks" },
 ];
 
 const quickLinks = [
@@ -86,10 +86,13 @@ export function Footer() {
             </h4>
             <ul className="space-y-2.5">
               {aiFeatures.map((feature) => (
-                <li key={feature}>
-                  <span className="text-sm text-zinc-500 hover:text-white transition-colors cursor-default">
-                    {feature}
-                  </span>
+                <li key={feature.label}>
+                  <Link
+                    to={feature.to}
+                    className="text-sm text-zinc-500 hover:text-white transition-all inline-block active:scale-95 active:text-indigo-400 cursor-pointer"
+                  >
+                    {feature.label}
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -105,7 +108,7 @@ export function Footer() {
                 <li key={label}>
                   <Link
                     to={to}
-                    className="text-sm text-zinc-500 hover:text-white transition-colors"
+                    className="text-sm text-zinc-500 hover:text-white transition-all inline-block active:scale-95 active:text-indigo-400 cursor-pointer"
                   >
                     {label}
                   </Link>
@@ -119,8 +122,18 @@ export function Footer() {
         <div className="mt-12 pt-4 border-t border-zinc-900 flex flex-col md:flex-row justify-between items-center gap-2 text-xs text-zinc-600">
           <p>© {new Date().getFullYear()} prepX. All rights reserved.</p>
           <div className="flex gap-4">
-            <Link to="/terms" className="hover:text-zinc-400 transition-colors">Terms</Link>
-            <Link to="/privacy-policy" className="hover:text-zinc-400 transition-colors">Privacy</Link>
+            <Link 
+              to="/terms" 
+              className="hover:text-zinc-300 transition-all inline-block px-2.5 py-1 rounded-lg active:scale-90 active:bg-zinc-800 active:text-indigo-400 cursor-pointer"
+            >
+              Terms
+            </Link>
+            <Link 
+              to="/privacy-policy" 
+              className="hover:text-zinc-300 transition-all inline-block px-2.5 py-1 rounded-lg active:scale-90 active:bg-zinc-800 active:text-indigo-400 cursor-pointer"
+            >
+              Privacy
+            </Link>
           </div>
         </div>
       </div>

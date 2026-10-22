@@ -10,6 +10,7 @@ import {
   getLeaderboard,
   getAIHint,
   analyzeCodeWithAI,
+  fixCodeWithAI,
   toggleBookmark,
   getUserBookmarks,
 } from "../controllers/codingController";
@@ -28,6 +29,7 @@ router.post("/submit", protect, submitCode);
 router.get("/submissions", protect, getUserSubmissions);
 router.post("/ai/hint", protect, getAIHint);
 router.post("/ai/analyze", protect, analyzeCodeWithAI);
+router.post("/ai/fix", protect, fixCodeWithAI);
 router.post("/bookmarks/:problemId", protect, toggleBookmark);
 router.get("/bookmarks", protect, getUserBookmarks);
 

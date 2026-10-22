@@ -162,15 +162,140 @@ export function GDRoomPage() {
     isVideoOnRef.current = isVideoOn;
   }, [isVideoOn]);
 
+  // Face Tracking in Camera
+  const [faceDetected, setFaceDetected] = useState(true);
+  const [faceWarning, setFaceWarning] = useState<string | null>(null);
+  const faceDetectorRef = useRef<any>(null);
+  const faceCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
   // Reactive effect to bind local camera stream to the video element whenever DOM mounts or stream changes
   useEffect(() => {
     if (localVideoRef.current && localStream && isVideoOn) {
-      localVideoRef.current.srcObject = localStream;
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
       localVideoRef.current.play().catch((e) => {
         console.warn("Local video play warning:", e);
       });
     }
-  }, [localStream, isVideoOn]);
+  }, [localStream, isVideoOn, loading]);
+
+  // Real-time Face Tracking detection loop
+  useEffect(() => {
+    if (!localStream || !isVideoOn || loading) {
+      setFaceDetected(true);
+      setFaceWarning(null);
+      if (faceCheckIntervalRef.current) {
+        clearInterval(faceCheckIntervalRef.current);
+        faceCheckIntervalRef.current = null;
+      }
+      return;
+    }
+
+    if (!offscreenCanvasRef.current) {
+      offscreenCanvasRef.current = document.createElement("canvas");
+      offscreenCanvasRef.current.width = 160;
+      offscreenCanvasRef.current.height = 120;
+    }
+
+    let missCount = 0;
+
+    const checkFacePresence = async () => {
+      const video = localVideoRef.current;
+      if (!video || video.readyState < 2 || video.paused) return;
+
+      let detected = false;
+
+      // 1. Native FaceDetector API (Chromium / modern browsers)
+      if (typeof (window as any).FaceDetector !== "undefined") {
+        try {
+          if (!faceDetectorRef.current) {
+            faceDetectorRef.current = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+          }
+          const faces = await faceDetectorRef.current.detect(video);
+          if (faces && faces.length > 0) {
+            detected = true;
+          }
+        } catch (e) {
+          // Fall through to canvas analysis
+        }
+      }
+
+      // 2. High-performance skin-tone and luminance variance analysis
+      if (!detected && offscreenCanvasRef.current) {
+        try {
+          const canvas = offscreenCanvasRef.current;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, 160, 120);
+            const frame = ctx.getImageData(30, 15, 100, 80);
+            const data = frame.data;
+            let skinPixels = 0;
+            let totalSampled = 0;
+            let sumLuma = 0;
+
+            for (let i = 0; i < data.length; i += 16) {
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              totalSampled++;
+              const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+              sumLuma += luma;
+
+              if (
+                r > 45 &&
+                g > 30 &&
+                b > 20 &&
+                r > g &&
+                r > b &&
+                Math.abs(r - g) >= 8 &&
+                Math.max(r, g, b) - Math.min(r, g, b) >= 12
+              ) {
+                skinPixels++;
+              }
+            }
+
+            const meanLuma = sumLuma / (totalSampled || 1);
+            let varianceSum = 0;
+            for (let i = 0; i < data.length; i += 16) {
+              const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              varianceSum += (luma - meanLuma) * (luma - meanLuma);
+            }
+            const lumaVariance = varianceSum / (totalSampled || 1);
+            const skinRatio = skinPixels / (totalSampled || 1);
+
+            if (skinRatio >= 0.08 && lumaVariance >= 35) {
+              detected = true;
+            }
+          }
+        } catch (err) {
+          detected = true;
+        }
+      }
+
+      if (detected) {
+        missCount = 0;
+        setFaceDetected(true);
+        setFaceWarning(null);
+      } else {
+        missCount++;
+        if (missCount >= 3) {
+          setFaceDetected(false);
+          setFaceWarning("⚠️ Face not detected! Please ensure your face is clearly visible to the camera.");
+        }
+      }
+    };
+
+    faceCheckIntervalRef.current = setInterval(checkFacePresence, 1500);
+
+    return () => {
+      if (faceCheckIntervalRef.current) {
+        clearInterval(faceCheckIntervalRef.current);
+        faceCheckIntervalRef.current = null;
+      }
+    };
+  }, [localStream, isVideoOn, loading]);
 
   // Current logged in user ID and role
   const isAdmin = session && currentParticipant ? session.adminId === currentParticipant.id || session.adminUsername === currentParticipant.username : false;
@@ -1160,9 +1285,9 @@ export function GDRoomPage() {
     }
   }
 
-  // Admin Skip Turn
+  // Skip Turn
   async function handleAdminSkipTurn() {
-    if (!sessionId || !isAdmin) return;
+    if (!sessionId) return;
     try {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
@@ -1174,15 +1299,15 @@ export function GDRoomPage() {
       } else {
         await skipTurn(sessionId);
       }
-      toast.info("Turn skipped by Moderator");
+      toast.info("Turn skipped to next participant");
     } catch (err: any) {
       toast.error(getErrorMessage(err, "Unable to skip turn. Please try again."));
     }
   }
 
-  // Admin Start Discussion
+  // Start Discussion
   async function handleStartDiscussion() {
-    if (!sessionId || !isAdmin) return;
+    if (!sessionId) return;
     try {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
@@ -1320,31 +1445,29 @@ export function GDRoomPage() {
               AI Tutor Listening & Attributing
             </div>
 
-            {isAdmin && session.status === "preparing" && (
+            {session.status === "preparing" && (
               <Button
                 onClick={handleStartDiscussion}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-600/20"
               >
                 <Play className="size-3.5" />
                 Start Discussion
               </Button>
             )}
 
-            {isAdmin && (
-              <button
-                onClick={() => setShowInviteModal(true)}
-                className="px-3 py-2 rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="size-3.5" />
-                Invite ({studentParticipants.length}/5)
-              </button>
-            )}
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="px-3 py-2 rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+            >
+              <Plus className="size-3.5" />
+              Invite ({studentParticipants.length}/5)
+            </button>
 
-            {isAdmin && (
+            {session.status === "in_progress" && (
               <Button
                 onClick={handleEndSession}
                 disabled={isEnding}
-                className="px-4 py-2 rounded-xl bg-red-600/90 hover:bg-red-600 text-white font-bold text-xs shadow-md shadow-red-600/20 flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-red-600/90 hover:bg-red-600 text-white font-bold text-xs shadow-md shadow-red-600/20 flex items-center gap-1.5 active:scale-95 transition-all"
               >
                 <PhoneOff className="size-3.5" />
                 {isEnding ? "Evaluating..." : "End Discussion"}
@@ -1365,6 +1488,22 @@ export function GDRoomPage() {
                 Start speaking to keep your turn!
               </span>
             )}
+          </div>
+        )}
+
+        {/* Face Tracking Warning Alert */}
+        {faceWarning && isVideoOn && (
+          <div className="max-w-7xl mx-auto mt-2 p-2.5 rounded-xl border border-red-500/50 bg-red-500/15 flex items-center justify-between text-xs text-red-300 animate-pulse shadow-lg shadow-red-500/10">
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertTriangle className="size-4 shrink-0 text-red-400" />
+              <span>{faceWarning}</span>
+            </div>
+            <button
+              className="text-[11px] font-bold underline cursor-pointer text-red-200 hover:text-white"
+              onClick={() => setFaceWarning(null)}
+            >
+              Dismiss
+            </button>
           </div>
         )}
       </div>
@@ -1396,15 +1535,13 @@ export function GDRoomPage() {
                   <Clock className="size-3.5" />
                   Speaking: {turnElapsedSeconds}s / 90s suggested
                 </div>
-                {isAdmin && (
-                  <button
-                    onClick={handleAdminSkipTurn}
-                    className="px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium text-[11px] flex items-center gap-1"
-                  >
-                    <SkipForward className="size-3" />
-                    Skip Turn
-                  </button>
-                )}
+                <button
+                  onClick={handleAdminSkipTurn}
+                  className="px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium text-[11px] flex items-center gap-1 active:scale-95 transition-all"
+                >
+                  <SkipForward className="size-3" />
+                  Skip Turn
+                </button>
               </div>
             </div>
           )}
@@ -1414,7 +1551,9 @@ export function GDRoomPage() {
             {/* Local User Tile */}
             <div
               className={`relative rounded-2xl overflow-hidden border aspect-video bg-zinc-900 flex items-center justify-center transition-all duration-300 ${
-                speakingPeers[currentParticipant?.id || ""] || isMyTurn
+                !faceDetected && isVideoOn
+                  ? "border-red-500 ring-2 ring-red-500/50 shadow-lg shadow-red-500/20"
+                  : speakingPeers[currentParticipant?.id || ""] || isMyTurn
                   ? "border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10"
                   : "border-zinc-800"
               }`}
@@ -1426,9 +1565,24 @@ export function GDRoomPage() {
                   <span className="truncate">🎙️ "{liveTranscriptPreview}"</span>
                 </div>
               )}
+
+              {/* Face Tracking Warning Badge */}
+              {!faceDetected && isVideoOn && (
+                <div className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-red-600/90 backdrop-blur-md border border-red-400 text-[11px] text-white font-bold animate-pulse pointer-events-none z-20 flex items-center gap-1.5 shadow-lg">
+                  <AlertTriangle className="size-3.5 text-white" />
+                  <span>No Face Detected!</span>
+                </div>
+              )}
+
               {isVideoOn ? (
                 <video
-                  ref={localVideoRef}
+                  ref={(el) => {
+                    localVideoRef.current = el;
+                    if (el && localStream && isVideoOn && el.srcObject !== localStream) {
+                      el.srcObject = localStream;
+                      el.play().catch(() => {});
+                    }
+                  }}
                   autoPlay
                   playsInline
                   muted
@@ -1446,7 +1600,7 @@ export function GDRoomPage() {
               {/* Tag & Audio Badges */}
               <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] pointer-events-none">
                 <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white font-bold flex items-center gap-1.5">
-                  @{currentParticipant?.username || "You"} {isAdmin ? "(Moderator)" : "(You)"}
+                  @{currentParticipant?.username || "You"} (You)
                 </span>
                 <span
                   className={`p-1 rounded-full ${

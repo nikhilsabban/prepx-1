@@ -48,8 +48,53 @@ export function AIInterview() {
   const [difficulty, setDifficulty] = useState<DifficultyLevel>("Medium");
   const [loading, setLoading] = useState(false);
 
+  // GitHub Repository Picker state
+  const [userRepos, setUserRepos] = useState<Array<{ id: number; name: string; html_url: string; language?: string; stargazers_count: number }>>([]);
+  const [fetchingRepos, setFetchingRepos] = useState(false);
+  const [customGithubUser, setCustomGithubUser] = useState("");
+
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const extractGithubUsername = (val: string) => {
+    if (!val) return "";
+    const clean = val.trim().replace(/^@/, "").replace(/\/+$/, "");
+    const match = clean.match(/github\.com\/([^/]+)/i);
+    return match ? match[1] : clean.split("/")[0] || "";
+  };
+
+  const loadGithubRepos = async (targetUsername?: string) => {
+    const rawUser = targetUsername || customGithubUser || user?.githubUrl || "";
+    const username = extractGithubUsername(rawUser);
+    if (!username) return;
+
+    setFetchingRepos(true);
+    try {
+      const res = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=12`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setUserRepos(data.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            html_url: r.html_url,
+            language: r.language,
+            stargazers_count: r.stargazers_count || 0,
+          })));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch GitHub repos:", e);
+    } finally {
+      setFetchingRepos(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (user?.githubUrl) {
+      loadGithubRepos(user.githubUrl);
+    }
+  }, [user?.githubUrl]);
 
   const handleStartInterview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,24 +295,99 @@ export function AIInterview() {
 
                   {/* DYNAMIC MODE FIELDS */}
                   {mode === "github" && (
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                        GitHub Repository URL
-                      </label>
-                      <div className="relative">
-                        <Github className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
-                        <Input
-                          type="url"
-                          placeholder="https://github.com/username/repository"
-                          value={githubUrl}
-                          onChange={(e) => setGithubUrl(e.target.value)}
-                          disabled={loading}
-                          required
-                          className="pl-10 bg-black/50 border-white/10 text-white h-12 rounded-xl focus-visible:ring-indigo-500 placeholder:text-zinc-600 text-sm"
-                        />
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                          GitHub Repository URL <span className="text-rose-400">*</span>
+                        </label>
+                        {userRepos.length > 0 && (
+                          <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                            {userRepos.length} Repositories Found
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-zinc-600">
-                        Must be a public GitHub repository. The AI will inspect your code & ask targeted questions.
+
+                      {/* Username Fetcher Row */}
+                      <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-black/40 border border-white/5">
+                        <div className="relative flex-1 min-w-[200px]">
+                          <Github className="absolute left-3.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+                          <Input
+                            type="text"
+                            placeholder="Enter GitHub username or profile link (e.g. nikhilsabban)"
+                            value={customGithubUser}
+                            onChange={(e) => setCustomGithubUser(e.target.value)}
+                            className="pl-9 bg-zinc-950/80 border-white/10 text-white h-9 rounded-xl text-xs placeholder:text-zinc-600 focus-visible:ring-indigo-500"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={() => loadGithubRepos(customGithubUser)}
+                          disabled={fetchingRepos}
+                          size="sm"
+                          className="h-9 px-3.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl cursor-pointer active:scale-95 transition-all"
+                        >
+                          {fetchingRepos ? "Fetching Repos..." : "Load Repositories"}
+                        </Button>
+                      </div>
+
+                      {/* Repos Grid */}
+                      {userRepos.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Choose from your repositories:
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
+                            {userRepos.map((repo) => {
+                              const isSelected = githubUrl === repo.html_url;
+                              return (
+                                <button
+                                  key={repo.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setGithubUrl(repo.html_url);
+                                    if (!interviewTitle || interviewTitle.startsWith("Technical Interview on")) {
+                                      setInterviewTitle(`Technical Interview on ${repo.name}`);
+                                    }
+                                  }}
+                                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer active:scale-95 flex flex-col justify-between ${
+                                    isSelected
+                                      ? "bg-indigo-600/20 border-indigo-500 text-white ring-1 ring-indigo-500"
+                                      : "bg-black/40 border-white/10 text-zinc-300 hover:border-white/20 hover:text-white"
+                                  }`}
+                                >
+                                  <div className="font-bold text-xs truncate max-w-full text-indigo-300 flex items-center justify-between">
+                                    <span>{repo.name}</span>
+                                    {repo.stargazers_count > 0 && <span className="text-[10px] text-zinc-500 font-normal">⭐ {repo.stargazers_count}</span>}
+                                  </div>
+                                  <div className="text-[10px] text-zinc-500 mt-1 flex items-center gap-2">
+                                    <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">{repo.language || "Code"}</span>
+                                    {isSelected && <span className="text-emerald-400 font-semibold ml-auto">Selected ✓</span>}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Direct manual URL input */}
+                      <div className="space-y-1 pt-1">
+                        <label className="text-[11px] text-zinc-400 font-medium">Or paste custom repo link:</label>
+                        <div className="relative">
+                          <Github className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
+                          <Input
+                            type="url"
+                            placeholder="https://github.com/username/repository"
+                            value={githubUrl}
+                            onChange={(e) => setGithubUrl(e.target.value)}
+                            disabled={loading}
+                            required
+                            className="pl-10 bg-black/50 border-white/10 text-white h-11 rounded-xl focus-visible:ring-indigo-500 placeholder:text-zinc-600 text-xs sm:text-sm"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-zinc-500">
+                        Must be a public GitHub repository. The AI will inspect your code structure & ask targeted architecture questions.
                       </p>
                     </div>
                   )}

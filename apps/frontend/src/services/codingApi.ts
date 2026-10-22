@@ -118,6 +118,20 @@ export const codingApi = {
     return res.data;
   },
 
+  fixCodeWithAI: async (payload: {
+    code: string;
+    language: string;
+    problemTitle?: string;
+    description?: string;
+    errorOutput?: string;
+    failedTest?: { input: string; expected: string; actual: string };
+  }) => {
+    const res = await axios.post(`${API_BASE_URL}/coding/ai/fix`, payload, {
+      headers: getAuthHeader(),
+    });
+    return res.data;
+  },
+
   toggleBookmark: async (problemId: string) => {
     const res = await axios.post(`${API_BASE_URL}/coding/bookmarks/${problemId}`, {}, {
       headers: getAuthHeader(),

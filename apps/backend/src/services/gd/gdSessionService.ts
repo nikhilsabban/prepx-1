@@ -167,16 +167,8 @@ class GDSessionService {
       throw new Error("Discussion room not found");
     }
 
-    // Verify room owner
-    if (room.adminId.toString() !== adminId) {
-      throw new Error("Only the room owner/admin can invite participants");
-    }
-
+    // Any participant in the room can invite
     const cleanUsername = targetUsername.toLowerCase().trim();
-
-    if (cleanUsername === room.adminUsername) {
-      throw new Error("The admin cannot invite themselves as a student participant");
-    }
 
     // Check user existence
     const user = await User.findOne({ username: cleanUsername });
@@ -369,20 +361,10 @@ class GDSessionService {
       return { session, participant };
     }
 
-    // Student join authorization check
-    const invitation = session.invitations.find((i) => i.username === cleanUsername);
-    if (!invitation) {
-      throw new Error("Access denied: You have not been invited to this discussion room");
-    }
-
-    if (invitation.status !== "accepted") {
-      throw new Error(`Access denied: Please accept your invitation first (Current status: ${invitation.status})`);
-    }
-
-    // Enforce strict student limit (maximum 5 students excluding admin)
+    // Open room participation: any authenticated user can join directly up to room capacity
     const existingStudents = session.participants.filter((p) => !p.isHost && p.role !== "admin").length;
     if (existingStudents >= MAX_STUDENTS_CAPACITY) {
-      throw new Error(`Room capacity exceeded: Maximum ${MAX_STUDENTS_CAPACITY} students allowed`);
+      throw new Error(`Room capacity reached: Maximum ${MAX_STUDENTS_CAPACITY} participants allowed in this discussion`);
     }
 
     participant = {
@@ -430,10 +412,6 @@ class GDSessionService {
   public async startDiscussion(roomId: string, adminId: string): Promise<IGroupDiscussion> {
     const session = await this.getSessionById(roomId);
     if (!session) throw new Error("Discussion room not found");
-
-    if (session.adminId.toString() !== adminId) {
-      throw new Error("Only the admin can start the group discussion");
-    }
 
     if (session.status !== "in_progress") {
       session.status = "in_progress";
@@ -607,9 +585,7 @@ class GDSessionService {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
 
-    if (session.adminId.toString() !== adminId) {
-      throw new Error("Only the room admin/moderator can skip turns");
-    }
+    // Allow participants to skip turn when needed
 
     await this.assignNextTurn(roomId, "admin_skipped", 0);
     return this.getSessionById(roomId);
