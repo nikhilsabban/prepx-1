@@ -2835,6 +2835,36 @@ var ResumeAnalysis = mongoose7.model(
 // src/services/resume/resumeParserService.ts
 import mammoth from "mammoth";
 import zlib from "zlib";
+function decodeAscii85(str) {
+  str = str.replace(/<~|~>/g, "").replace(/\s+/g, "");
+  const out = [];
+  let tuple = 0;
+  let count = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if (str[i] === "z" && count === 0) {
+      out.push(0, 0, 0, 0);
+      continue;
+    }
+    if (c < 33 || c > 117) continue;
+    tuple = tuple * 85 + (c - 33);
+    count++;
+    if (count === 5) {
+      out.push(tuple >> 24 & 255, tuple >> 16 & 255, tuple >> 8 & 255, tuple & 255);
+      tuple = 0;
+      count = 0;
+    }
+  }
+  if (count > 0) {
+    for (let j = count; j < 5; j++) {
+      tuple = tuple * 85 + 84;
+    }
+    for (let k = 0; k < count - 1; k++) {
+      out.push(tuple >> 24 - 8 * k & 255);
+    }
+  }
+  return Buffer.from(out);
+}
 function extractTextFromPdfBuffer(buffer) {
   try {
     const binary = buffer.toString("binary");
@@ -2858,30 +2888,53 @@ function extractTextFromPdfBuffer(buffer) {
           if (combined.length > 0) extractedWords.push(combined);
         }
       }
-      const hexTjRegex = /<([0-9A-Fa-f]{2,})>\s*T[jJ]/g;
+      const hexTjRegex = /<([0-9A-Fa-f]{2,})>\s*(?:Tj|'|")/g;
       while ((m = hexTjRegex.exec(streamText)) !== null) {
         const hex = m[1];
         let str = "";
-        for (let i = 0; i < hex.length; i += 2) {
-          str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+        if (hex.startsWith("FEFF") || hex.startsWith("feff")) {
+          for (let i = 4; i < hex.length; i += 4) {
+            str += String.fromCharCode(parseInt(hex.substr(i, 4), 16));
+          }
+        } else {
+          for (let i = 0; i < hex.length; i += 2) {
+            str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+          }
         }
         const decoded = decodePdfString(str);
         if (decoded.length > 0) extractedWords.push(decoded);
       }
     };
-    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    const streamRegex = /stream\r?\n?([\s\S]*?)(?:[\r\n\s]*|~>)endstream/g;
     let sMatch;
     while ((sMatch = streamRegex.exec(binary)) !== null) {
-      const rawStream = Buffer.from(sMatch[1], "binary");
-      let decompressed = "";
-      try {
-        decompressed = zlib.inflateSync(rawStream).toString("binary");
-      } catch {
+      const streamHeader = binary.slice(Math.max(0, sMatch.index - 300), sMatch.index);
+      let rawData = sMatch[1];
+      if (sMatch[0].includes("~>endstream") && !rawData.endsWith("~>")) {
+        rawData += "~>";
+      }
+      let streamBuf = Buffer.from(rawData, "binary");
+      const isAscii85 = streamHeader.includes("ASCII85Decode") || rawData.includes("~>");
+      if (isAscii85) {
         try {
-          decompressed = zlib.inflateRawSync(rawStream).toString("binary");
+          streamBuf = decodeAscii85(rawData);
         } catch {
-          decompressed = rawStream.toString("binary");
         }
+      }
+      const isFlate = streamHeader.includes("FlateDecode") || isAscii85;
+      let decompressed = "";
+      if (isFlate) {
+        try {
+          decompressed = zlib.inflateSync(streamBuf).toString("binary");
+        } catch {
+          try {
+            decompressed = zlib.inflateRawSync(streamBuf).toString("binary");
+          } catch {
+            decompressed = streamBuf.toString("binary");
+          }
+        }
+      } else {
+        decompressed = streamBuf.toString("binary");
       }
       if (decompressed) {
         extractFromStream(decompressed);
@@ -2930,8 +2983,11 @@ async function extractTextFromBuffer(buffer, fileType, originalFileName) {
     } catch (err) {
       console.warn("[ResumeParser] pdf-parse library failed, falling back to stream extractor:", err);
     }
-    if (!parsedViaPdfParse) {
-      rawText = extractTextFromPdfBuffer(buffer);
+    if (!parsedViaPdfParse || rawText.trim().length < 40) {
+      const fallbackText = extractTextFromPdfBuffer(buffer);
+      if (fallbackText && fallbackText.trim().length > rawText.trim().length) {
+        rawText = fallbackText;
+      }
     }
   } else if (isDocx) {
     try {
@@ -2951,7 +3007,7 @@ function sanitizeExtractedText(text) {
 }
 function parseStructuredResume(rawText) {
   const emailMatch = rawText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
-  const phoneMatch = rawText.match(/(?:(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\b\d{10}\b))/);
+  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\d{5}[-.\s]?\d{5}|\b\d{10}\b)/);
   const linkedinMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|pub)\/[A-Za-z0-9_.-]+/i);
   const githubMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_.-]+/i);
   const portfolioMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?[A-Za-z0-9.-]+\.(?:com|org|io|dev|me|net|tech|app)(?:\/[^\s]*)?/i);
@@ -3086,6 +3142,21 @@ function parseStructuredResume(rawText) {
     "Generative AI",
     "LangChain",
     "OpenAI",
+    // UI/UX Design & Product
+    "Figma",
+    "Adobe XD",
+    "Illustrator",
+    "Photoshop",
+    "Miro",
+    "UI/UX",
+    "Wireframing",
+    "Wireframes",
+    "Prototyping",
+    "Prototypes",
+    "Design Systems",
+    "User Research",
+    "Interaction Design",
+    "Jira",
     // Testing & Quality Assurance
     "Jest",
     "Pytest",
@@ -3191,13 +3262,18 @@ function calculateATSScore(input) {
     "skills",
     "projects",
     "summary",
-    "objective"
+    "objective",
+    "cert",
+    "learning",
+    "built",
+    "toolbox",
+    "about"
   ];
   let foundSectionsCount = 0;
   requiredSections.forEach((sec) => {
     if (textLower.includes(sec)) foundSectionsCount++;
   });
-  const structureScore = Math.min(100, Math.round(foundSectionsCount / 5 * 100));
+  const structureScore = Math.min(100, Math.round(foundSectionsCount / 4 * 100));
   const formattingIssues = [];
   let formattingScore = 100;
   if (extractedText.length < 200) {

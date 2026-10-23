@@ -51,13 +51,13 @@ export function calculateATSScore(input: ATSScoreInput): ATSScoreResult {
   // 2. Resume Structure Score (10%)
   const requiredSections = [
     "experience", "work", "employment", "education", "degree",
-    "skills", "projects", "summary", "objective"
+    "skills", "projects", "summary", "objective", "cert", "learning", "built", "toolbox", "about"
   ];
   let foundSectionsCount = 0;
   requiredSections.forEach((sec) => {
     if (textLower.includes(sec)) foundSectionsCount++;
   });
-  const structureScore = Math.min(100, Math.round((foundSectionsCount / 5) * 100));
+  const structureScore = Math.min(100, Math.round((foundSectionsCount / 4) * 100));
 
   // 3. Formatting Risk Score (5%)
   const formattingIssues: string[] = [];

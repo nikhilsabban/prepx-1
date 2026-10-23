@@ -38,9 +38,40 @@ export interface ParsedResumeData {
   };
 }
 
+function decodeAscii85(str: string): Buffer {
+  str = str.replace(/<~|~>/g, "").replace(/\s+/g, "");
+  const out: number[] = [];
+  let tuple = 0;
+  let count = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if (str[i] === "z" && count === 0) {
+      out.push(0, 0, 0, 0);
+      continue;
+    }
+    if (c < 33 || c > 117) continue;
+    tuple = tuple * 85 + (c - 33);
+    count++;
+    if (count === 5) {
+      out.push((tuple >> 24) & 255, (tuple >> 16) & 255, (tuple >> 8) & 255, tuple & 255);
+      tuple = 0;
+      count = 0;
+    }
+  }
+  if (count > 0) {
+    for (let j = count; j < 5; j++) {
+      tuple = tuple * 85 + 84;
+    }
+    for (let k = 0; k < count - 1; k++) {
+      out.push((tuple >> (24 - 8 * k)) & 255);
+    }
+  }
+  return Buffer.from(out);
+}
+
 /**
- * Extract raw text from PDF binary using Node.js zlib stream decompression and PDF text operators.
- * Accurately decodes compressed FlateDecode streams without returning raw PDF dictionary syntax tokens.
+ * Extract raw text from PDF binary using Node.js stream decompression (FlateDecode + ASCII85Decode) and PDF text operators.
+ * Accurately decodes compressed streams without returning raw PDF dictionary syntax tokens.
  */
 function extractTextFromPdfBuffer(buffer: Buffer): string {
   try {
@@ -86,12 +117,18 @@ function extractTextFromPdfBuffer(buffer: Buffer): string {
       }
 
       // 3. Hex strings <48656C6C6F> Tj
-      const hexTjRegex = /<([0-9A-Fa-f]{2,})>\s*T[jJ]/g;
+      const hexTjRegex = /<([0-9A-Fa-f]{2,})>\s*(?:Tj|'|")/g;
       while ((m = hexTjRegex.exec(streamText)) !== null) {
         const hex = m[1];
         let str = "";
-        for (let i = 0; i < hex.length; i += 2) {
-          str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+        if (hex.startsWith("FEFF") || hex.startsWith("feff")) {
+          for (let i = 4; i < hex.length; i += 4) {
+            str += String.fromCharCode(parseInt(hex.substr(i, 4), 16));
+          }
+        } else {
+          for (let i = 0; i < hex.length; i += 2) {
+            str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+          }
         }
         const decoded = decodePdfString(str);
         if (decoded.length > 0) extractedWords.push(decoded);
@@ -99,21 +136,43 @@ function extractTextFromPdfBuffer(buffer: Buffer): string {
     };
 
     // Decompress and extract from all stream ... endstream blocks
-    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    const streamRegex = /stream\r?\n?([\s\S]*?)(?:[\r\n\s]*|~>)endstream/g;
     let sMatch: RegExpExecArray | null;
 
     while ((sMatch = streamRegex.exec(binary)) !== null) {
-      const rawStream = Buffer.from(sMatch[1], "binary");
+      const streamHeader = binary.slice(Math.max(0, sMatch.index - 300), sMatch.index);
+      let rawData = sMatch[1];
+      if (sMatch[0].includes("~>endstream") && !rawData.endsWith("~>")) {
+        rawData += "~>";
+      }
+
+      let streamBuf = Buffer.from(rawData, "binary");
+
+      // Check for ASCII85 encoding
+      const isAscii85 = streamHeader.includes("ASCII85Decode") || rawData.includes("~>");
+      if (isAscii85) {
+        try {
+          streamBuf = decodeAscii85(rawData);
+        } catch {
+          // Continue with raw buffer if ascii85 decoding fails
+        }
+      }
+
+      const isFlate = streamHeader.includes("FlateDecode") || isAscii85;
       let decompressed = "";
 
-      try {
-        decompressed = zlib.inflateSync(rawStream).toString("binary");
-      } catch {
+      if (isFlate) {
         try {
-          decompressed = zlib.inflateRawSync(rawStream).toString("binary");
+          decompressed = zlib.inflateSync(streamBuf).toString("binary");
         } catch {
-          decompressed = rawStream.toString("binary");
+          try {
+            decompressed = zlib.inflateRawSync(streamBuf).toString("binary");
+          } catch {
+            decompressed = streamBuf.toString("binary");
+          }
         }
+      } else {
+        decompressed = streamBuf.toString("binary");
       }
 
       if (decompressed) {
@@ -194,8 +253,11 @@ export async function extractTextFromBuffer(
       console.warn("[ResumeParser] pdf-parse library failed, falling back to stream extractor:", err);
     }
 
-    if (!parsedViaPdfParse) {
-      rawText = extractTextFromPdfBuffer(buffer);
+    if (!parsedViaPdfParse || rawText.trim().length < 40) {
+      const fallbackText = extractTextFromPdfBuffer(buffer);
+      if (fallbackText && fallbackText.trim().length > rawText.trim().length) {
+        rawText = fallbackText;
+      }
     }
   } else if (isDocx) {
     try {
@@ -230,7 +292,7 @@ function sanitizeExtractedText(text: string): string {
  */
 export function parseStructuredResume(rawText: string): ParsedResumeData {
   const emailMatch = rawText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
-  const phoneMatch = rawText.match(/(?:(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\b\d{10}\b))/);
+  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\d{5}[-.\s]?\d{5}|\b\d{10}\b)/);
   const linkedinMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|pub)\/[A-Za-z0-9_.-]+/i);
   const githubMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_.-]+/i);
   const portfolioMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?[A-Za-z0-9.-]+\.(?:com|org|io|dev|me|net|tech|app)(?:\/[^\s]*)?/i);
@@ -289,6 +351,9 @@ export function parseStructuredResume(rawText: string): ParsedResumeData {
 
     // Machine Learning & AI
     "Machine Learning", "Deep Learning", "Pandas", "NumPy", "PyTorch", "TensorFlow", "Scikit-learn", "NLP", "Computer Vision", "LLM", "Generative AI", "LangChain", "OpenAI",
+
+    // UI/UX Design & Product
+    "Figma", "Adobe XD", "Illustrator", "Photoshop", "Miro", "UI/UX", "Wireframing", "Wireframes", "Prototyping", "Prototypes", "Design Systems", "User Research", "Interaction Design", "Jira",
 
     // Testing & Quality Assurance
     "Jest", "Pytest", "Mocha", "Cypress", "Playwright", "Selenium", "Unit Testing", "Integration Testing",
