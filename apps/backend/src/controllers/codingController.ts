@@ -615,7 +615,11 @@ export const getDsaCatalogData = (_req: Request, res: Response): void => {
 
 export const getDsaProblemData = (req: Request, res: Response): void => {
   try {
-    const { slug } = req.params;
+    const slug = typeof req.params.slug === "string" ? req.params.slug : Array.isArray(req.params.slug) ? req.params.slug[0] : "";
+    if (!slug) {
+      res.status(400).json({ message: "Problem slug is required" });
+      return;
+    }
     const p = getProblem(slug);
     if (!p) {
       res.status(404).json({ message: "Problem not found" });
