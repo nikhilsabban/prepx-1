@@ -277,13 +277,13 @@ export const twoPointers: SeedProblem[] = [
       let rm = 0;
       let res = 0;
       while (l < r) {
-        if (h[l] < h[r]) {
-          lm = Math.max(lm, h[l]);
-          res += lm - h[l];
+        if (h[l]! < h[r]!) {
+          lm = Math.max(lm, h[l]!);
+          res += lm - h[l]!;
           l++;
         } else {
-          rm = Math.max(rm, h[r]);
-          res += rm - h[r];
+          rm = Math.max(rm, h[r]!);
+          res += rm - h[r]!;
           r--;
         }
       }
@@ -455,8 +455,8 @@ export const twoPointers: SeedProblem[] = [
       let i = 0;
       let j = 0;
       while (i < a.length || j < b.length) {
-        if (j >= b.length || (i < a.length && a[i] <= b[j])) res.push(a[i++]);
-        else res.push(b[j++]);
+        if (j >= b.length || (i < a.length && a[i]! <= b[j]!)) res.push(a[i++]!);
+        else res.push(b[j++]!);
       }
       return arrOut(res);
     },
@@ -571,7 +571,7 @@ export const twoPointers: SeedProblem[] = [
       let j = people.length - 1;
       let boats = 0;
       while (i <= j) {
-        if (people[i] + people[j] <= limit) i++;
+        if (people[i]! + people[j]! <= limit) i++;
         j--;
         boats++;
       }
