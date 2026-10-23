@@ -55,9 +55,11 @@ export const arrays: SeedProblem[] = [
       const target = int(l1);
       const seen = new Map<number, number>();
       for (let i = 0; i < nums.length; i++) {
-        const need = target - nums[i];
+        const val = nums[i];
+        if (val === undefined) continue;
+        const need = target - val;
         if (seen.has(need)) return `${seen.get(need)} ${i}`;
-        seen.set(nums[i], i);
+        seen.set(val, i);
       }
       return "";
     },
@@ -149,10 +151,11 @@ export const arrays: SeedProblem[] = [
     starterCode: buildStarter("intArray", "int", "maxSubArray"),
     reference: (input) => {
       const nums = first(input);
-      let best = nums[0];
-      let cur = nums[0];
+      let best = nums[0] ?? 0;
+      let cur = nums[0] ?? 0;
       for (let i = 1; i < nums.length; i++) {
-        cur = Math.max(nums[i], cur + nums[i]);
+        const x = nums[i] ?? 0;
+        cur = Math.max(x, cur + x);
         best = Math.max(best, cur);
       }
       return String(best);
@@ -235,12 +238,12 @@ export const arrays: SeedProblem[] = [
       let pre = 1;
       for (let i = 0; i < n; i++) {
         res[i] = pre;
-        pre *= nums[i];
+        pre *= nums[i] ?? 1;
       }
       let post = 1;
       for (let i = n - 1; i >= 0; i--) {
-        res[i] *= post;
-        post *= nums[i];
+        res[i] = (res[i] ?? 1) * post;
+        post *= nums[i] ?? 1;
       }
       return arrOut(res);
     },
@@ -362,11 +365,11 @@ export const arrays: SeedProblem[] = [
     starterCode: buildStarter("intArray", "int", "maxProduct"),
     reference: (input) => {
       const nums = first(input);
-      let best = nums[0];
-      let maxP = nums[0];
-      let minP = nums[0];
+      let best = nums[0] ?? 0;
+      let maxP = nums[0] ?? 0;
+      let minP = nums[0] ?? 0;
       for (let i = 1; i < nums.length; i++) {
-        const x = nums[i];
+        const x = nums[i] ?? 0;
         const cands = [x, maxP * x, minP * x];
         maxP = Math.max(...cands);
         minP = Math.min(...cands);
@@ -416,14 +419,17 @@ export const arrays: SeedProblem[] = [
     starterCode: buildStarter("matrix", "intMatrix", "mergeIntervals"),
     reference: (input) => {
       const ls = lines(input);
-      const [n] = ints(ls[0]);
+      const n = ints(ls[0])[0] ?? 0;
       const iv: number[][] = [];
       for (let i = 0; i < n; i++) iv.push(ints(ls[1 + i]));
-      iv.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      iv.sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0) || (a[1] ?? 0) - (b[1] ?? 0));
       const out: number[][] = [];
-      for (const [s, e] of iv) {
-        if (out.length && s <= out[out.length - 1][1]) {
-          out[out.length - 1][1] = Math.max(out[out.length - 1][1], e);
+      for (const row of iv) {
+        const s = row[0] ?? 0;
+        const e = row[1] ?? 0;
+        const last = out[out.length - 1];
+        if (last && s <= (last[1] ?? 0)) {
+          last[1] = Math.max(last[1] ?? 0, e);
         } else {
           out.push([s, e]);
         }
@@ -473,20 +479,32 @@ export const arrays: SeedProblem[] = [
     starterCode: buildStarter("matrixK", "intMatrix", "insertInterval"),
     reference: (input) => {
       const ls = lines(input);
-      const [n] = ints(ls[0]);
+      const n = ints(ls[0])[0] ?? 0;
       const iv: number[][] = [];
       for (let i = 0; i < n; i++) iv.push(ints(ls[1 + i]));
-      let [ns, ne] = ints(ls[1 + n]);
+      const inserted = ints(ls[1 + n]);
+      let ns = inserted[0] ?? 0;
+      let ne = inserted[1] ?? 0;
       const out: number[][] = [];
       let i = 0;
-      while (i < n && iv[i][1] < ns) out.push(iv[i++]);
-      while (i < n && iv[i][0] <= ne) {
-        ns = Math.min(ns, iv[i][0]);
-        ne = Math.max(ne, iv[i][1]);
+      while (i < n) {
+        const cur = iv[i];
+        if (!cur || (cur[1] ?? 0) >= ns) break;
+        out.push(cur);
+        i++;
+      }
+      while (i < n) {
+        const cur = iv[i];
+        if (!cur || (cur[0] ?? 0) > ne) break;
+        ns = Math.min(ns, cur[0] ?? ns);
+        ne = Math.max(ne, cur[1] ?? ne);
         i++;
       }
       out.push([ns, ne]);
-      while (i < n) out.push(iv[i++]);
+      while (i < n) {
+        const cur = iv[i++];
+        if (cur) out.push(cur);
+      }
       return matOut(out);
     },
     tests: [
@@ -584,13 +602,14 @@ export const arrays: SeedProblem[] = [
       const nums = first(input);
       const n = nums.length;
       for (let i = 0; i < n; i++) {
-        while (
-          nums[i] > 0 &&
-          nums[i] <= n &&
-          nums[nums[i] - 1] !== nums[i]
-        ) {
-          const j = nums[i] - 1;
-          [nums[i], nums[j]] = [nums[j], nums[i]];
+        let cur = nums[i];
+        while (cur !== undefined && cur > 0 && cur <= n) {
+          const j = cur - 1;
+          const dest = nums[j];
+          if (dest === undefined || dest === cur) break;
+          nums[i] = dest;
+          nums[j] = cur;
+          cur = nums[i];
         }
       }
       for (let i = 0; i < n; i++) {
@@ -704,7 +723,10 @@ export const arrays: SeedProblem[] = [
       const rows: number[][] = [];
       for (let i = 0; i < n; i++) {
         const row = new Array(i + 1).fill(1);
-        for (let j = 1; j < i; j++) row[j] = rows[i - 1][j - 1] + rows[i - 1][j];
+        for (let j = 1; j < i; j++) {
+          const prev = rows[i - 1] ?? [];
+          row[j] = (prev[j - 1] ?? 0) + (prev[j] ?? 0);
+        }
         rows.push(row);
       }
       return matOut(rows);
