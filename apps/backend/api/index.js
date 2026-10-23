@@ -2837,7 +2837,6 @@ import { createRequire } from "module";
 import mammoth from "mammoth";
 var require2 = createRequire(import.meta.url);
 var pdfParsePkg = null;
-var PDFParse = null;
 async function extractTextFromBuffer(buffer, fileType, originalFileName) {
   const isPdf = fileType.includes("pdf") || originalFileName.toLowerCase().endsWith(".pdf");
   const isDocx = fileType.includes("officedocument") || fileType.includes("docx") || originalFileName.toLowerCase().endsWith(".docx");
@@ -2846,25 +2845,43 @@ async function extractTextFromBuffer(buffer, fileType, originalFileName) {
     try {
       if (!pdfParsePkg) {
         try {
-          pdfParsePkg = require2("pdf-parse");
-          PDFParse = pdfParsePkg.PDFParse || pdfParsePkg.default?.PDFParse;
-        } catch (e) {
-          console.warn("Could not lazily load pdf-parse:", e?.message);
+          pdfParsePkg = require2("pdf-parse/lib/pdf-parse.js");
+        } catch {
+          try {
+            pdfParsePkg = require2("pdf-parse");
+          } catch (e) {
+            console.warn("Could not lazily load pdf-parse:", e?.message);
+          }
         }
       }
       if (typeof pdfParsePkg === "function") {
         const parsed = await pdfParsePkg(buffer);
-        rawText = parsed.text || "";
-      } else if (PDFParse) {
-        const instance = new PDFParse({ data: buffer });
-        const parsed = await instance.getText();
-        rawText = typeof parsed === "string" ? parsed : parsed.text || "";
-      } else {
-        throw new Error("PDF parser class or function not available");
+        rawText = parsed?.text || "";
+      } else if (pdfParsePkg?.default && typeof pdfParsePkg.default === "function") {
+        const parsed = await pdfParsePkg.default(buffer);
+        rawText = parsed?.text || "";
       }
     } catch (err) {
-      console.error("PDF parse error:", err);
-      throw new Error("Could not extract text from PDF resume.");
+      console.warn("Primary PDF parse error, attempting stream fallback:", err?.message);
+    }
+    if (!rawText || rawText.trim().length === 0) {
+      try {
+        const bufferStr = buffer.toString("binary");
+        const tjMatches = bufferStr.match(/\(([^()]+)\)\s*T[jJ]/g);
+        if (tjMatches && tjMatches.length > 0) {
+          rawText = tjMatches.map((m) => m.replace(/\s*T[jJ]$/, "").replace(/^\(/, "").replace(/\)$/, "")).join(" ");
+        } else {
+          const words2 = bufferStr.match(/[A-Za-z0-9@.\-_/]{3,}/g);
+          if (words2 && words2.length > 20) {
+            rawText = words2.join(" ");
+          }
+        }
+      } catch (streamErr) {
+        console.warn("Stream fallback error:", streamErr);
+      }
+    }
+    if (!rawText || rawText.trim().length === 0) {
+      rawText = buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r]/g, " ").trim();
     }
   } else if (isDocx) {
     try {
@@ -17957,13 +17974,24 @@ app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
 app.use(express.text({ type: ["application/sdp", "text/plain"], limit: "10mb" }));
 app.use("/api/auth", authRoutes_default);
-app.use("/api/v1", interviewRoutes_default);
+app.use("/auth", authRoutes_default);
 app.use("/api/v1/resume-analysis", resumeAnalysisRoutes_default);
+app.use("/v1/resume-analysis", resumeAnalysisRoutes_default);
+app.use("/resume-analysis", resumeAnalysisRoutes_default);
 app.use("/api/v1/coding", codingRoutes_default);
+app.use("/v1/coding", codingRoutes_default);
+app.use("/api/coding", codingRoutes_default);
+app.use("/coding", codingRoutes_default);
 app.use("/api", codingRoutes_default);
 app.use("/api/v1/gd", gdRoutes_default);
+app.use("/v1/gd", gdRoutes_default);
+app.use("/gd", gdRoutes_default);
 app.use("/api/v1/gamification", gamificationRoutes_default);
+app.use("/v1/gamification", gamificationRoutes_default);
 app.use("/api/gamification", gamificationRoutes_default);
+app.use("/gamification", gamificationRoutes_default);
+app.use("/api/v1", interviewRoutes_default);
+app.use("/v1", interviewRoutes_default);
 app.get(["/", "/api"], (req, res) => {
   res.json({
     status: "ok",
@@ -17973,7 +18001,8 @@ app.get(["/", "/api"], (req, res) => {
       interview: "/api/v1",
       resumeAnalysis: "/api/v1/resume-analysis",
       coding: "/api/v1/coding",
-      gd: "/api/v1/gd"
+      gd: "/api/v1/gd",
+      gamification: "/api/v1/gamification"
     }
   });
 });

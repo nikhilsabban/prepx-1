@@ -126,7 +126,13 @@ export function Navbar() {
                 aria-label="User Account Menu"
               >
                 {user.profilePicture ? (
-                  <img src={user.profilePicture} alt={user.fullName} className="size-full rounded-full object-cover" />
+                  <img
+                    src={user.profilePicture}
+                    alt={user.fullName}
+                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
+                    className="size-full rounded-full object-cover"
+                  />
                 ) : (
                   user.fullName.split(" ").map(n => n[0]).join("").toUpperCase().substring(0, 2)
                 )}

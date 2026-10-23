@@ -438,6 +438,8 @@ export function Profile() {
                   <img
                     src={user.profilePicture}
                     alt={user.fullName}
+                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
                     className="size-24 rounded-full object-cover border-2 border-violet-500/40 shadow-md group-hover:opacity-80 transition-opacity"
                   />
                 ) : (

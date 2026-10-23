@@ -59,15 +59,31 @@ app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
 app.use(express.text({ type: ["application/sdp", "text/plain"], limit: "10mb" }));
 
-// Routes
+// Routes - Dual mounted so both local /api and stripped Vercel serverless paths route seamlessly
 app.use("/api/auth", authRoutes);
-app.use("/api/v1", interviewRoutes);
+app.use("/auth", authRoutes);
+
 app.use("/api/v1/resume-analysis", resumeAnalysisRoutes);
+app.use("/v1/resume-analysis", resumeAnalysisRoutes);
+app.use("/resume-analysis", resumeAnalysisRoutes);
+
 app.use("/api/v1/coding", codingRoutes);
+app.use("/v1/coding", codingRoutes);
+app.use("/api/coding", codingRoutes);
+app.use("/coding", codingRoutes);
 app.use("/api", codingRoutes);
+
 app.use("/api/v1/gd", gdRoutes);
+app.use("/v1/gd", gdRoutes);
+app.use("/gd", gdRoutes);
+
 app.use("/api/v1/gamification", gamificationRoutes);
+app.use("/v1/gamification", gamificationRoutes);
 app.use("/api/gamification", gamificationRoutes);
+app.use("/gamification", gamificationRoutes);
+
+app.use("/api/v1", interviewRoutes);
+app.use("/v1", interviewRoutes);
 
 app.get(["/", "/api"], (req, res) => {
   res.json({
@@ -79,6 +95,7 @@ app.get(["/", "/api"], (req, res) => {
       resumeAnalysis: "/api/v1/resume-analysis",
       coding: "/api/v1/coding",
       gd: "/api/v1/gd",
+      gamification: "/api/v1/gamification",
     },
   });
 });
