@@ -3372,12 +3372,16 @@ function calculateATSScore(input) {
 
 // src/services/ai/aiAnalysisService.ts
 import { Groq as Groq2 } from "groq-sdk";
+function getGroqKeyPool() {
+  const raw = process.env.GROQ_API_KEY || "";
+  return raw.split(",").map((k) => k.trim()).filter(Boolean);
+}
 async function analyzeResumeWithAI(req) {
-  const groqApiKey = process.env.GROQ_API_KEY?.trim();
-  if (!groqApiKey) {
+  const keys = getGroqKeyPool();
+  if (keys.length === 0) {
+    console.warn("[AIAnalysis] No GROQ_API_KEY configured. Falling back to local heuristic analysis.");
     return getFallbackAIResponse(req);
   }
-  const groq = new Groq2({ apiKey: groqApiKey });
   const hasJd = req.jobDescriptionText && req.jobDescriptionText.trim().length > 0;
   const systemPrompt = hasJd ? `You are a Senior Technical Recruiter & ATS Auditor.
 Your task is to analyze candidate resumes strictly against a specific TARGET JOB DESCRIPTION and return a JSON evaluation.
@@ -3446,40 +3450,64 @@ ${req.jobDescriptionText?.slice(0, 3e3)}
 </target_job_description>` : `<candidate_resume>
 ${req.resumeText.slice(0, 4e3)}
 </candidate_resume>`;
-  try {
-    const completion = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      model: "openai/gpt-oss-120b",
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    });
-    const content = completion.choices[0]?.message?.content;
-    if (!content) throw new Error("Empty AI response received.");
-    const parsed = JSON.parse(content);
-    return {
-      semanticMatchScore: typeof parsed.semanticMatchScore === "number" ? parsed.semanticMatchScore : 78,
-      matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : void 0,
-      missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords : void 0,
-      matchedSkills: Array.isArray(parsed.matchedSkills) ? parsed.matchedSkills : void 0,
-      missingSkills: Array.isArray(parsed.missingSkills) ? parsed.missingSkills : void 0,
-      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : ["Strong core technical background"],
-      weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses : ["Could add more quantifiable metrics"],
-      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
-      sectionFeedback: parsed.sectionFeedback || {
-        summary: "Good clear summary",
-        skills: "Well structured skill set",
-        experience: "Highlight measurable business outcomes",
-        projects: "Include live demo or repository links",
-        education: "Clear academic details"
-      }
-    };
-  } catch (err) {
-    console.error("AI Analysis error:", err);
-    return getFallbackAIResponse(req);
+  const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+  let lastError = null;
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    try {
+      const groq = new Groq2({ apiKey: key });
+      const completion = await groq.chat.completions.create({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        model,
+        temperature: 0.2,
+        response_format: { type: "json_object" }
+      });
+      const content = completion.choices[0]?.message?.content;
+      if (!content) throw new Error("Empty AI response received.");
+      const parsed = JSON.parse(content);
+      const normalizedRecommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations.map((r, idx) => {
+        if (typeof r === "string") {
+          return {
+            priority: idx === 0 ? "HIGH" : idx < 3 ? "MEDIUM" : "LOW",
+            category: "Optimization",
+            suggestion: r,
+            reason: "Improves ATS readability and recruiter alignment."
+          };
+        }
+        return {
+          priority: r.priority || (idx === 0 ? "HIGH" : idx < 3 ? "MEDIUM" : "LOW"),
+          category: r.category || "General",
+          suggestion: r.suggestion || r.recommendation || String(r),
+          reason: r.reason || "Actionable improvement for standard ATS parsers."
+        };
+      }) : [];
+      return {
+        semanticMatchScore: typeof parsed.semanticMatchScore === "number" ? parsed.semanticMatchScore : 78,
+        matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : void 0,
+        missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords : void 0,
+        matchedSkills: Array.isArray(parsed.matchedSkills) ? parsed.matchedSkills : void 0,
+        missingSkills: Array.isArray(parsed.missingSkills) ? parsed.missingSkills : void 0,
+        strengths: Array.isArray(parsed.strengths) && parsed.strengths.length > 0 ? parsed.strengths : ["Strong core technical background"],
+        weaknesses: Array.isArray(parsed.weaknesses) && parsed.weaknesses.length > 0 ? parsed.weaknesses : ["Could add more quantifiable metrics"],
+        recommendations: normalizedRecommendations,
+        sectionFeedback: parsed.sectionFeedback || {
+          summary: "Good clear summary",
+          skills: "Well structured skill set",
+          experience: "Highlight measurable business outcomes",
+          projects: "Include live demo or repository links",
+          education: "Clear academic details"
+        }
+      };
+    } catch (err) {
+      lastError = err;
+      console.warn(`[AIAnalysis] Groq key attempt #${i + 1} failed: ${err.message}. Retrying with next key...`);
+    }
   }
+  console.error("[AIAnalysis] All Groq API keys failed. Reason:", lastError?.message || lastError);
+  return getFallbackAIResponse(req);
 }
 function getFallbackAIResponse(req) {
   const text = req.resumeText || "";
@@ -3488,29 +3516,30 @@ function getFallbackAIResponse(req) {
   const dynamicStrengths = [];
   const dynamicWeaknesses = [];
   if (skillsCount > 5) {
-    dynamicStrengths.push(`Extracted ${skillsCount} technical skills (${req.structuredData.skills.slice(0, 4).join(", ")})`);
+    dynamicStrengths.push(
+      `Extracted ${skillsCount} technical skills (${req.structuredData.skills.slice(0, 4).join(", ")})`
+    );
   } else {
     dynamicWeaknesses.push("Technical skills section could be expanded with more modern frameworks & tools.");
   }
   if (wordCount > 300) {
     dynamicStrengths.push(`Comprehensive resume length (${wordCount} words) covering past projects & experience`);
   } else if (wordCount > 50) {
-    dynamicWeaknesses.push(`Resume content is relatively concise (${wordCount} words). Consider adding details to project descriptions.`);
+    dynamicWeaknesses.push(
+      `Resume content is relatively concise (${wordCount} words). Consider adding details to project descriptions.`
+    );
   }
   if (req.jobDescriptionText && req.jobDescriptionText.trim().length > 0) {
     dynamicStrengths.push("Job description target provided for tailored ATS alignment.");
   } else {
-    dynamicWeaknesses.push("No specific Job Description provided. Analysis was performed against general industry standards.");
+    dynamicWeaknesses.push(
+      "No specific Job Description provided. Analysis was performed against general industry standards."
+    );
   }
   return {
     semanticMatchScore: Math.min(95, Math.max(50, 65 + skillsCount * 3)),
-    strengths: dynamicStrengths.length > 0 ? dynamicStrengths : [
-      "Solid technical background",
-      "Clear contact information and section structure"
-    ],
-    weaknesses: dynamicWeaknesses.length > 0 ? dynamicWeaknesses : [
-      "Bullet points could include more quantified metrics (e.g., % performance increase)"
-    ],
+    strengths: dynamicStrengths.length > 0 ? dynamicStrengths : ["Solid technical background", "Clear contact information and section structure"],
+    weaknesses: dynamicWeaknesses.length > 0 ? dynamicWeaknesses : ["Bullet points could include more quantified metrics (e.g., % performance increase)"],
     recommendations: [
       {
         priority: "HIGH",
