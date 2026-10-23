@@ -215,6 +215,7 @@ export function ResumeUpload() {
                     src={localBlobUrl || resumeFile.fileUrl}
                     className="w-full h-full rounded-xl border border-zinc-800/80 bg-white"
                     title="Resume PDF Document Viewer"
+                    sandbox="allow-scripts allow-same-origin"
                   />
                 ) : (
                   <div className="p-8 overflow-y-auto flex-1 text-sm bg-[#09090D] rounded-xl border border-zinc-800 space-y-6">

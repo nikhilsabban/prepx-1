@@ -17,6 +17,7 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { BACKEND_URL } from "@/lib/config";
 
 // --- STREAK MODAL ---
 export function StreakModal({
@@ -239,7 +240,7 @@ export function JudgeStatusModal({
     setPinging(true);
     const start = performance.now();
     try {
-      const res = await fetch("/api/execute", {
+      const res = await fetch(`${BACKEND_URL}/api/v1/coding/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

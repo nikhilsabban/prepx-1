@@ -155,14 +155,21 @@ export function EditorWorkspace({
     setRunning(true);
     setSubmit(null);
     try {
-      const res = await fetch("/api/execute", {
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("token") || localStorage.getItem("prepx_token")
+          : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${BACKEND_URL}/api/v1/coding/execute`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ slug, language, code }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Run failed.");
+        toast.error(data.error ?? data.message ?? "Run failed.");
         return;
       }
       setRun(data as RunResult);
@@ -177,14 +184,21 @@ export function EditorWorkspace({
     setSubmitting(true);
     setRun(null);
     try {
-      const res = await fetch("/api/submit", {
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("token") || localStorage.getItem("prepx_token")
+          : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`${BACKEND_URL}/api/v1/coding/submit`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ slug, language, code }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Submit failed.");
+        toast.error(data.error ?? data.message ?? "Submit failed.");
         return;
       }
       const result = data as SubmitResult;

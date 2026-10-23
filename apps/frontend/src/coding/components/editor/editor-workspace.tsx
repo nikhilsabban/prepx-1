@@ -31,6 +31,7 @@ import { recordAttempt, recordSolved } from "@/lib/progress";
 import { completeDueReview, markForReview } from "@/lib/review";
 import type { Difficulty } from "@/data/dsa";
 import { cn } from "@/lib/utils";
+import { BACKEND_URL } from "@/lib/config";
 
 type StarterCode = Record<string, string>;
 
@@ -156,7 +157,7 @@ export function EditorWorkspace({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch("/api/v1/coding/execute", {
+      const res = await fetch(`${BACKEND_URL}/api/v1/coding/execute`, {
         method: "POST",
         headers,
         body: JSON.stringify({ slug, language, code }),
@@ -182,7 +183,7 @@ export function EditorWorkspace({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch("/api/v1/coding/submit", {
+      const res = await fetch(`${BACKEND_URL}/api/v1/coding/submit`, {
         method: "POST",
         headers,
         body: JSON.stringify({ slug, language, code }),
