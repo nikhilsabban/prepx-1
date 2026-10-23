@@ -34,10 +34,13 @@ import {
 } from "../../services/gdService";
 import { SkeletonResult } from "../../components/ui/skeleton";
 import { toast } from "react-toastify";
+import { useGamification } from "../../context/GamificationContext";
 
 export function GDResultPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const { awardXP } = useGamification();
+  const awardedRef = React.useRef(false);
 
   const [session, setSession] = useState<IGDSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +86,10 @@ export function GDResultPage() {
     try {
       const data = await fetchGDSession(sessionId!);
       setSession(data);
+      if (data && !awardedRef.current) {
+        awardedRef.current = true;
+        awardXP(100, "Group Discussion Round Participation", "GD Orator");
+      }
     } catch (err: any) {
       console.error("Failed to load evaluation:", err);
       toast.error("Could not load GD evaluation.");

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
+import { useGamification } from "../context/GamificationContext";
 import { Button } from "./ui/button";
-import { LogOut, User, BookOpenCheck, History, Bookmark, ArrowLeft, Menu, X, Sparkles, LayoutDashboard, FileText, Users } from "lucide-react";
+import { LogOut, User, BookOpenCheck, History, Bookmark, ArrowLeft, Menu, X, Sparkles, LayoutDashboard, FileText, Users, Trophy, Flame } from "lucide-react";
 import { toast } from "react-toastify";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
+  const { openHub, xp, levelNumber } = useGamification();
   const navigate = useNavigate();
   const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -103,7 +105,19 @@ export function Navbar() {
         )}
 
         {/* Right Auth Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {isAuthenticated && user && (
+            <button
+              onClick={() => openHub("overview")}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-950/80 via-purple-950/70 to-zinc-900 border border-indigo-500/30 text-xs font-semibold text-indigo-200 hover:border-indigo-400 hover:brightness-110 active:scale-95 transition-all cursor-pointer shadow-sm shadow-indigo-500/20"
+              title="PrepX Gamification Hub: XP, Quests, Badges & Leaderboard"
+            >
+              <Trophy className="size-3.5 text-amber-400" />
+              <span className="font-bold text-white">L{levelNumber}</span>
+              <span className="hidden sm:inline text-indigo-300 font-mono text-[11px]">{xp} XP</span>
+            </button>
+          )}
+
           {isAuthenticated && user ? (
             <div className="relative flex items-center gap-2">
               <button 
@@ -127,6 +141,16 @@ export function Navbar() {
                       <p className="text-xs text-zinc-400 truncate mt-0.5">{user.email}</p>
                     </div>
                     <div className="py-1">
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          openHub("overview");
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-amber-300 hover:text-amber-200 hover:bg-zinc-800/60 transition-colors text-left cursor-pointer"
+                      >
+                        <Trophy className="size-4 text-amber-400" />
+                        <span>Gamification & Rewards</span>
+                      </button>
                       <Link onClick={() => setDropdownOpen(false)} to={`/${user.id}`} className="flex items-center gap-3 px-4 py-2.5 text-xs md:text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/60 transition-colors">
                         <LayoutDashboard className="size-4 text-indigo-400" />
                         Dashboard

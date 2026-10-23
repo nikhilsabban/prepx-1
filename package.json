@@ -2,12 +2,14 @@
   "name": "ai-interviewer-mern",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n \"backend,frontend\" -c \"blue,magenta\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently -n \"backend,frontend,coding\" -c \"blue,magenta,green\" \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:coding\"",
     "dev:backend": "npm --prefix apps/backend run dev",
     "dev:frontend": "npm --prefix apps/frontend run dev",
-    "build": "npm run build:backend && npm run build:frontend",
+    "dev:coding": "npm --prefix apps/coding run dev",
+    "build": "npm run build:backend && npm run build:frontend && npm run build:coding",
     "build:backend": "npm --prefix apps/backend run build",
-    "build:frontend": "npm --prefix apps/frontend run build"
+    "build:frontend": "npm --prefix apps/frontend run build",
+    "build:coding": "npm --prefix apps/coding run build"
   },
   "devDependencies": {
     "concurrently": "^9.2.4",

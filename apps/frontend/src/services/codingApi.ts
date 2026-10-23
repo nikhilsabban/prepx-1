@@ -82,6 +82,20 @@ export const codingApi = {
     return res.data;
   },
 
+  recordActivity: async (payload: {
+    slug: string;
+    language: string;
+    verdict: string;
+    passed?: number;
+    total?: number;
+    runtimeMs?: number | null;
+  }) => {
+    const res = await axios.post(`${API_BASE_URL}/coding/record-activity`, payload, {
+      headers: getAuthHeader(),
+    });
+    return res.data;
+  },
+
   submitCode: async (payload: { code: string; language: string; problemId: string }) => {
     const res = await axios.post(`${API_BASE_URL}/coding/submit`, payload, {
       headers: getAuthHeader(),

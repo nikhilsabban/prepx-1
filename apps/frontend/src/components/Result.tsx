@@ -1,16 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams, Link } from "react-router";
 import { Bot, Loader2, Sparkles, User, ArrowLeft, History } from "lucide-react";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
 import { fetchInterviewResult, type ResultResponse } from "../services/interviewService";
 import { useAuth } from "../context/AuthContext";
+import { useGamification } from "../context/GamificationContext";
 import { SkeletonResult } from "./ui/skeleton";
 
 export function Result() {
     const { interviewId } = useParams();
     const navigate = useNavigate();
     const { isAuthenticated, user } = useAuth();
+    const { awardXP } = useGamification();
+    const awardedRef = useRef(false);
     const [result, setResult] = useState<ResultResponse>({
         score: 0,
         feedback: "",
@@ -25,6 +28,10 @@ export function Result() {
             try {
                 const data = await fetchInterviewResult(interviewId);
                 setResult(data);
+                if (data.status === "Done" && !awardedRef.current) {
+                    awardedRef.current = true;
+                    awardXP(150, "Completed AI Technical Mock Interview", "Interview Pro");
+                }
                 return data.status;
             } catch (err) {
                 console.error("Error fetching result:", err);
@@ -39,7 +46,7 @@ export function Result() {
         }, 4000);
 
         return () => clearInterval(intervalId);
-    }, [interviewId]);
+    }, [interviewId, awardXP]);
 
     const ready = result.status === "Done";
 

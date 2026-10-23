@@ -1,11 +1,11 @@
-import type { Response } from "express";
+import type { Response, Request } from "express";
 import mongoose from "mongoose";
 import { CodingProblem } from "../models/CodingProblem";
 import { CodingSubmission } from "../models/CodingSubmission";
 import { User } from "../models/User";
 import type { AuthRequest } from "../middleware/authMiddleware";
-import { runBatch, fixInput, applyWrapper } from "../services/codingExecutionService";
-import { INITIAL_PROBLEMS } from "../utils/seedCodingProblems";
+import { runSamples, submitSolution } from "../services/judgeService";
+import { topics, problems, getProblem } from "../data/dsa";
 
 export const getProblems = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -16,29 +16,21 @@ export const getProblems = async (req: AuthRequest, res: Response): Promise<void
     if (tag && tag !== "all") query.tags = { $in: [new RegExp(String(tag), "i")] };
     if (search) query.title = { $regex: String(search), $options: "i" };
 
-    let problems = await CodingProblem.find(query)
+    const problems = await CodingProblem.find(query)
       .select("-testCases -starter -hints")
       .sort({ number: 1 })
       .limit(Number(limit));
 
-    if (!problems || problems.length === 0) {
-      problems = INITIAL_PROBLEMS as any[];
-    }
-
-    res.json({ problems, total: problems.length, page: Number(page) });
+    res.json({ problems: problems || [], total: (problems || []).length, page: Number(page) });
   } catch (error: any) {
-    res.json({ problems: INITIAL_PROBLEMS, total: INITIAL_PROBLEMS.length, page: 1 });
+    res.json({ problems: [], total: 0, page: 1 });
   }
 };
 
 export const getProblemBySlug = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { slug } = req.params;
-    let problem = await CodingProblem.findOne({ slug, hidden: false });
-    if (!problem) {
-      const initP = INITIAL_PROBLEMS.find((p) => p.slug === slug);
-      if (initP) problem = initP as any;
-    }
+    const problem = await CodingProblem.findOne({ slug, hidden: false });
 
     if (!problem) {
       res.status(404).json({ message: "Problem not found" });
@@ -53,239 +45,89 @@ export const getProblemBySlug = async (req: AuthRequest, res: Response): Promise
 
 export const getProblemTags = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    let tags = await CodingProblem.distinct("tags", { hidden: false });
-    if (!tags || tags.length === 0) {
-      const tagSet = new Set<string>();
-      INITIAL_PROBLEMS.forEach((p) => (p.tags || []).forEach((t) => tagSet.add(t)));
-      tags = Array.from(tagSet);
-    }
-    res.json((tags as string[]).sort());
+    const tags = await CodingProblem.distinct("tags", { hidden: false });
+    res.json((tags as string[] || []).sort());
   } catch (error) {
     res.json(["Array", "Dynamic Programming", "Hash Table", "Stack", "String"].sort());
   }
 };
 
-export const isMatch = (actual: string, expected: string): boolean => {
-  const act = (actual || "").trim();
-  const exp = (expected || "").trim();
-  if (act === exp) return true;
-
-  // Case-insensitive boolean comparison (e.g. "True" vs "true")
-  const actLower = act.toLowerCase();
-  const expLower = exp.toLowerCase();
-  if ((expLower === "true" || expLower === "false") && actLower === expLower) {
-    return true;
-  }
-
-  // Try parsing JSON structures (handles arrays like [0, 1] vs [0,1], numbers, objects)
+export const recordCodingActivity = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const parsedAct = JSON.parse(act);
-    const parsedExp = JSON.parse(exp);
-    if (JSON.stringify(parsedAct) === JSON.stringify(parsedExp)) {
-      return true;
-    }
-    if (Array.isArray(parsedAct) && Array.isArray(parsedExp) && parsedAct.length === parsedExp.length) {
-      if (typeof parsedAct[0] === "number" && typeof parsedExp[0] === "number") {
-        const sortedAct = [...parsedAct].sort((a, b) => a - b);
-        const sortedExp = [...parsedExp].sort((a, b) => a - b);
-        if (JSON.stringify(sortedAct) === JSON.stringify(sortedExp)) {
-          return true;
-        }
-      }
-    }
-  } catch (e) {
-    const normAct = act.replace(/['"]/g, "").replace(/\s+/g, " ").replace(/\s*,\s*/g, ",");
-    const normExp = exp.replace(/['"]/g, "").replace(/\s+/g, " ").replace(/\s*,\s*/g, ",");
-    if (normAct === normExp) return true;
-  }
-
-  const numAct = Number(act);
-  const numExp = Number(exp);
-  if (!isNaN(numAct) && !isNaN(numExp) && Math.abs(numAct - numExp) < 1e-4) {
-    return true;
-  }
-
-  return false;
-};
-
-export const runCode = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { code, language, problemId, stdin = "" } = req.body;
-    if (!code || !language) {
-      res.status(400).json({ message: "Code and language are required" });
-      return;
-    }
-
-    if (!problemId) {
-      const batchRes = await runBatch(code, language, [fixInput(stdin)]);
-      const result = batchRes[0];
-      res.json({
-        results: [{
-          input: stdin,
-          expected: "",
-          actual: result ? (result.stdout || result.stderr || "No output") : "No output",
-          passed: result ? result.exitCode === 0 : false,
-          stderr: result ? result.stderr : "",
-        }],
-      });
-      return;
-    }
-
-    const problem = await CodingProblem.findById(problemId);
-    if (!problem) {
-      res.status(404).json({ message: "Problem not found" });
-      return;
-    }
-
-    const wrapper = (problem.codeWrapper as any)?.[language] || "";
-    const finalCode = applyWrapper(code, wrapper);
-
-    const testCases = problem.testCases.filter((tc) => !tc.hidden);
-    if (testCases.length === 0) {
-      res.json({ results: [] });
-      return;
-    }
-
-    const inputs = testCases.map((tc) => fixInput(tc.input));
-    const batchResults = await runBatch(finalCode, language, inputs);
-
-    const results = testCases.map((tc, i) => {
-      const r = batchResults[i];
-      const actual = r ? r.stdout : "";
-      const expected = (tc.expected || "").trim();
-      const exitCode = r ? r.exitCode : 1;
-      const stderr = r ? r.stderr : "Execution error";
-      const statusLabel = r ? r.statusLabel : "Error";
-
-      return {
-        input: tc.input,
-        expected,
-        actual: exitCode !== 0 ? (stderr || "Runtime Error") : actual,
-        passed: exitCode === 0 && isMatch(actual, expected),
-        stderr,
-        statusLabel,
-      };
-    });
-
-    res.json({ results });
-  } catch (error: any) {
-    res.status(500).json({ message: "Error running code. Please try again." });
-  }
-};
-
-export const submitCode = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { code, language, problemId } = req.body;
     const userId = req.user?._id;
-
     if (!userId) {
       res.status(401).json({ message: "Authentication required" });
       return;
     }
 
-    const problem = await CodingProblem.findById(problemId);
+    const { slug, language, verdict, passed = 0, total = 0, runtimeMs = null } = req.body;
+    if (!slug || !language || !verdict) {
+      res.status(400).json({ message: "Slug, language, and verdict are required" });
+      return;
+    }
+
+    const verdictMap: Record<string, string> = {
+      ACCEPTED: "Accepted",
+      WRONG_ANSWER: "Wrong Answer",
+      RUNTIME_ERROR: "Runtime Error",
+      TIME_LIMIT_EXCEEDED: "Time Limit Exceeded",
+      COMPILE_ERROR: "Compilation Error",
+    };
+    const canonicalVerdict = verdictMap[String(verdict).toUpperCase()] || "Wrong Answer";
+
+    // Find or create problem stub in MongoDB to support ObjectId references for user.solved/attempted
+    let problem = await CodingProblem.findOne({ slug });
     if (!problem) {
-      res.status(404).json({ message: "Problem not found" });
-      return;
-    }
+      const formattedTitle = slug
+        .split("-")
+        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
 
-    const wrapper = (problem.codeWrapper as any)?.[language] || "";
-    const finalCode = applyWrapper(code, wrapper);
-    const testCases = problem.testCases;
-
-    if (testCases.length === 0) {
-      const batchRes = await runBatch(finalCode, language, [""]);
-      const result = batchRes[0];
-      const exitCode = result ? result.exitCode : 1;
-      const verdict = exitCode === 0 ? "Accepted" : "Runtime Error";
-      const sub = new CodingSubmission({
-        user: userId,
-        problem: problemId,
-        language,
-        code,
-        verdict,
-        runtime: result ? result.runtime : "N/A",
-        testsPassed: exitCode === 0 ? 1 : 0,
-        testsTotal: 1,
-        output: result ? result.stdout : "",
-        stderr: result ? result.stderr : "",
+      problem = new CodingProblem({
+        slug,
+        title: formattedTitle,
+        difficulty: "Medium",
+        category: "Algorithms",
+        tags: ["DSA", "Solvarch"],
+        description: `DSA Challenge: ${formattedTitle}`,
+        points: 100,
+        hidden: false,
+        testCases: [],
       });
-      await sub.save();
-      const gamification = await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
-      res.json({ ...sub.toObject(), beats: 85, failCase: null, gamification });
-      return;
+      await problem.save();
     }
-
-    const inputs = testCases.map((tc) => fixInput(tc.input));
-    const batchResults = await runBatch(finalCode, language, inputs);
-
-    let passed = 0;
-    let firstFail: any = null;
-    let totalRuntime = 0;
-
-    for (let i = 0; i < testCases.length; i++) {
-      const tc = testCases[i];
-      const r = batchResults[i];
-      if (!tc || !r) continue;
-
-      totalRuntime += r.runtimeMs || 0;
-      const actual = r.stdout;
-      const expected = (tc.expected || "").trim();
-
-      if (r.exitCode !== 0) {
-        if (!firstFail) {
-          firstFail = {
-            input: tc.input,
-            expected,
-            actual: r.stderr || "Runtime Error",
-            stderr: r.stderr,
-            isHidden: tc.hidden,
-          };
-        }
-        break;
-      }
-      if (isMatch(actual, expected)) {
-        passed++;
-      } else if (!firstFail) {
-        firstFail = {
-          input: tc.hidden ? "(hidden testcase)" : tc.input,
-          expected: tc.hidden ? "(hidden testcase)" : expected,
-          actual: tc.hidden ? "(hidden testcase)" : actual,
-          isHidden: tc.hidden,
-        };
-      }
-    }
-
-    const verdict =
-      passed === testCases.length ? "Accepted" :
-        firstFail?.stderr ? "Runtime Error" :
-          "Wrong Answer";
 
     const sub = new CodingSubmission({
       user: userId,
-      problem: problemId,
-      language,
-      code,
-      verdict,
-      runtime: `${Math.round(totalRuntime / testCases.length)}ms`,
-      testsPassed: passed,
-      testsTotal: testCases.length,
-      output: firstFail ? JSON.stringify(firstFail) : "",
-      stderr: firstFail?.stderr || "",
+      problem: problem._id,
+      language: ["cpp", "python", "java", "c", "javascript"].includes(language) ? language : "javascript",
+      code: "// Source stored in student workspace draft",
+      verdict: canonicalVerdict as any,
+      runtime: runtimeMs ? `${runtimeMs}ms` : "N/A",
+      testsPassed: Number(passed) || 0,
+      testsTotal: Number(total) || 0,
+      output: "",
+      stderr: "",
     });
     await sub.save();
 
-    const gamification = await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
+    const isAccepted = canonicalVerdict === "Accepted";
+    const gamification = await updateUserCodingStats(userId.toString(), problem, isAccepted);
 
     res.json({
-      ...sub.toObject(),
-      beats: verdict === "Accepted" ? Math.floor(Math.random() * 30 + 65) : null,
-      failCase: firstFail,
+      success: true,
+      submissionId: sub._id,
+      verdict: canonicalVerdict,
       gamification,
     });
   } catch (error: any) {
-    res.status(500).json({ message: "Submission failed. Please try again." });
+    console.error("recordCodingActivity error:", error);
+    res.status(500).json({ message: "Failed to record coding activity" });
   }
+};
+
+export const runCode = async (req: AuthRequest, res: Response): Promise<void> => {
+  return executeCode(req, res);
 };
 
 export const getUserSubmissions = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -696,3 +538,101 @@ function getRatingTitle(r: number) {
   if (r < 2800) return "Elite Programmer";
   return "Legendary Coder";
 }
+
+export const executeCode = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { slug, language, code, customInput } = req.body;
+    if (!slug || !language || !code) {
+      res.status(400).json({ message: "slug, language, and code are required" });
+      return;
+    }
+    const result = await runSamples({ slug, language, code, customInput });
+    res.json(result);
+  } catch (err: any) {
+    console.error("executeCode error:", err);
+    res.status(500).json({ message: err.message || "Execution failed" });
+  }
+};
+
+export const submitCode = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { slug, language, code } = req.body;
+    if (!slug || !language || !code) {
+      res.status(400).json({ message: "slug, language, and code are required" });
+      return;
+    }
+    const result = await submitSolution({ slug, language, code });
+
+    const userId = req.user?._id;
+    if (userId) {
+      try {
+        const submission = new CodingSubmission({
+          user: userId,
+          problemId: slug,
+          language,
+          code: code.slice(0, 5000),
+          status: result.status,
+          runtime: result.runtimeMs || 0,
+          passedTestCases: result.passed,
+          totalTestCases: result.total,
+          memory: 0,
+          output: result.firstFailure ? `${result.firstFailure.got}\n${result.firstFailure.stderr}`.trim() : "",
+          error: result.firstFailure?.stderr || ""
+        });
+        await submission.save();
+
+        if (result.status === "ACCEPTED") {
+          await updateUserCodingStats(userId.toString(), 50, true);
+        } else {
+          await updateUserCodingStats(userId.toString(), 10, false);
+        }
+      } catch (saveErr) {
+        console.error("Failed to auto-save submission in submitCode:", saveErr);
+      }
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    console.error("submitCode error:", err);
+    res.status(500).json({ message: err.message || "Submission failed" });
+  }
+};
+
+export const getDsaCatalogData = (_req: Request, res: Response): void => {
+  try {
+    const summaryProblems = problems.map((p) => ({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+      difficulty: p.difficulty,
+      topic: p.topic,
+    }));
+    res.json({ topics, problems: summaryProblems, total: problems.length });
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to load DSA catalog" });
+  }
+};
+
+export const getDsaProblemData = (req: Request, res: Response): void => {
+  try {
+    const { slug } = req.params;
+    const p = getProblem(slug);
+    if (!p) {
+      res.status(404).json({ message: "Problem not found" });
+      return;
+    }
+    // Mask non-sample test cases so hidden test cases are strictly protected
+    const safeProblem = {
+      ...p,
+      testCases: p.testCases.map((tc) =>
+        tc.isSample
+          ? tc
+          : { ...tc, input: "[Hidden Test Case - Withheld]", expectedOutput: "[Hidden Test Case - Withheld]" }
+      ),
+    };
+    res.json(safeProblem);
+  } catch (err: any) {
+    res.status(500).json({ message: "Failed to load problem details" });
+  }
+};
+

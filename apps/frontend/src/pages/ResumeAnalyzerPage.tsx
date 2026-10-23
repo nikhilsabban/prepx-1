@@ -14,10 +14,12 @@ import { Button } from "../components/ui/button";
 import { SkeletonResume } from "../components/ui/skeleton";
 import { toast } from "react-toastify";
 import { Sparkles, Loader2, RefreshCw } from "lucide-react";
+import { useGamification } from "../context/GamificationContext";
 
 import { getErrorMessage } from "../lib/utils";
 
 export function ResumeAnalyzerPage() {
+  const { awardXP } = useGamification();
   const {
     resumeFile,
     jobDescription,
@@ -57,6 +59,11 @@ export function ResumeAnalyzerPage() {
       if (res.success && res.data) {
         setResult(res.data);
         toast.success("Resume review complete.");
+
+        const score = res.data.overallAtsScore || 75;
+        const xpEarned = score >= 80 ? 100 : 75;
+        const badge = score >= 80 ? "Resume Strategist" : undefined;
+        awardXP(xpEarned, `Resume ATS Evaluation (${score}/100)`, badge);
 
         fetchAnalysisHistoryApi(1, 5).then((h) => {
           if (h.success && h.data) setHistory(h.data);

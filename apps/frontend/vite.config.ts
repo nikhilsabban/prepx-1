@@ -5,10 +5,16 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    "process.env": {},
+    "process": { env: {} },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "styles": path.resolve(__dirname, "./styles"),
+      "next/link": path.resolve(__dirname, "./src/coding/compat/link.tsx"),
+      "next/navigation": path.resolve(__dirname, "./src/coding/compat/navigation.ts"),
     },
   },
   server: {
@@ -17,6 +23,11 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:3003",
         changeOrigin: true,
+      },
+      "/coding-module": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/coding-module/, ""),
       },
     },
   },

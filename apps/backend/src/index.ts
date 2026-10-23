@@ -9,17 +9,15 @@ import interviewRoutes from "./routes/interviewRoutes";
 import resumeAnalysisRoutes from "./routes/resumeAnalysisRoutes";
 import codingRoutes from "./routes/codingRoutes";
 import gdRoutes from "./routes/gdRoutes";
+import gamificationRoutes from "./routes/gamificationRoutes";
 import { initGDWebSocketServer } from "./services/gd/gdWebSocketService";
-import { seedCodingProblems } from "./utils/seedCodingProblems";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Connect to MongoDB (for standalone server)
 if (!process.env.VERCEL) {
-  connectDB().then(() => {
-    seedCodingProblems();
-  }).catch((err) => {
+  connectDB().catch((err) => {
     console.warn("MongoDB initial connection notice:", err.message);
   });
 }
@@ -66,7 +64,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/v1", interviewRoutes);
 app.use("/api/v1/resume-analysis", resumeAnalysisRoutes);
 app.use("/api/v1/coding", codingRoutes);
+app.use("/api", codingRoutes);
 app.use("/api/v1/gd", gdRoutes);
+app.use("/api/v1/gamification", gamificationRoutes);
+app.use("/api/gamification", gamificationRoutes);
 
 app.get(["/", "/api"], (req, res) => {
   res.json({

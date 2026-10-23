@@ -1044,14 +1044,14 @@ async function login(req, res) {
       return;
     }
     if (!user.password) {
-      const provider = user.authProvider && user.authProvider !== "local" ? user.authProvider : "Google";
+      const provider2 = user.authProvider && user.authProvider !== "local" ? user.authProvider : "Google";
       res.status(400).json({
-        message: `This account was registered using ${provider}. Please sign in with ${provider} or use Forgot Password to create a password.`
+        message: `This account was registered using ${provider2}. Please sign in with ${provider2} or use Forgot Password to create a password.`
       });
       return;
     }
-    const isMatch2 = await bcrypt.compare(password, user.password);
-    if (!isMatch2) {
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
       if (user.authProvider === "google") {
         res.status(401).json({
           message: "Incorrect password. This account was registered with Google. Sign in with 'Continue with Google' or click 'Forgot Password?' to set your password.",
@@ -1274,8 +1274,8 @@ async function changePassword(req, res) {
       });
       return;
     }
-    const isMatch2 = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch2) {
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
       res.status(400).json({
         message: "Current password is incorrect"
       });
@@ -1538,21 +1538,21 @@ async function linkedinLogin(req, res) {
     res.status(500).json({ message: "LinkedIn authentication failed" });
   }
 }
-async function findOrCreateOAuthUser(provider, providerId, name, email, picture) {
+async function findOrCreateOAuthUser(provider2, providerId, name, email, picture) {
   let user = await User.findOne({ email });
   if (!user) {
     user = await User.create({
-      fullName: name || `${provider} User`,
+      fullName: name || `${provider2} User`,
       email,
       profilePicture: picture || "",
-      authProvider: provider,
+      authProvider: provider2,
       providerId,
       isVerified: true
     });
   } else {
     user.isVerified = true;
     if (!user.authProvider || user.authProvider === "local") {
-      user.authProvider = provider;
+      user.authProvider = provider2;
       user.providerId = providerId;
       if (picture && !user.profilePicture) user.profilePicture = picture;
     }
@@ -2885,8 +2885,8 @@ function parseStructuredResume(rawText) {
   const linkedinMatch = rawText.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9_-]+/i);
   const githubMatch = rawText.match(/https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_-]+/i);
   const portfolioMatch = rawText.match(/https?:\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/\S*)?/i);
-  const lines = rawText.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
-  const candidateName = lines[0] && lines[0].length < 40 ? lines[0] : "";
+  const lines2 = rawText.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  const candidateName = lines2[0] && lines2[0].length < 40 ? lines2[0] : "";
   const skillKeywords = [
     // Languages & Database
     "JavaScript",
@@ -3670,3111 +3670,10357 @@ var CodingSubmission = mongoose9.model("CodingSubmission", CodingSubmissionSchem
 // src/controllers/codingController.ts
 init_User();
 
-// src/services/codingExecutionService.ts
-import vm from "vm";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import axios4 from "axios";
-var execAsync = promisify(execFile);
-var OC_API_URL = "https://api.onlinecompiler.io/api/run-code-sync/";
-var OC_COMPILERS = {
-  javascript: "nodejs-24",
-  python: "python-3.14",
-  cpp: "g++-15",
-  java: "openjdk-25",
-  c: "gcc-15"
-};
-var ocApiKey = () => process.env.ONLINE_COMPILER_API_KEY || "";
-var fixInput = (s) => (s || "").replace(/\\n/g, "\n");
-var applyWrapper = (userCode, wrapper) => {
-  if (!wrapper || !wrapper.trim()) return userCode;
-  return wrapper.replace("__USER_CODE__", userCode);
-};
-function extractFunctionNames(code) {
-  const names = [];
-  const patterns = [
-    /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g,
-    // function trap(...)
-    /(?:var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function/g,
-    // var trap = function(...)
-    /(?:var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\(/g,
-    // const trap = (...) =>
-    /(?:var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*[a-zA-Z_$]/g
-    // const trap = async ...
-  ];
-  for (const pat of patterns) {
-    let m;
-    while ((m = pat.exec(code)) !== null) {
-      if (m[1] && !names.includes(m[1])) names.push(m[1]);
-    }
+// src/data/starters.ts
+var PARAMS = {
+  intArray: { py: "nums", js: "nums", java: "int[] nums", cpp: "vector<int>& nums" },
+  intArrayTarget: {
+    py: "nums, target",
+    js: "nums, target",
+    java: "int[] nums, int target",
+    cpp: "vector<int>& nums, int target"
+  },
+  intArrayK: {
+    py: "nums, k",
+    js: "nums, k",
+    java: "int[] nums, int k",
+    cpp: "vector<int>& nums, int k"
+  },
+  int: { py: "n", js: "n", java: "int n", cpp: "int n" },
+  twoIntsLine: { py: "a, b", js: "a, b", java: "int a, int b", cpp: "int a, int b" },
+  string: { py: "s", js: "s", java: "String s", cpp: "string s" },
+  twoStrings: {
+    py: "s, t",
+    js: "s, t",
+    java: "String s, String t",
+    cpp: "string s, string t"
+  },
+  stringInt: {
+    py: "s, k",
+    js: "s, k",
+    java: "String s, int k",
+    cpp: "string s, int k"
+  },
+  matrix: {
+    py: "grid",
+    js: "grid",
+    java: "int[][] grid",
+    cpp: "vector<vector<int>>& grid"
+  },
+  matrixK: {
+    py: "grid, query",
+    js: "grid, query",
+    java: "int[][] grid, int[] query",
+    cpp: "vector<vector<int>>& grid, vector<int>& query"
+  },
+  twoIntArrays: {
+    py: "nums1, nums2",
+    js: "nums1, nums2",
+    java: "int[] nums1, int[] nums2",
+    cpp: "vector<int>& nums1, vector<int>& nums2"
+  },
+  stringArray: {
+    py: "words",
+    js: "words",
+    java: "String[] words",
+    cpp: "vector<string>& words"
+  },
+  stringWords: {
+    py: "s, words",
+    js: "s, words",
+    java: "String s, String[] words",
+    cpp: "string s, vector<string>& words"
+  },
+  ops: { py: "ops", js: "ops", java: "String[] ops", cpp: "vector<string>& ops" },
+  nEdges: {
+    py: "n, edges",
+    js: "n, edges",
+    java: "int n, int[][] edges",
+    cpp: "int n, vector<vector<int>>& edges"
+  },
+  nEdgesQ: {
+    py: "n, edges, query",
+    js: "n, edges, query",
+    java: "int n, int[][] edges, int[] query",
+    cpp: "int n, vector<vector<int>>& edges, vector<int>& query"
+  },
+  list: { py: "head", js: "head", java: "ListNode head", cpp: "ListNode* head" },
+  listK: {
+    py: "head, k",
+    js: "head, k",
+    java: "ListNode head, int k",
+    cpp: "ListNode* head, int k"
+  },
+  listCycle: { py: "head", js: "head", java: "ListNode head", cpp: "ListNode* head" },
+  twoLists: {
+    py: "l1, l2",
+    js: "l1, l2",
+    java: "ListNode l1, ListNode l2",
+    cpp: "ListNode* l1, ListNode* l2"
+  },
+  kLists: {
+    py: "lists",
+    js: "lists",
+    java: "ListNode[] lists",
+    cpp: "vector<ListNode*>& lists"
+  },
+  tree: { py: "root", js: "root", java: "TreeNode root", cpp: "TreeNode* root" },
+  treeK: {
+    py: "root, k",
+    js: "root, k",
+    java: "TreeNode root, int k",
+    cpp: "TreeNode* root, int k"
+  },
+  twoTrees: {
+    py: "p, q",
+    js: "p, q",
+    java: "TreeNode p, TreeNode q",
+    cpp: "TreeNode* p, TreeNode* q"
+  },
+  treePQ: {
+    py: "root, p, q",
+    js: "root, p, q",
+    java: "TreeNode root, int p, int q",
+    cpp: "TreeNode* root, int p, int q"
   }
-  return names;
+};
+var LIST_SHAPES = ["list", "listK", "listCycle", "twoLists", "kLists"];
+var TREE_SHAPES = ["tree", "treeK", "twoTrees", "treePQ"];
+var RET_JAVA = {
+  int: "int",
+  long: "long",
+  bool: "boolean",
+  intArray: "int[]",
+  string: "String",
+  float2: "double",
+  list: "ListNode",
+  tree: "TreeNode",
+  lines: "List<String>",
+  sortedLines: "List<String>",
+  intMatrix: "List<List<Integer>>",
+  sortedIntMatrix: "List<List<Integer>>"
+};
+var RET_CPP = {
+  int: "int",
+  long: "long long",
+  bool: "bool",
+  intArray: "vector<int>",
+  string: "string",
+  float2: "double",
+  list: "ListNode*",
+  tree: "TreeNode*",
+  lines: "vector<string>",
+  sortedLines: "vector<string>",
+  intMatrix: "vector<vector<int>>",
+  sortedIntMatrix: "vector<vector<int>>"
+};
+var RET_DEFAULT_JAVA = {
+  int: "0",
+  long: "0",
+  bool: "false",
+  intArray: "new int[]{}",
+  string: '""',
+  float2: "0.0",
+  list: "null",
+  tree: "null",
+  lines: "new ArrayList<>()",
+  sortedLines: "new ArrayList<>()",
+  intMatrix: "new ArrayList<>()",
+  sortedIntMatrix: "new ArrayList<>()"
+};
+var RET_DEFAULT_CPP = {
+  int: "0",
+  long: "0",
+  bool: "false",
+  intArray: "{}",
+  string: '""',
+  float2: "0.0",
+  list: "nullptr",
+  tree: "nullptr",
+  lines: "{}",
+  sortedLines: "{}",
+  intMatrix: "{}",
+  sortedIntMatrix: "{}"
+};
+var PY_LIST_HELPERS = `class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def build_list(line):
+    dummy = ListNode()
+    cur = dummy
+    for tok in (line or '').split():
+        cur.next = ListNode(int(tok))
+        cur = cur.next
+    return dummy.next
+
+def list_to_str(head):
+    vals = []
+    while head:
+        vals.append(str(head.val))
+        head = head.next
+    return ' '.join(vals)
+`;
+var PY_TREE_HELPERS = `class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def build_tree(line):
+    toks = (line or '').split()
+    if not toks or toks[0] == 'null':
+        return None
+    root = TreeNode(int(toks[0]))
+    q = deque([root])
+    i = 1
+    while q and i < len(toks):
+        node = q.popleft()
+        if i < len(toks) and toks[i] != 'null':
+            node.left = TreeNode(int(toks[i]))
+            q.append(node.left)
+        i += 1
+        if i < len(toks) and toks[i] != 'null':
+            node.right = TreeNode(int(toks[i]))
+            q.append(node.right)
+        i += 1
+    return root
+
+def serialize_tree(root):
+    if not root:
+        return 'null'
+    out = []
+    q = deque([root])
+    while q:
+        node = q.popleft()
+        if node:
+            out.append(str(node.val))
+            q.append(node.left)
+            q.append(node.right)
+        else:
+            out.append('null')
+    while out and out[-1] == 'null':
+        out.pop()
+    return ' '.join(out)
+`;
+var JS_LIST_HELPERS = `class ListNode {
+  constructor(val = 0, next = null) { this.val = val; this.next = next; }
 }
-var BUILTIN_GLOBALS = /* @__PURE__ */ new Set([
-  "console",
-  "require",
-  "globalThis",
-  "stdin",
-  "clearInterval",
-  "clearTimeout",
-  "setInterval",
-  "setTimeout",
-  "queueMicrotask",
-  "structuredClone",
-  "atob",
-  "btoa",
-  "fetch",
-  "performance",
-  "URL",
-  "URLSearchParams",
-  "TextEncoder",
-  "TextDecoder",
-  "AbortController",
-  "AbortSignal",
-  "Event",
-  "EventTarget",
-  "MessageChannel",
-  "MessagePort",
-  "MessageEvent",
-  "DOMException",
-  "Headers",
-  "Request",
-  "Response",
-  "FormData",
-  "Blob",
-  "File",
-  "ReadableStream",
-  "WritableStream",
-  "TransformStream",
-  "CompressionStream",
-  "DecompressionStream",
-  "ByteLengthQueuingStrategy",
-  "CountQueuingStrategy",
-  "BroadcastChannel",
-  "WebSocket",
-  "Object",
-  "Function",
-  "Array",
-  "Number",
-  "Boolean",
-  "String",
-  "Symbol",
-  "Date",
-  "RegExp",
-  "Error",
-  "Map",
-  "Set",
-  "WeakMap",
-  "WeakSet",
-  "WeakRef",
-  "Promise",
-  "Proxy",
-  "Reflect",
-  "JSON",
-  "Math",
-  "parseInt",
-  "parseFloat",
-  "isNaN",
-  "isFinite",
-  "decodeURI",
-  "decodeURIComponent",
-  "encodeURI",
-  "encodeURIComponent",
-  "eval",
-  "undefined",
-  "NaN",
-  "Infinity",
-  "ArrayBuffer",
-  "SharedArrayBuffer",
-  "DataView",
-  "Float32Array",
-  "Float64Array",
-  "Int8Array",
-  "Int16Array",
-  "Int32Array",
-  "Uint8Array",
-  "Uint8ClampedArray",
-  "Uint16Array",
-  "Uint32Array",
-  "BigInt",
-  "BigInt64Array",
-  "BigUint64Array",
-  "FinalizationRegistry",
-  "AggregateError",
-  "EvalError",
-  "RangeError",
-  "ReferenceError",
-  "SyntaxError",
-  "TypeError",
-  "URIError",
-  "escape",
-  "unescape"
-]);
-async function runLocalJS(code, stdin) {
-  const start = Date.now();
-  const logs = [];
-  const sandbox = {
-    console: {
-      log: (...args) => logs.push(args.map((a) => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ")),
-      error: (...args) => logs.push(args.map((a) => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" "))
-    },
-    stdin,
-    require: () => {
-    }
-  };
-  sandbox.globalThis = sandbox;
-  const candidateNames = extractFunctionNames(code);
-  const candidateJSON = JSON.stringify(candidateNames);
-  try {
-    const jsRunner = `
-; (function() {
-  const rawInput = (typeof stdin !== 'undefined' ? String(stdin) : '').trim();
-  let args = [];
-  if (rawInput.length > 0) {
-    const lines = rawInput.split('\\n').filter(l => l.length > 0);
-    args = lines.map(line => {
-      const trimmed = line.trim();
-      try { 
-        return JSON.parse(trimmed); 
-      } catch (e) {
-        if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-          return trimmed.slice(1, -1);
+
+function buildList(line) {
+  const dummy = new ListNode();
+  let cur = dummy;
+  for (const tok of (line || '').trim().split(/\\s+/).filter(Boolean)) {
+    cur.next = new ListNode(parseInt(tok));
+    cur = cur.next;
+  }
+  return dummy.next;
+}
+
+function listToStr(head) {
+  const vals = [];
+  while (head) { vals.push(head.val); head = head.next; }
+  return vals.join(' ');
+}
+`;
+var JS_TREE_HELPERS = `class TreeNode {
+  constructor(val = 0, left = null, right = null) { this.val = val; this.left = left; this.right = right; }
+}
+
+function buildTree(line) {
+  const toks = (line || '').trim().split(/\\s+/).filter(Boolean);
+  if (!toks.length || toks[0] === 'null') return null;
+  const root = new TreeNode(parseInt(toks[0]));
+  const q = [root];
+  let i = 0 + 1;
+  while (q.length && i < toks.length) {
+    const node = q.shift();
+    if (i < toks.length && toks[i] !== 'null') { node.left = new TreeNode(parseInt(toks[i])); q.push(node.left); }
+    i++;
+    if (i < toks.length && toks[i] !== 'null') { node.right = new TreeNode(parseInt(toks[i])); q.push(node.right); }
+    i++;
+  }
+  return root;
+}
+
+function serializeTree(root) {
+  if (!root) return 'null';
+  const out = [];
+  const q = [root];
+  while (q.length) {
+    const node = q.shift();
+    if (node) { out.push(String(node.val)); q.push(node.left); q.push(node.right); }
+    else out.push('null');
+  }
+  while (out.length && out[out.length - 1] === 'null') out.pop();
+  return out.join(' ');
+}
+`;
+var JAVA_LISTNODE_CLASS = `class ListNode {
+    int val;
+    ListNode next;
+    ListNode(int val) { this.val = val; }
+}
+`;
+var JAVA_TREENODE_CLASS = `class TreeNode {
+    int val;
+    TreeNode left, right;
+    TreeNode(int val) { this.val = val; }
+}
+`;
+var JAVA_LIST_HELPERS = `
+    static ListNode buildList(String line) {
+        ListNode dummy = new ListNode(0), cur = dummy;
+        if (line != null && !line.trim().isEmpty()) {
+            for (String tok : line.trim().split("\\\\s+")) {
+                cur.next = new ListNode(Integer.parseInt(tok));
+                cur = cur.next;
+            }
         }
-        return trimmed; 
-      }
-    });
-  }
-
-  let fn = null;
-
-  // 1. Check for Solution class
-  if (typeof Solution !== 'undefined') {
-    try {
-      const sol = typeof Solution === 'function' ? new Solution() : Solution;
-      const proto = Object.getPrototypeOf(sol) || sol;
-      const methods = Object.getOwnPropertyNames(proto).filter(m => m !== 'constructor' && typeof sol[m] === 'function');
-      if (methods.length > 0) fn = sol[methods[0]].bind(sol);
-    } catch(e) {}
-  }
-
-  // 2. Check for 'solve' function
-  if (!fn && typeof solve === 'function') fn = solve;
-
-  // 3. Dynamically check candidate names extracted from user code
-  if (!fn) {
-    const candidates = ${candidateJSON};
-    for (const name of candidates) {
-      try {
-        const f = eval(name);
-        if (typeof f === 'function') { fn = f; break; }
-      } catch(e) {}
+        return dummy.next;
     }
-  }
 
-  // 4. Fallback: scan globalThis but skip all known builtins
-  if (!fn) {
-    const IGNORE = new Set(${JSON.stringify([...BUILTIN_GLOBALS])});
-    for (const key of Object.keys(globalThis)) {
-      if (IGNORE.has(key)) continue;
-      try {
-        if (typeof globalThis[key] === 'function') { fn = globalThis[key]; break; }
-      } catch(e) {}
+    static String listToStr(ListNode head) {
+        StringBuilder sb = new StringBuilder();
+        while (head != null) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(head.val);
+            head = head.next;
+        }
+        return sb.toString();
     }
-  }
-
-  if (fn) {
-    const res = fn(...args);
-    if (res !== undefined) {
-      console.log(typeof res === 'object' ? JSON.stringify(res) : String(res));
-    }
-  }
-})();
 `;
-    const fullCode = `${code}
-${jsRunner}`;
-    const script = new vm.Script(fullCode);
-    const context = vm.createContext(sandbox);
-    script.runInContext(context, { timeout: 5e3 });
-    const elapsed = Date.now() - start;
-    return {
-      stdout: logs.join("\n").trim(),
-      stderr: "",
-      exitCode: 0,
-      statusLabel: "Accepted",
-      runtime: `${elapsed}ms`,
-      runtimeMs: elapsed
-    };
-  } catch (err) {
-    const elapsed = Date.now() - start;
-    return {
-      stdout: logs.join("\n").trim(),
-      stderr: err.message || "Runtime Error",
-      exitCode: 1,
-      statusLabel: "Runtime Error",
-      runtime: `${elapsed}ms`,
-      runtimeMs: elapsed
-    };
-  }
-}
-async function runLocalPython(code, stdin) {
-  const start = Date.now();
-  try {
-    const pyRunner = `
-import sys, json
-from typing import List, Dict, Tuple, Optional, Set, Any
+var JAVA_TREE_HELPERS = `
+    static TreeNode buildTree(String line) {
+        if (line == null || line.trim().isEmpty()) return null;
+        String[] toks = line.trim().split("\\\\s+");
+        if (toks[0].equals("null")) return null;
+        TreeNode root = new TreeNode(Integer.parseInt(toks[0]));
+        LinkedList<TreeNode> q = new LinkedList<>();
+        q.add(root);
+        int i = 1;
+        while (!q.isEmpty() && i < toks.length) {
+            TreeNode node = q.poll();
+            if (i < toks.length && !toks[i].equals("null")) { node.left = new TreeNode(Integer.parseInt(toks[i])); q.add(node.left); }
+            i++;
+            if (i < toks.length && !toks[i].equals("null")) { node.right = new TreeNode(Integer.parseInt(toks[i])); q.add(node.right); }
+            i++;
+        }
+        return root;
+    }
 
-${code}
-
-if __name__ == '__main__':
-    lines = """${stdin.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}""".strip().split('\\n')
-    args = []
-    for line in lines:
-        if line.strip():
-            try:
-                args.append(json.loads(line))
-            except:
-                args.append(line.strip())
-    fn = None
-    if 'Solution' in globals():
-        sol = Solution()
-        methods = [m for m in dir(sol) if not m.startswith('_')]
-        if methods:
-            fn = getattr(sol, methods[0])
-    if not fn:
-        _skip = {'sys', 'json', 'List', 'Dict', 'Tuple', 'Optional', 'Set', 'Any'}
-        funcs = [v for k, v in globals().items() if callable(v) and not k.startswith('_') and k not in _skip and k != 'Solution']
-        if funcs:
-            fn = funcs[-1]
-    if fn:
-        res = fn(*args)
-        if res is not None:
-            print(json.dumps(res) if isinstance(res, (bool, list, dict)) else res)
+    static String serializeTree(TreeNode root) {
+        if (root == null) return "null";
+        List<String> out = new ArrayList<>();
+        LinkedList<TreeNode> q = new LinkedList<>();
+        q.add(root);
+        while (!q.isEmpty()) {
+            TreeNode node = q.poll();
+            if (node != null) { out.add(String.valueOf(node.val)); q.add(node.left); q.add(node.right); }
+            else out.add("null");
+        }
+        while (!out.isEmpty() && out.get(out.size() - 1).equals("null")) out.remove(out.size() - 1);
+        return String.join(" ", out);
+    }
 `;
-    const { stdout, stderr } = await execAsync("python", ["-c", pyRunner], { timeout: 5e3 });
-    const elapsed = Date.now() - start;
-    return {
-      stdout: (stdout || "").trim(),
-      stderr: (stderr || "").trim(),
-      exitCode: 0,
-      statusLabel: "Accepted",
-      runtime: `${elapsed}ms`,
-      runtimeMs: elapsed
-    };
-  } catch (err) {
-    const elapsed = Date.now() - start;
-    return {
-      stdout: (err.stdout || "").trim(),
-      stderr: (err.stderr || err.message || "").trim(),
-      exitCode: 1,
-      statusLabel: "Runtime Error",
-      runtime: `${elapsed}ms`,
-      runtimeMs: elapsed
-    };
+var CPP_LIST_HELPERS = `struct ListNode {
+    int val;
+    ListNode* next;
+    ListNode(int x) : val(x), next(nullptr) {}
+};
+
+ListNode* buildList(const string& line) {
+    ListNode dummy(0);
+    ListNode* cur = &dummy;
+    stringstream ss(line);
+    int x;
+    while (ss >> x) { cur->next = new ListNode(x); cur = cur->next; }
+    return dummy.next;
+}
+
+string listToStr(ListNode* head) {
+    string out;
+    while (head) {
+        if (!out.empty()) out += ' ';
+        out += to_string(head->val);
+        head = head->next;
+    }
+    return out;
+}
+
+`;
+var CPP_TREE_HELPERS = `struct TreeNode {
+    int val;
+    TreeNode *left, *right;
+    TreeNode(int x) : val(x), left(nullptr), right(nullptr) {}
+};
+
+TreeNode* buildTree(const string& line) {
+    vector<string> toks;
+    { stringstream ss(line); string t; while (ss >> t) toks.push_back(t); }
+    if (toks.empty() || toks[0] == "null") return nullptr;
+    TreeNode* root = new TreeNode(stoi(toks[0]));
+    queue<TreeNode*> q;
+    q.push(root);
+    size_t i = 1;
+    while (!q.empty() && i < toks.size()) {
+        TreeNode* node = q.front(); q.pop();
+        if (i < toks.size() && toks[i] != "null") { node->left = new TreeNode(stoi(toks[i])); q.push(node->left); }
+        i++;
+        if (i < toks.size() && toks[i] != "null") { node->right = new TreeNode(stoi(toks[i])); q.push(node->right); }
+        i++;
+    }
+    return root;
+}
+
+string serializeTree(TreeNode* root) {
+    if (!root) return "null";
+    vector<string> out;
+    queue<TreeNode*> q;
+    q.push(root);
+    while (!q.empty()) {
+        TreeNode* node = q.front(); q.pop();
+        if (node) { out.push_back(to_string(node->val)); q.push(node->left); q.push(node->right); }
+        else out.push_back("null");
+    }
+    while (!out.empty() && out.back() == "null") out.pop_back();
+    string s;
+    for (size_t i = 0; i < out.size(); i++) { if (i) s += ' '; s += out[i]; }
+    return s;
+}
+
+`;
+function pyReader(shape) {
+  switch (shape) {
+    case "intArray":
+      return "    nums = list(map(int, data[0].split()))";
+    case "intArrayTarget":
+      return "    nums = list(map(int, data[0].split()))\n    target = int(data[1])";
+    case "intArrayK":
+      return "    nums = list(map(int, data[0].split()))\n    k = int(data[1])";
+    case "int":
+      return "    n = int(data[0])";
+    case "twoIntsLine":
+      return "    a, b = map(int, data[0].split())";
+    case "string":
+      return "    s = data[0]";
+    case "twoStrings":
+      return "    s = data[0]\n    t = data[1]";
+    case "stringInt":
+      return "    s = data[0]\n    k = int(data[1])";
+    case "matrix":
+      return "    r, c = map(int, data[0].split())\n    grid = [list(map(int, data[1 + i].split())) for i in range(r)]";
+    case "matrixK":
+      return "    r, c = map(int, data[0].split())\n    grid = [list(map(int, data[1 + i].split())) for i in range(r)]\n    query = list(map(int, data[1 + r].split()))";
+    case "twoIntArrays":
+      return "    nums1 = list(map(int, data[0].split()))\n    nums2 = list(map(int, data[1].split()))";
+    case "stringArray":
+      return "    words = data[0].split()";
+    case "stringWords":
+      return "    s = data[0]\n    words = data[1].split()";
+    case "ops":
+      return "    ops = [line for line in data if line.strip()]";
+    case "nEdges":
+      return "    n, m = map(int, data[0].split())\n    edges = [list(map(int, data[1 + i].split())) for i in range(m)]";
+    case "nEdgesQ":
+      return "    n, m = map(int, data[0].split())\n    edges = [list(map(int, data[1 + i].split())) for i in range(m)]\n    query = list(map(int, data[1 + m].split()))";
+    case "list":
+      return "    head = build_list(data[0])";
+    case "listK":
+      return "    head = build_list(data[0])\n    k = int(data[1])";
+    case "listCycle":
+      return "    head = build_list(data[0])\n    pos = int(data[1])\n    if head and pos >= 0:\n        nodes = []\n        cur = head\n        while cur:\n            nodes.append(cur)\n            cur = cur.next\n        nodes[-1].next = nodes[pos]";
+    case "twoLists":
+      return "    l1 = build_list(data[0])\n    l2 = build_list(data[1])";
+    case "kLists":
+      return "    k = int(data[0])\n    lists = [build_list(data[1 + i]) for i in range(k)]";
+    case "tree":
+      return "    root = build_tree(data[0])";
+    case "treeK":
+      return "    root = build_tree(data[0])\n    k = int(data[1])";
+    case "twoTrees":
+      return "    p = build_tree(data[0])\n    q = build_tree(data[1])";
+    case "treePQ":
+      return "    root = build_tree(data[0])\n    p, q = map(int, data[1].split())";
   }
 }
-async function runLocalBatch(code, language, inputs) {
-  const langName = language === "c++" ? "cpp" : language;
-  return Promise.all(inputs.map(async (stdin) => {
-    if (langName === "javascript") return runLocalJS(code, stdin);
-    if (langName === "python") return runLocalPython(code, stdin);
-    const start = Date.now();
-    const elapsed = Date.now() - start;
-    return {
-      stdout: "",
-      stderr: "Execution unsupported for this language in local offline mode",
-      exitCode: 1,
-      statusLabel: "Runtime Error",
-      runtime: `${elapsed}ms`,
-      runtimeMs: elapsed
-    };
-  }));
-}
-async function runOnlineCompiler(code, compiler, stdin, timeLimit = 10) {
-  const start = Date.now();
-  try {
-    const response = await axios4.post(
-      OC_API_URL,
-      {
-        compiler,
-        code,
-        input: stdin,
-        time_limit: timeLimit
-      },
-      {
-        headers: {
-          "Authorization": ocApiKey(),
-          "Content-Type": "application/json"
-        },
-        timeout: 3e4
-      }
-    );
-    const data = response.data;
-    const elapsed = Date.now() - start;
-    const output = (data.output || "").trim();
-    const error = (data.error || "").trim();
-    if (output.includes("Too many runs") || error.includes("Too many runs") || output.includes("limit") && output.includes("at once")) {
-      return null;
-    }
-    const exitCode = data.exit_code ?? (data.status === "success" ? 0 : 1);
-    let statusLabel = "Accepted";
-    if (exitCode !== 0) {
-      if (error.includes("Compilation") || error.includes("SyntaxError")) {
-        statusLabel = "Compilation Error";
-      } else if (data.signal === "SIGKILL" || data.signal === "SIGXCPU") {
-        statusLabel = "Time Limit Exceeded";
-      } else {
-        statusLabel = "Runtime Error";
-      }
-    }
-    return {
-      stdout: output,
-      stderr: error,
-      exitCode,
-      statusLabel,
-      runtime: data.time ? `${Math.round(parseFloat(data.time) * 1e3)}ms` : `${elapsed}ms`,
-      runtimeMs: data.time ? parseFloat(data.time) * 1e3 : elapsed
-    };
-  } catch (err) {
-    const status = err.response?.status;
-    if (status === 429 || status === 503 || status === 502 || !err.response) {
-      return null;
-    }
-    return null;
+function pyPrinter(out) {
+  switch (out) {
+    case "bool":
+      return "    print('true' if res else 'false')";
+    case "intArray":
+      return "    print(' '.join(map(str, res)))";
+    case "float2":
+      return "    print(f'{res:.2f}')";
+    case "list":
+      return "    print(list_to_str(res))";
+    case "tree":
+      return "    print(serialize_tree(res))";
+    case "lines":
+      return "    print('\\n'.join(res))";
+    case "sortedLines":
+      return "    print('\\n'.join(sorted(res)))";
+    case "intMatrix":
+      return "    print('\\n'.join(' '.join(map(str, row)) for row in res))";
+    case "sortedIntMatrix":
+      return "    print('\\n'.join(sorted(' '.join(map(str, row)) for row in res)))";
+    default:
+      return "    print(res)";
   }
 }
-async function runBatch(code, language, inputs) {
-  const langKey = language === "c++" ? "cpp" : language;
-  const compiler = OC_COMPILERS[langKey];
-  const apiKey = ocApiKey();
-  if (!apiKey || !compiler) {
-    return await runLocalBatch(code, language, inputs);
+var JS_INTS = "(l) => (l || '').trim().split(/\\s+/).filter(Boolean).map(Number)";
+function jsReader(shape) {
+  switch (shape) {
+    case "intArray":
+      return "  const nums = (data[0]||'').trim().split(/\\s+/).filter(Boolean).map(Number);";
+    case "intArrayTarget":
+      return "  const nums = (data[0]||'').trim().split(/\\s+/).filter(Boolean).map(Number);\n  const target = parseInt(data[1]);";
+    case "intArrayK":
+      return "  const nums = (data[0]||'').trim().split(/\\s+/).filter(Boolean).map(Number);\n  const k = parseInt(data[1]);";
+    case "int":
+      return "  const n = parseInt(data[0]);";
+    case "twoIntsLine":
+      return "  const [a, b] = data[0].trim().split(/\\s+/).map(Number);";
+    case "string":
+      return "  const s = data[0] ?? '';";
+    case "twoStrings":
+      return "  const s = data[0] ?? '';\n  const t = data[1] ?? '';";
+    case "stringInt":
+      return "  const s = data[0] ?? '';\n  const k = parseInt(data[1]);";
+    case "matrix":
+      return "  const [r, c] = data[0].trim().split(/\\s+/).map(Number);\n  const grid = [];\n  for (let i = 0; i < r; i++) grid.push(data[1 + i].trim().split(/\\s+/).map(Number));";
+    case "matrixK":
+      return `  const parseIntsJs = ${JS_INTS};
+  const [r, c] = data[0].trim().split(/\\s+/).map(Number);
+  const grid = [];
+  for (let i = 0; i < r; i++) grid.push(parseIntsJs(data[1 + i]));
+  const query = parseIntsJs(data[1 + r]);`;
+    case "twoIntArrays":
+      return `  const parseIntsJs = ${JS_INTS};
+  const nums1 = parseIntsJs(data[0]);
+  const nums2 = parseIntsJs(data[1]);`;
+    case "stringArray":
+      return "  const words = (data[0]||'').trim().split(/\\s+/).filter(Boolean);";
+    case "stringWords":
+      return "  const s = data[0] ?? '';\n  const words = (data[1]||'').trim().split(/\\s+/).filter(Boolean);";
+    case "ops":
+      return "  const ops = data.filter((l) => l.trim().length > 0);";
+    case "nEdges":
+      return `  const parseIntsJs = ${JS_INTS};
+  const [n, m] = data[0].trim().split(/\\s+/).map(Number);
+  const edges = [];
+  for (let i = 0; i < m; i++) edges.push(parseIntsJs(data[1 + i]));`;
+    case "nEdgesQ":
+      return `  const parseIntsJs = ${JS_INTS};
+  const [n, m] = data[0].trim().split(/\\s+/).map(Number);
+  const edges = [];
+  for (let i = 0; i < m; i++) edges.push(parseIntsJs(data[1 + i]));
+  const query = parseIntsJs(data[1 + m]);`;
+    case "list":
+      return "  const head = buildList(data[0]);";
+    case "listK":
+      return "  const head = buildList(data[0]);\n  const k = parseInt(data[1]);";
+    case "listCycle":
+      return "  const head = buildList(data[0]);\n  const pos = parseInt(data[1]);\n  if (head && pos >= 0) {\n    const nodes = [];\n    let cur = head;\n    while (cur) { nodes.push(cur); cur = cur.next; }\n    nodes[nodes.length - 1].next = nodes[pos];\n  }";
+    case "twoLists":
+      return "  const l1 = buildList(data[0]);\n  const l2 = buildList(data[1]);";
+    case "kLists":
+      return "  const k = parseInt(data[0]);\n  const lists = [];\n  for (let i = 0; i < k; i++) lists.push(buildList(data[1 + i]));";
+    case "tree":
+      return "  const root = buildTree(data[0]);";
+    case "treeK":
+      return "  const root = buildTree(data[0]);\n  const k = parseInt(data[1]);";
+    case "twoTrees":
+      return "  const p = buildTree(data[0]);\n  const q = buildTree(data[1]);";
+    case "treePQ":
+      return "  const root = buildTree(data[0]);\n  const [p, q] = data[1].trim().split(/\\s+/).map(Number);";
   }
-  const results = [];
-  let useLocal = false;
-  for (const stdin of inputs) {
-    if (useLocal) {
-      const localResults = await runLocalBatch(code, language, [stdin]);
-      const res = localResults[0];
-      if (res) {
-        results.push(res);
-      } else {
-        results.push({ stdout: "", stderr: "Execution failed", exitCode: 1, statusLabel: "Runtime Error", runtime: "0ms", runtimeMs: 0 });
-      }
-      continue;
+}
+function jsPrinter(out) {
+  switch (out) {
+    case "bool":
+      return "  console.log(res ? 'true' : 'false');";
+    case "intArray":
+      return "  console.log(res.join(' '));";
+    case "float2":
+      return "  console.log(Number(res).toFixed(2));";
+    case "list":
+      return "  console.log(listToStr(res));";
+    case "tree":
+      return "  console.log(serializeTree(res));";
+    case "lines":
+      return "  console.log(res.join('\\n'));";
+    case "sortedLines":
+      return "  console.log([...res].sort().join('\\n'));";
+    case "intMatrix":
+      return "  console.log(res.map((r) => r.join(' ')).join('\\n'));";
+    case "sortedIntMatrix":
+      return "  console.log(res.map((r) => r.join(' ')).sort().join('\\n'));";
+    default:
+      return "  console.log(res);";
+  }
+}
+function javaReader(shape) {
+  switch (shape) {
+    case "intArray":
+      return "        int[] nums = parseInts(br.readLine());";
+    case "intArrayTarget":
+      return "        int[] nums = parseInts(br.readLine());\n        int target = Integer.parseInt(br.readLine().trim());";
+    case "intArrayK":
+      return "        int[] nums = parseInts(br.readLine());\n        int k = Integer.parseInt(br.readLine().trim());";
+    case "int":
+      return "        int n = Integer.parseInt(br.readLine().trim());";
+    case "twoIntsLine":
+      return "        int[] ab = parseInts(br.readLine());\n        int a = ab[0], b = ab[1];";
+    case "string":
+      return "        String s = br.readLine();";
+    case "twoStrings":
+      return "        String s = br.readLine();\n        String t = br.readLine();";
+    case "stringInt":
+      return "        String s = br.readLine();\n        int k = Integer.parseInt(br.readLine().trim());";
+    case "matrix":
+      return "        int[] rc = parseInts(br.readLine());\n        int r = rc[0], c = rc[1];\n        int[][] grid = new int[r][];\n        for (int i = 0; i < r; i++) grid[i] = parseInts(br.readLine());";
+    case "matrixK":
+      return "        int[] rc = parseInts(br.readLine());\n        int r = rc[0], c = rc[1];\n        int[][] grid = new int[r][];\n        for (int i = 0; i < r; i++) grid[i] = parseInts(br.readLine());\n        int[] query = parseInts(br.readLine());";
+    case "twoIntArrays":
+      return "        int[] nums1 = parseInts(br.readLine());\n        int[] nums2 = parseInts(br.readLine());";
+    case "stringArray":
+      return '        String wline = br.readLine();\n        String[] words = (wline == null || wline.trim().isEmpty()) ? new String[]{} : wline.trim().split("\\\\s+");';
+    case "stringWords":
+      return '        String s = br.readLine();\n        String wline = br.readLine();\n        String[] words = (wline == null || wline.trim().isEmpty()) ? new String[]{} : wline.trim().split("\\\\s+");';
+    case "ops":
+      return "        List<String> opsList = new ArrayList<>();\n        String line;\n        while ((line = br.readLine()) != null) if (!line.trim().isEmpty()) opsList.add(line.trim());\n        String[] ops = opsList.toArray(new String[0]);";
+    case "nEdges":
+      return "        int[] nm = parseInts(br.readLine());\n        int n = nm[0], m = nm[1];\n        int[][] edges = new int[m][];\n        for (int i = 0; i < m; i++) edges[i] = parseInts(br.readLine());";
+    case "nEdgesQ":
+      return "        int[] nm = parseInts(br.readLine());\n        int n = nm[0], m = nm[1];\n        int[][] edges = new int[m][];\n        for (int i = 0; i < m; i++) edges[i] = parseInts(br.readLine());\n        int[] query = parseInts(br.readLine());";
+    case "list":
+      return "        ListNode head = buildList(br.readLine());";
+    case "listK":
+      return "        ListNode head = buildList(br.readLine());\n        int k = Integer.parseInt(br.readLine().trim());";
+    case "listCycle":
+      return "        ListNode head = buildList(br.readLine());\n        int pos = Integer.parseInt(br.readLine().trim());\n        if (head != null && pos >= 0) {\n            List<ListNode> nodes = new ArrayList<>();\n            for (ListNode c = head; c != null; c = c.next) nodes.add(c);\n            nodes.get(nodes.size() - 1).next = nodes.get(pos);\n        }";
+    case "twoLists":
+      return "        ListNode l1 = buildList(br.readLine());\n        ListNode l2 = buildList(br.readLine());";
+    case "kLists":
+      return "        int k = Integer.parseInt(br.readLine().trim());\n        ListNode[] lists = new ListNode[k];\n        for (int i = 0; i < k; i++) lists[i] = buildList(br.readLine());";
+    case "tree":
+      return "        TreeNode root = buildTree(br.readLine());";
+    case "treeK":
+      return "        TreeNode root = buildTree(br.readLine());\n        int k = Integer.parseInt(br.readLine().trim());";
+    case "twoTrees":
+      return "        TreeNode p = buildTree(br.readLine());\n        TreeNode q = buildTree(br.readLine());";
+    case "treePQ":
+      return "        TreeNode root = buildTree(br.readLine());\n        int[] pq = parseInts(br.readLine());\n        int p = pq[0], q = pq[1];";
+  }
+}
+function javaPrinter(out, callArgs, fnName) {
+  const call = `${RET_JAVA[out]} res = new Solution().${fnName}(${callArgs});`;
+  switch (out) {
+    case "bool":
+      return `        ${call}
+        System.out.println(res ? "true" : "false");`;
+    case "intArray":
+      return `        ${call}
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < res.length; i++) { if (i > 0) sb.append(' '); sb.append(res[i]); }
+        System.out.println(sb.toString());`;
+    case "float2":
+      return `        ${call}
+        System.out.printf("%.2f%n", res);`;
+    case "list":
+      return `        ${call}
+        System.out.println(listToStr(res));`;
+    case "tree":
+      return `        ${call}
+        System.out.println(serializeTree(res));`;
+    case "lines":
+      return `        ${call}
+        System.out.println(String.join("\\n", res));`;
+    case "sortedLines":
+      return `        ${call}
+        List<String> sortedRes = new ArrayList<>(res);
+        Collections.sort(sortedRes);
+        System.out.println(String.join("\\n", sortedRes));`;
+    case "intMatrix":
+    case "sortedIntMatrix": {
+      const sortLine = out === "sortedIntMatrix" ? "\n        Collections.sort(rows);" : "";
+      return `        ${call}
+        List<String> rows = new ArrayList<>();
+        for (List<Integer> row : res) {
+            StringBuilder rb = new StringBuilder();
+            for (int i = 0; i < row.size(); i++) { if (i > 0) rb.append(' '); rb.append(row.get(i)); }
+            rows.add(rb.toString());
+        }${sortLine}
+        System.out.println(String.join("\\n", rows));`;
     }
-    const result = await runOnlineCompiler(code, compiler, stdin);
-    if (result === null) {
-      useLocal = true;
-      const localResults = await runLocalBatch(code, language, [stdin]);
-      const res = localResults[0];
-      if (res) {
-        results.push(res);
-      } else {
-        results.push({ stdout: "", stderr: "Execution failed", exitCode: 1, statusLabel: "Runtime Error", runtime: "0ms", runtimeMs: 0 });
-      }
+    default:
+      return `        ${call}
+        System.out.println(res);`;
+  }
+}
+function cppReader(shape) {
+  switch (shape) {
+    case "intArray":
+      return "    string line; getline(cin, line);\n    vector<int> nums = parseInts(line);";
+    case "intArrayTarget":
+      return "    string line; getline(cin, line);\n    vector<int> nums = parseInts(line);\n    int target; cin >> target;";
+    case "intArrayK":
+      return "    string line; getline(cin, line);\n    vector<int> nums = parseInts(line);\n    int k; cin >> k;";
+    case "int":
+      return "    int n; cin >> n;";
+    case "twoIntsLine":
+      return "    int a, b; cin >> a >> b;";
+    case "string":
+      return "    string s; getline(cin, s);";
+    case "twoStrings":
+      return "    string s, t; getline(cin, s); getline(cin, t);";
+    case "stringInt":
+      return "    string s; getline(cin, s);\n    int k; cin >> k;";
+    case "matrix":
+      return "    int r, c; cin >> r >> c;\n    vector<vector<int>> grid(r, vector<int>(c));\n    for (int i = 0; i < r; i++) for (int j = 0; j < c; j++) cin >> grid[i][j];";
+    case "matrixK":
+      return "    int r, c; cin >> r >> c;\n    vector<vector<int>> grid(r, vector<int>(c));\n    for (int i = 0; i < r; i++) for (int j = 0; j < c; j++) cin >> grid[i][j];\n    cin.ignore();\n    string qline; getline(cin, qline);\n    vector<int> query = parseInts(qline);";
+    case "twoIntArrays":
+      return "    string line1, line2; getline(cin, line1); getline(cin, line2);\n    vector<int> nums1 = parseInts(line1);\n    vector<int> nums2 = parseInts(line2);";
+    case "stringArray":
+      return "    string line; getline(cin, line);\n    vector<string> words;\n    { stringstream ss(line); string w; while (ss >> w) words.push_back(w); }";
+    case "stringWords":
+      return "    string s; getline(cin, s);\n    string wline; getline(cin, wline);\n    vector<string> words;\n    { stringstream ss(wline); string w; while (ss >> w) words.push_back(w); }";
+    case "ops":
+      return "    vector<string> ops;\n    string line;\n    while (getline(cin, line)) { if (!line.empty()) ops.push_back(line); }";
+    case "nEdges":
+      return "    string hline; getline(cin, hline);\n    vector<int> nmv = parseInts(hline);\n    int n = nmv[0], m = nmv[1];\n    vector<vector<int>> edges(m);\n    for (int i = 0; i < m; i++) { string row; getline(cin, row); edges[i] = parseInts(row); }";
+    case "nEdgesQ":
+      return "    string hline; getline(cin, hline);\n    vector<int> nmv = parseInts(hline);\n    int n = nmv[0], m = nmv[1];\n    vector<vector<int>> edges(m);\n    for (int i = 0; i < m; i++) { string row; getline(cin, row); edges[i] = parseInts(row); }\n    string qline; getline(cin, qline);\n    vector<int> query = parseInts(qline);";
+    case "list":
+      return "    string line; getline(cin, line);\n    ListNode* head = buildList(line);";
+    case "listK":
+      return "    string line; getline(cin, line);\n    ListNode* head = buildList(line);\n    int k; cin >> k;";
+    case "listCycle":
+      return "    string line; getline(cin, line);\n    ListNode* head = buildList(line);\n    int pos; cin >> pos;\n    if (head && pos >= 0) {\n        vector<ListNode*> nodes;\n        for (ListNode* c = head; c; c = c->next) nodes.push_back(c);\n        nodes.back()->next = nodes[pos];\n    }";
+    case "twoLists":
+      return "    string line1, line2; getline(cin, line1); getline(cin, line2);\n    ListNode* l1 = buildList(line1);\n    ListNode* l2 = buildList(line2);";
+    case "kLists":
+      return "    int k; cin >> k; cin.ignore();\n    vector<ListNode*> lists(k);\n    for (int i = 0; i < k; i++) { string line; getline(cin, line); lists[i] = buildList(line); }";
+    case "tree":
+      return "    string line; getline(cin, line);\n    TreeNode* root = buildTree(line);";
+    case "treeK":
+      return "    string line; getline(cin, line);\n    TreeNode* root = buildTree(line);\n    int k; cin >> k;";
+    case "twoTrees":
+      return "    string line1, line2; getline(cin, line1); getline(cin, line2);\n    TreeNode* p = buildTree(line1);\n    TreeNode* q = buildTree(line2);";
+    case "treePQ":
+      return "    string line; getline(cin, line);\n    TreeNode* root = buildTree(line);\n    int p, q; cin >> p >> q;";
+  }
+}
+function cppPrinter(out, callArgs, fnName) {
+  const call = `auto res = ${fnName}(${callArgs});`;
+  switch (out) {
+    case "bool":
+      return `    ${call}
+    cout << (res ? "true" : "false") << "\\n";`;
+    case "intArray":
+      return `    ${call}
+    for (size_t i = 0; i < res.size(); i++) { if (i) cout << ' '; cout << res[i]; }
+    cout << "\\n";`;
+    case "float2":
+      return `    ${call}
+    cout << fixed << setprecision(2) << res << "\\n";`;
+    case "list":
+      return `    ${call}
+    cout << listToStr(res) << "\\n";`;
+    case "tree":
+      return `    ${call}
+    cout << serializeTree(res) << "\\n";`;
+    case "lines":
+      return `    ${call}
+    for (auto& item : res) cout << item << "\\n";`;
+    case "sortedLines":
+      return `    ${call}
+    sort(res.begin(), res.end());
+    for (auto& item : res) cout << item << "\\n";`;
+    case "intMatrix":
+      return `    ${call}
+    for (auto& row : res) {
+        for (size_t i = 0; i < row.size(); i++) { if (i) cout << ' '; cout << row[i]; }
+        cout << "\\n";
+    }`;
+    case "sortedIntMatrix":
+      return `    ${call}
+    vector<string> rows;
+    for (auto& row : res) {
+        string rs;
+        for (size_t i = 0; i < row.size(); i++) { if (i) rs += ' '; rs += to_string(row[i]); }
+        rows.push_back(rs);
+    }
+    sort(rows.begin(), rows.end());
+    for (auto& rs : rows) cout << rs << "\\n";`;
+    default:
+      return `    ${call}
+    cout << res << "\\n";`;
+  }
+}
+function callArgsFor(shape) {
+  return PARAMS[shape].py;
+}
+function visibleHeader(comment, needsList, needsTree, listNote, treeNote) {
+  const lines2 = [
+    `${comment} Input parsing and output printing are handled for you \u2014`,
+    `${comment} just implement this function and return the result.`
+  ];
+  if (needsList) lines2.push(listNote);
+  if (needsTree) lines2.push(treeNote);
+  return lines2.join("\n") + "\n";
+}
+function buildStarter(shape, out, fnName) {
+  const args = callArgsFor(shape);
+  const needsList = LIST_SHAPES.includes(shape) || out === "list";
+  const needsTree = TREE_SHAPES.includes(shape) || out === "tree";
+  const pyImports = needsTree ? "import sys\nfrom collections import deque\n" : "import sys\n";
+  const pyHelpers = (needsList ? PY_LIST_HELPERS + "\n" : "") + (needsTree ? PY_TREE_HELPERS + "\n" : "");
+  const python = {
+    prefix: `${pyImports}
+${pyHelpers}`,
+    visible: `${visibleHeader(
+      "#",
+      needsList,
+      needsTree,
+      "# A ListNode class (fields: val, next) is available.",
+      "# A TreeNode class (fields: val, left, right) is available."
+    )}def ${fnName}(${PARAMS[shape].py}):
+    # Write your solution here
+    pass
+`,
+    suffix: `
+def main():
+    data = sys.stdin.read().split('\\n')
+${pyReader(shape)}
+    res = ${fnName}(${args})
+${pyPrinter(out)}
+
+main()
+`
+  };
+  const jsHelpers = (needsList ? JS_LIST_HELPERS + "\n" : "") + (needsTree ? JS_TREE_HELPERS + "\n" : "");
+  const javascript = {
+    prefix: jsHelpers,
+    visible: `${visibleHeader(
+      "//",
+      needsList,
+      needsTree,
+      "// A ListNode class (fields: val, next) is available.",
+      "// A TreeNode class (fields: val, left, right) is available."
+    )}function ${fnName}(${PARAMS[shape].js}) {
+  // Write your solution here
+}
+`,
+    suffix: `
+function main() {
+  const data = require('fs').readFileSync(0, 'utf8').split('\\n');
+${jsReader(shape)}
+  const res = ${fnName}(${args});
+${jsPrinter(out)}
+}
+
+main();
+`
+  };
+  const needsParseInts = /parseInts/.test(javaReader(shape));
+  const javaParseHelper = needsParseInts ? `
+    static int[] parseInts(String line) {
+        if (line == null || line.trim().isEmpty()) return new int[]{};
+        String[] p = line.trim().split("\\\\s+");
+        int[] a = new int[p.length];
+        for (int i = 0; i < p.length; i++) a[i] = Integer.parseInt(p[i]);
+        return a;
+    }
+` : "";
+  const javaHelper = javaParseHelper + (needsList ? JAVA_LIST_HELPERS : "") + (needsTree ? JAVA_TREE_HELPERS : "");
+  const javaNodeClasses = (needsList ? JAVA_LISTNODE_CLASS + "\n" : "") + (needsTree ? JAVA_TREENODE_CLASS + "\n" : "");
+  const java = {
+    prefix: `import java.util.*;
+import java.io.*;
+
+${javaNodeClasses}`,
+    visible: `${visibleHeader(
+      "//",
+      needsList,
+      needsTree,
+      "// A ListNode class (fields: val, next) is available.",
+      "// A TreeNode class (fields: val, left, right) is available."
+    )}class Solution {
+    ${RET_JAVA[out]} ${fnName}(${PARAMS[shape].java}) {
+        // Write your solution here
+        return ${RET_DEFAULT_JAVA[out]};
+    }
+}
+`,
+    suffix: `
+public class Main {
+${javaHelper}
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+${javaReader(shape)}
+${javaPrinter(out, args, fnName)}
+    }
+}
+`
+  };
+  const needsCppParse = /parseInts/.test(cppReader(shape));
+  const cppParseHelper = needsCppParse ? `vector<int> parseInts(const string& line) {
+    vector<int> v; stringstream ss(line); int x;
+    while (ss >> x) v.push_back(x);
+    return v;
+}
+
+` : "";
+  const cppHelper = cppParseHelper + (needsList ? CPP_LIST_HELPERS : "") + (needsTree ? CPP_TREE_HELPERS : "");
+  const cpp = {
+    prefix: `#include <bits/stdc++.h>
+using namespace std;
+
+${cppHelper}`,
+    visible: `${visibleHeader(
+      "//",
+      needsList,
+      needsTree,
+      "// struct ListNode { int val; ListNode* next; } is available.",
+      "// struct TreeNode { int val; TreeNode *left, *right; } is available."
+    )}${RET_CPP[out]} ${fnName}(${PARAMS[shape].cpp}) {
+    // Write your solution here
+    return ${RET_DEFAULT_CPP[out]};
+}
+`,
+    suffix: `
+int main() {
+${cppReader(shape)}
+${cppPrinter(out, args, fnName)}
+    return 0;
+}
+`
+  };
+  return { python, javascript, java, cpp };
+}
+
+// src/data/ref-utils.ts
+var lines = (s) => s.split("\n");
+var ints = (line) => (line ?? "").trim().split(/\s+/).filter((x) => x.length > 0).map(Number);
+var int = (line) => parseInt((line ?? "0").trim(), 10);
+var boolOut = (b) => b ? "true" : "false";
+var arrOut = (a) => a.join(" ");
+var words = (line) => (line ?? "").trim().split(/\s+/).filter((x) => x.length > 0);
+var linesOut = (a) => a.join("\n");
+var sortedLinesOut = (a) => [...a].sort().join("\n");
+var matOut = (rows) => rows.map((r) => r.join(" ")).join("\n");
+var sortedMatOut = (rows) => rows.map((r) => r.join(" ")).sort().join("\n");
+var TNode = class {
+  val;
+  left = null;
+  right = null;
+  constructor(v) {
+    this.val = v;
+  }
+};
+var parseTree = (line) => {
+  const toks = (line ?? "").trim().split(/\s+/).filter(Boolean);
+  if (toks.length === 0 || toks[0] === "null") return null;
+  const root = new TNode(parseInt(toks[0], 10));
+  const q = [root];
+  let i = 1;
+  while (q.length && i < toks.length) {
+    const node = q.shift();
+    if (i < toks.length && toks[i] !== "null") {
+      node.left = new TNode(parseInt(toks[i], 10));
+      q.push(node.left);
+    }
+    i++;
+    if (i < toks.length && toks[i] !== "null") {
+      node.right = new TNode(parseInt(toks[i], 10));
+      q.push(node.right);
+    }
+    i++;
+  }
+  return root;
+};
+var treeOut = (root) => {
+  if (!root) return "null";
+  const out = [];
+  const q = [root];
+  while (q.length) {
+    const node = q.shift();
+    if (node) {
+      out.push(String(node.val));
+      q.push(node.left);
+      q.push(node.right);
     } else {
-      results.push(result);
+      out.push("null");
     }
   }
-  return results;
-}
+  while (out.length && out[out.length - 1] === "null") out.pop();
+  return out.join(" ");
+};
+var yt = (query) => "https://www.youtube.com/results?search_query=" + encodeURIComponent(query);
 
-// src/utils/seedCodingProblems.ts
-var INITIAL_PROBLEMS = [
+// src/data/problems/arrays.ts
+var first = (s) => ints(s.split("\n")[0]);
+var arrays = [
   {
-    "number": 1,
-    "title": "Two Sum",
-    "slug": "two-sum",
-    "difficulty": "Easy",
-    "description": "Given an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to `target`.\n\nYou may assume that each input would have exactly one solution, and you may not use the same element twice.\n\nYou can return the answer in any order.",
-    "examples": [
+    slug: "two-sum",
+    title: "Two Sum",
+    difficulty: "EASY",
+    statement: `Given an array of integers \`nums\` and an integer \`target\`, return the **indices** of the two numbers that add up to \`target\`. Exactly one valid answer exists, and you may not use the same element twice. Return the indices in increasing order.
+
+**Input**
+- Line 1: space-separated integers \`nums\`
+- Line 2: integer \`target\`
+
+**Output**
+- The two indices, space-separated (smaller index first).`,
+    constraints: `- 2 \u2264 nums.length \u2264 10^4
+- -10^9 \u2264 nums[i] \u2264 10^9
+- Only one valid answer exists.`,
+    examples: [
+      { input: "2 7 11 15\n9", output: "0 1", explanation: "nums[0] + nums[1] = 2 + 7 = 9." },
+      { input: "3 2 4\n6", output: "1 2", explanation: "nums[1] + nums[2] = 2 + 4 = 6." }
+    ],
+    hints: [
+      "The brute-force approach checks every pair in O(n\xB2). Can you do better?",
+      "For each number x, you need to find target \u2212 x. What data structure gives O(1) lookups?",
+      "Use a hash map from value \u2192 index. As you scan, check if the complement was already seen."
+    ],
+    editorial: `The optimal solution scans the array once, keeping a hash map from each value to its index. For every element \`x\`, the complement we need is \`target \u2212 x\`. If that complement is already in the map, we've found the answer; otherwise we store \`x\` and continue. This trades O(n) extra space for a drop from O(n\xB2) to O(n) time.`,
+    approaches: [
       {
-        "input": "nums = [2,7,11,15], target = 9",
-        "output": "[0,1]",
-        "explanation": "Because nums[0] + nums[1] == 9, we return [0, 1]."
+        name: "Brute force",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(1)",
+        body: "Check every pair (i, j) and return the first that sums to target."
       },
       {
-        "input": "nums = [3,2,4], target = 6",
-        "output": "[1,2]",
-        "explanation": "Because nums[1] + nums[2] == 6, we return [1, 2]."
+        name: "Hash map (one pass)",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "Store seen value \u2192 index. For each x, look up target \u2212 x before inserting x."
       }
     ],
-    "constraints": [
-      "2 <= nums.length <= 10^4",
-      "-10^9 <= nums[i] <= 10^9",
-      "-10^9 <= target <= 10^9",
-      "Only one valid answer exists."
-    ],
-    "testCases": [
-      {
-        "input": "[2,7,11,15]\n9",
-        "expected": "[0,1]"
-      },
-      {
-        "input": "[3,2,4]\n6",
-        "expected": "[1,2]"
-      },
-      {
-        "input": "[3,3]\n6",
-        "expected": "[0,1]"
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode two sum"),
+    tags: ["array", "hash-table"],
+    starterCode: buildStarter("intArrayTarget", "intArray", "twoSum"),
+    reference: (input) => {
+      const [l0, l1] = input.split("\n");
+      const nums = ints(l0);
+      const target = int(l1);
+      const seen = /* @__PURE__ */ new Map();
+      for (let i = 0; i < nums.length; i++) {
+        const need = target - nums[i];
+        if (seen.has(need)) return `${seen.get(need)} ${i}`;
+        seen.set(nums[i], i);
       }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        pass",
-      "javascript": "var twoSum = function(nums, target) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        return new int[]{};\n    }\n}",
-      "c": "int* twoSum(int* nums, int numsSize, int target, int* returnSize) {\n    \n}"
+      return "";
     },
-    "tags": [
-      "Array",
-      "Hash Table"
-    ],
-    "companies": [
-      "Google",
-      "Amazon",
-      "Meta",
-      "Apple"
-    ],
-    "acceptance": 52.4,
-    "points": 100,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "2 7 11 15\n9", sample: true },
+      { input: "3 2 4\n6", sample: true },
+      { input: "3 3\n6" },
+      { input: "-1 -2 -3 -4 -5\n-8" },
+      { input: "0 4 3 0\n0" },
+      { input: "1 2 3 4 5 6 7 8 9 10\n19" }
+    ]
   },
   {
-    "number": 2,
-    "title": "Valid Parentheses",
-    "slug": "valid-parentheses",
-    "difficulty": "Easy",
-    "description": "Given a string `s` containing just the characters `'('`, `')'`, `'{'`, `'}'`, `'['` and `']'`, determine if the input string is valid.\n\nAn input string is valid if:\n1. Open brackets must be closed by the same type of brackets.\n2. Open brackets must be closed in the correct order.\n3. Every close bracket has a corresponding open bracket of the same type.",
-    "examples": [
-      {
-        "input": 's = "()"',
-        "output": "true",
-        "explanation": "Simple pair matches."
-      },
-      {
-        "input": 's = "()[]{}"',
-        "output": "true",
-        "explanation": "All pairs match correctly."
-      },
-      {
-        "input": 's = "(]"',
-        "output": "false",
-        "explanation": "Mismatched closing bracket."
+    slug: "best-time-to-buy-and-sell-stock",
+    title: "Best Time to Buy and Sell Stock",
+    difficulty: "EASY",
+    statement: `You are given an array \`prices\` where \`prices[i]\` is the price of a stock on day \`i\`. Buy on one day and sell on a later day to maximize profit. Return the maximum profit, or \`0\` if no profit is possible.
+
+**Input**: one line of space-separated integers \`prices\`.
+**Output**: the maximum profit.`,
+    constraints: `- 1 \u2264 prices.length \u2264 10^5
+- 0 \u2264 prices[i] \u2264 10^4`,
+    examples: [
+      { input: "7 1 5 3 6 4", output: "5", explanation: "Buy at 1, sell at 6 \u2192 profit 5." },
+      { input: "7 6 4 3 1", output: "0", explanation: "Prices only fall; no profitable trade." }
+    ],
+    hints: [
+      "Track the minimum price seen so far as you scan left to right.",
+      "At each day, the best profit selling today is price \u2212 minSoFar."
+    ],
+    editorial: `Walk through the prices once, remembering the lowest price seen so far. For each day, the profit from selling that day is \`price \u2212 minSoFar\`; keep the maximum. This is O(n) time and O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode best time to buy and sell stock"),
+    tags: ["array", "dynamic-programming", "greedy"],
+    starterCode: buildStarter("intArray", "int", "maxProfit"),
+    reference: (input) => {
+      const prices = first(input);
+      let min = Infinity;
+      let profit = 0;
+      for (const p of prices) {
+        if (p < min) min = p;
+        else if (p - min > profit) profit = p - min;
       }
-    ],
-    "constraints": [
-      "1 <= s.length <= 10^4",
-      "s consists of parentheses only '()[]{}'."
-    ],
-    "testCases": [
-      {
-        "input": '"()"',
-        "expected": "true"
-      },
-      {
-        "input": '"()[]{}"',
-        "expected": "true"
-      },
-      {
-        "input": '"(]"',
-        "expected": "false"
-      },
-      {
-        "input": '"{[]}"',
-        "expected": "true"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def isValid(self, s: str) -> bool:\n        pass",
-      "javascript": "var isValid = function(s) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    bool isValid(string s) {\n        \n    }\n};",
-      "java": "class Solution {\n    public boolean isValid(String s) {\n        return false;\n    }\n}",
-      "c": "bool isValid(char* s) {\n    \n}"
+      return String(profit);
     },
-    "tags": [
-      "String",
-      "Stack"
-    ],
-    "companies": [
-      "Amazon",
-      "Microsoft",
-      "Google"
-    ],
-    "acceptance": 40.5,
-    "points": 100,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "7 1 5 3 6 4", sample: true },
+      { input: "7 6 4 3 1", sample: true },
+      { input: "1" },
+      { input: "2 4 1" },
+      { input: "3 2 6 5 0 3" },
+      { input: "1 2 3 4 5" }
+    ]
   },
   {
-    "number": 3,
-    "title": "Merge Two Sorted Lists",
-    "slug": "merge-two-sorted-lists",
-    "difficulty": "Easy",
-    "description": "You are given the heads of two sorted linked lists `list1` and `list2`.\n\nMerge the two lists into one sorted list. The list should be made by splicing together the nodes of the first two lists.\n\nReturn the head of the merged linked list.",
-    "examples": [
+    slug: "maximum-subarray",
+    title: "Maximum Subarray",
+    difficulty: "MEDIUM",
+    statement: `Given an integer array \`nums\`, find the contiguous subarray (containing at least one number) with the largest sum, and return that sum.
+
+**Input**: one line of space-separated integers.
+**Output**: the maximum subarray sum.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^5
+- -10^4 \u2264 nums[i] \u2264 10^4`,
+    examples: [
+      { input: "-2 1 -3 4 -1 2 1 -5 4", output: "6", explanation: "[4,-1,2,1] has sum 6." },
+      { input: "5 4 -1 7 8", output: "23", explanation: "The whole array sums to 23." }
+    ],
+    hints: [
+      "If the running sum ever goes negative, it can only hurt future subarrays.",
+      "Kadane's algorithm: at each index, either extend the previous subarray or start fresh."
+    ],
+    editorial: `**Kadane's algorithm.** Keep a running sum \`cur\`. At each element, \`cur = max(x, cur + x)\` \u2014 either start a new subarray at \`x\` or extend the current one. Track the best \`cur\` seen. O(n) time, O(1) space.`,
+    approaches: [
       {
-        "input": "list1 = [1,2,4], list2 = [1,3,4]",
-        "output": "[1,1,2,3,4,4]",
-        "explanation": "Merged sorted list."
-      },
-      {
-        "input": "list1 = [], list2 = []",
-        "output": "[]",
-        "explanation": "Both lists empty."
+        name: "Kadane's algorithm",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "Reset the running sum whenever extending would do worse than starting over at the current element."
       }
     ],
-    "constraints": [
-      "The number of nodes in both lists is in the range [0, 50].",
-      "-100 <= Node.val <= 100",
-      "Both list1 and list2 are sorted in non-decreasing order."
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,4]\n[1,3,4]",
-        "expected": "[1,1,2,3,4,4]"
-      },
-      {
-        "input": "[]\n[]",
-        "expected": "[]"
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode maximum subarray kadane"),
+    tags: ["array", "divide-and-conquer", "dynamic-programming"],
+    starterCode: buildStarter("intArray", "int", "maxSubArray"),
+    reference: (input) => {
+      const nums = first(input);
+      let best = nums[0];
+      let cur = nums[0];
+      for (let i = 1; i < nums.length; i++) {
+        cur = Math.max(nums[i], cur + nums[i]);
+        best = Math.max(best, cur);
       }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def mergeTwoLists(self, list1: Optional[ListNode], list2: Optional[ListNode]) -> Optional[ListNode]:\n        pass",
-      "javascript": "var mergeTwoLists = function(list1, list2) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    ListNode* mergeTwoLists(ListNode* list1, ListNode* list2) {\n        \n    }\n};",
-      "java": "class Solution {\n    public ListNode mergeTwoLists(ListNode list1, ListNode list2) {\n        return null;\n    }\n}",
-      "c": "struct ListNode* mergeTwoLists(struct ListNode* list1, struct ListNode* list2) {\n    \n}"
+      return String(best);
     },
-    "tags": [
-      "Linked List",
-      "Recursion"
-    ],
-    "companies": [
-      "Amazon",
-      "Apple",
-      "Meta"
-    ],
-    "acceptance": 63.1,
-    "points": 100,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "-2 1 -3 4 -1 2 1 -5 4", sample: true },
+      { input: "5 4 -1 7 8", sample: true },
+      { input: "1" },
+      { input: "-1" },
+      { input: "-2 -1" },
+      { input: "8 -19 5 -4 20" }
+    ]
   },
   {
-    "number": 4,
-    "title": "Best Time to Buy and Sell Stock",
-    "slug": "best-time-to-buy-and-sell-stock",
-    "difficulty": "Easy",
-    "description": "You are given an array `prices` where `prices[i]` is the price of a given stock on the `i-th` day.\n\nYou want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock.\n\nReturn the maximum profit you can achieve from this transaction. If you cannot achieve any profit, return `0`.",
-    "examples": [
-      {
-        "input": "prices = [7,1,5,3,6,4]",
-        "output": "5",
-        "explanation": "Buy on day 2 (price = 1) and sell on day 5 (price = 6), profit = 6-1 = 5."
-      },
-      {
-        "input": "prices = [7,6,4,3,1]",
-        "output": "0",
-        "explanation": "In this case, no transactions are done and max profit = 0."
-      }
+    slug: "contains-duplicate",
+    title: "Contains Duplicate",
+    difficulty: "EASY",
+    statement: `Given an integer array \`nums\`, return \`true\` if any value appears at least twice, and \`false\` if every element is distinct.
+
+**Input**: one line of space-separated integers.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^5
+- -10^9 \u2264 nums[i] \u2264 10^9`,
+    examples: [
+      { input: "1 2 3 1", output: "true", explanation: "1 appears twice." },
+      { input: "1 2 3 4", output: "false", explanation: "All distinct." }
     ],
-    "constraints": [
-      "1 <= prices.length <= 10^5",
-      "0 <= prices[i] <= 10^4"
+    hints: [
+      "A set stores only distinct values.",
+      "If the set's size is smaller than the array's length, there was a duplicate."
     ],
-    "testCases": [
-      {
-        "input": "[7,1,5,3,6,4]",
-        "expected": "5"
-      },
-      {
-        "input": "[7,6,4,3,1]",
-        "expected": "0"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def maxProfit(self, prices: List[int]) -> int:\n        pass",
-      "javascript": "var maxProfit = function(prices) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int maxProfit(vector<int>& prices) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int maxProfit(int[] prices) {\n        return 0;\n    }\n}",
-      "c": "int maxProfit(int* prices, int pricesSize) {\n    \n}"
+    editorial: `Insert every element into a hash set. If you ever try to insert a value already present \u2014 equivalently, if the final set size is less than the array length \u2014 there's a duplicate. O(n) time and space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode contains duplicate"),
+    tags: ["array", "hash-table", "sorting"],
+    starterCode: buildStarter("intArray", "bool", "containsDuplicate"),
+    reference: (input) => {
+      const nums = first(input);
+      return boolOut(new Set(nums).size !== nums.length);
     },
-    "tags": [
-      "Array",
-      "Dynamic Programming"
-    ],
-    "companies": [
-      "Amazon",
-      "Microsoft",
-      "Google"
-    ],
-    "acceptance": 54.2,
-    "points": 100,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "1 2 3 1", sample: true },
+      { input: "1 2 3 4", sample: true },
+      { input: "1 1 1 3 3 4 3 2 4 2" },
+      { input: "5" },
+      { input: "-1 -1" }
+    ]
   },
   {
-    "number": 5,
-    "title": "Valid Anagram",
-    "slug": "valid-anagram",
-    "difficulty": "Easy",
-    "description": "Given two strings `s` and `t`, return `true` if `t` is an anagram of `s`, and `false` otherwise.\n\nAn Anagram is a word or phrase formed by rearranging the letters of a different word or phrase, typically using all the original letters exactly once.",
-    "examples": [
-      {
-        "input": 's = "anagram", t = "nagaram"',
-        "output": "true"
-      },
-      {
-        "input": 's = "rat", t = "car"',
-        "output": "false"
+    slug: "product-of-array-except-self",
+    title: "Product of Array Except Self",
+    difficulty: "MEDIUM",
+    statement: `Given an integer array \`nums\`, return an array \`answer\` such that \`answer[i]\` is the product of all elements of \`nums\` **except** \`nums[i]\`. Solve it without using the division operator, in O(n) time.
+
+**Input**: one line of space-separated integers.
+**Output**: the answer array, space-separated.`,
+    constraints: `- 2 \u2264 nums.length \u2264 10^5
+- The product of any prefix or suffix fits in a 32-bit integer.`,
+    examples: [
+      { input: "1 2 3 4", output: "24 12 8 6" },
+      { input: "-1 1 0 -3 3", output: "0 0 9 0 0" }
+    ],
+    hints: [
+      "answer[i] = (product of everything to the left) \xD7 (product of everything to the right).",
+      "Compute prefix products in one pass, then multiply by suffix products in a second pass."
+    ],
+    editorial: `Do two passes. First, fill \`answer[i]\` with the product of all elements **before** \`i\` (prefix products). Then sweep right-to-left maintaining a running **suffix** product and multiply it into \`answer[i]\`. No division, O(n) time, O(1) extra space (excluding the output).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode product of array except self"),
+    tags: ["array", "prefix-sum"],
+    starterCode: buildStarter("intArray", "intArray", "productExceptSelf"),
+    reference: (input) => {
+      const nums = first(input);
+      const n = nums.length;
+      const res = new Array(n).fill(1);
+      let pre = 1;
+      for (let i = 0; i < n; i++) {
+        res[i] = pre;
+        pre *= nums[i];
       }
-    ],
-    "constraints": [
-      "1 <= s.length, t.length <= 5 * 10^4",
-      "s and t consist of lowercase English letters."
-    ],
-    "testCases": [
-      {
-        "input": '"anagram"\n"nagaram"',
-        "expected": "true"
-      },
-      {
-        "input": '"rat"\n"car"',
-        "expected": "false"
+      let post = 1;
+      for (let i = n - 1; i >= 0; i--) {
+        res[i] *= post;
+        post *= nums[i];
       }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def isAnagram(self, s: str, t: str) -> bool:\n        pass",
-      "javascript": "var isAnagram = function(s, t) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    bool isAnagram(string s, string t) {\n        \n    }\n};",
-      "java": "class Solution {\n    public boolean isAnagram(String s, String t) {\n        return false;\n    }\n}",
-      "c": "bool isAnagram(char* s, char* t) {\n    \n}"
+      return arrOut(res);
     },
-    "tags": [
-      "Hash Table",
-      "String",
-      "Sorting"
-    ],
-    "companies": [
-      "Uber",
-      "Google",
-      "Amazon"
-    ],
-    "acceptance": 63.5,
-    "points": 100,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "1 2 3 4", sample: true },
+      { input: "-1 1 0 -3 3", sample: true },
+      { input: "2 3" },
+      { input: "5 1 1 1" },
+      { input: "1 2 3 4 5 6" }
+    ]
   },
   {
-    "number": 6,
-    "title": "Binary Search",
-    "slug": "binary-search",
-    "difficulty": "Easy",
-    "description": "Given an array of integers `nums` which is sorted in ascending order, and an integer `target`, write a function to search `target` in `nums`. If `target` exists, then return its index. Otherwise, return `-1`.\n\nYou must write an algorithm with `O(log n)` runtime complexity.",
-    "examples": [
-      {
-        "input": "nums = [-1,0,3,5,9,12], target = 9",
-        "output": "4",
-        "explanation": "9 exists in nums and its index is 4"
-      },
-      {
-        "input": "nums = [-1,0,3,5,9,12], target = 2",
-        "output": "-1",
-        "explanation": "2 does not exist in nums so return -1"
-      }
+    slug: "move-zeroes",
+    title: "Move Zeroes",
+    difficulty: "EASY",
+    statement: `Given an integer array \`nums\`, move all \`0\`s to the end while keeping the relative order of the non-zero elements. Return the resulting array.
+
+**Input**: one line of space-separated integers.
+**Output**: the transformed array, space-separated.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^4
+- -2^31 \u2264 nums[i] \u2264 2^31 \u2212 1`,
+    examples: [
+      { input: "0 1 0 3 12", output: "1 3 12 0 0" },
+      { input: "0", output: "0" }
     ],
-    "constraints": [
-      "1 <= nums.length <= 10^4",
-      "-10^4 < nums[i], target < 10^4",
-      "All integers in nums are unique.",
-      "nums is sorted in ascending order."
+    hints: [
+      "Keep a write pointer for the next non-zero slot.",
+      "Copy non-zero elements forward, then fill the remaining slots with zeros."
     ],
-    "testCases": [
-      {
-        "input": "[-1,0,3,5,9,12]\n9",
-        "expected": "4"
-      },
-      {
-        "input": "[-1,0,3,5,9,12]\n2",
-        "expected": "-1"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def search(self, nums: List[int], target: int) -> int:\n        pass",
-      "javascript": "var search = function(nums, target) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int search(vector<int>& nums, int target) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int search(int[] nums, int target) {\n        return -1;\n    }\n}",
-      "c": "int search(int* nums, int numsSize, int target) {\n    \n}"
+    editorial: `Use a two-pointer approach: a \`write\` index marks where the next non-zero value goes. Scan the array; each non-zero value is placed at \`write\` and \`write\` advances. Finally, fill positions from \`write\` to the end with zeros. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode move zeroes"),
+    tags: ["array", "two-pointers"],
+    starterCode: buildStarter("intArray", "intArray", "moveZeroes"),
+    reference: (input) => {
+      const nums = first(input);
+      const res = nums.filter((x) => x !== 0);
+      while (res.length < nums.length) res.push(0);
+      return arrOut(res);
     },
-    "tags": [
-      "Array",
-      "Binary Search"
-    ],
-    "companies": [
-      "Apple",
-      "Microsoft",
-      "Google"
-    ],
-    "acceptance": 56.8,
-    "points": 100,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "0 1 0 3 12", sample: true },
+      { input: "0", sample: true },
+      { input: "1 2 3" },
+      { input: "0 0 1" },
+      { input: "4 0 5 0 0 6" }
+    ]
   },
   {
-    "number": 7,
-    "title": "Maximum Subarray",
-    "slug": "maximum-subarray",
-    "difficulty": "Medium",
-    "description": "Given an integer array `nums`, find the subarray with the largest sum, and return its sum.",
-    "examples": [
-      {
-        "input": "nums = [-2,1,-3,4,-1,2,1,-5,4]",
-        "output": "6",
-        "explanation": "The subarray [4,-1,2,1] has the largest sum 6."
-      },
-      {
-        "input": "nums = [1]",
-        "output": "1"
-      },
-      {
-        "input": "nums = [5,4,-1,7,8]",
-        "output": "23"
+    slug: "majority-element",
+    title: "Majority Element",
+    difficulty: "EASY",
+    statement: `Given an array \`nums\` of size \`n\`, return the majority element \u2014 the element that appears **more than \u230An/2\u230B times**. You may assume it always exists.
+
+**Input**: one line of space-separated integers.
+**Output**: the majority element.`,
+    constraints: `- 1 \u2264 nums.length \u2264 5\xB710^4
+- The majority element always exists.`,
+    examples: [
+      { input: "3 2 3", output: "3" },
+      { input: "2 2 1 1 1 2 2", output: "2" }
+    ],
+    hints: [
+      "A hash map of counts works but uses O(n) space.",
+      "Boyer\u2013Moore voting: keep a candidate and a counter; matching votes increment, others decrement."
+    ],
+    editorial: `**Boyer\u2013Moore majority vote.** Maintain a candidate and a count. When count hits 0, adopt the current element as the candidate. Increment count on a match, decrement otherwise. Because the majority element occurs more than n/2 times, it survives as the final candidate. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode majority element boyer moore"),
+    tags: ["array", "hash-table", "divide-and-conquer"],
+    starterCode: buildStarter("intArray", "int", "majorityElement"),
+    reference: (input) => {
+      const nums = first(input);
+      let count = 0;
+      let cand = nums[0];
+      for (const x of nums) {
+        if (count === 0) cand = x;
+        count += x === cand ? 1 : -1;
       }
-    ],
-    "constraints": [
-      "1 <= nums.length <= 10^5",
-      "-10^4 <= nums[i] <= 10^4"
-    ],
-    "testCases": [
-      {
-        "input": "[-2,1,-3,4,-1,2,1,-5,4]",
-        "expected": "6"
-      },
-      {
-        "input": "[1]",
-        "expected": "1"
-      },
-      {
-        "input": "[5,4,-1,7,8]",
-        "expected": "23"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def maxSubArray(self, nums: List[int]) -> int:\n        pass",
-      "javascript": "var maxSubArray = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int maxSubArray(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int maxSubArray(int[] nums) {\n        return 0;\n    }\n}",
-      "c": "int maxSubArray(int* nums, int numsSize) {\n    \n}"
+      return String(cand);
     },
-    "tags": [
-      "Array",
-      "Divide and Conquer",
-      "Dynamic Programming"
-    ],
-    "companies": [
-      "Amazon",
-      "Microsoft",
-      "Apple",
-      "LinkedIn"
-    ],
-    "acceptance": 50.3,
-    "points": 200,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "3 2 3", sample: true },
+      { input: "2 2 1 1 1 2 2", sample: true },
+      { input: "1" },
+      { input: "6 5 5" },
+      { input: "8 8 7 7 7" }
+    ]
   },
   {
-    "number": 8,
-    "title": "Container With Most Water",
-    "slug": "container-with-most-water",
-    "difficulty": "Medium",
-    "description": "You are given an integer array `height` of length `n`. There are `n` vertical lines drawn such that the two endpoints of the `i-th` line are `(i, 0)` and `(i, height[i])`.\n\nFind two lines that together with the x-axis form a container, such that the container contains the most water.\n\nReturn the maximum amount of water a container can store.",
-    "examples": [
-      {
-        "input": "height = [1,8,6,2,5,4,8,3,7]",
-        "output": "49",
-        "explanation": "The vertical lines are [1,8,6,2,5,4,8,3,7]. In this case, max area of water is 49."
-      },
-      {
-        "input": "height = [1,1]",
-        "output": "1"
+    slug: "maximum-product-subarray",
+    title: "Maximum Product Subarray",
+    difficulty: "MEDIUM",
+    statement: `Given an integer array \`nums\`, find a contiguous non-empty subarray with the largest **product**, and return that product.
+
+**Input**: one line of space-separated integers.
+**Output**: the maximum product.`,
+    constraints: `- 1 \u2264 nums.length \u2264 2\xB710^4
+- -10 \u2264 nums[i] \u2264 10
+- The answer fits in a 32-bit integer.`,
+    examples: [
+      { input: "2 3 -2 4", output: "6", explanation: "[2,3] gives 6." },
+      { input: "-2 0 -1", output: "0", explanation: "The best you can do is 0." }
+    ],
+    hints: [
+      "A negative number flips the sign \u2014 today's minimum can become tomorrow's maximum.",
+      "Track both the max and min product ending at each index."
+    ],
+    editorial: `Because negatives flip signs, track **both** the maximum and minimum product ending at each position. At each element \`x\`, the new max/min come from \`{x, max\xB7x, min\xB7x}\`. The running best over all positions is the answer. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode maximum product subarray"),
+    tags: ["array", "dynamic-programming"],
+    starterCode: buildStarter("intArray", "int", "maxProduct"),
+    reference: (input) => {
+      const nums = first(input);
+      let best = nums[0];
+      let maxP = nums[0];
+      let minP = nums[0];
+      for (let i = 1; i < nums.length; i++) {
+        const x = nums[i];
+        const cands = [x, maxP * x, minP * x];
+        maxP = Math.max(...cands);
+        minP = Math.min(...cands);
+        best = Math.max(best, maxP);
       }
-    ],
-    "constraints": [
-      "n == height.length",
-      "2 <= n <= 10^5",
-      "0 <= height[i] <= 10^4"
-    ],
-    "testCases": [
-      {
-        "input": "[1,8,6,2,5,4,8,3,7]",
-        "expected": "49"
-      },
-      {
-        "input": "[1,1]",
-        "expected": "1"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def maxArea(self, height: List[int]) -> int:\n        pass",
-      "javascript": "var maxArea = function(height) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int maxArea(vector<int>& height) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int maxArea(int[] height) {\n        return 0;\n    }\n}",
-      "c": "int maxArea(int* height, int heightSize) {\n    \n}"
+      return String(best);
     },
-    "tags": [
-      "Array",
-      "Two Pointers",
-      "Greedy"
-    ],
-    "companies": [
-      "Google",
-      "Amazon",
-      "Meta"
-    ],
-    "acceptance": 54.1,
-    "points": 200,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "2 3 -2 4", sample: true },
+      { input: "-2 0 -1", sample: true },
+      { input: "-2" },
+      { input: "2 -5 -2 -4 3" },
+      { input: "3 -1 4" }
+    ]
   },
   {
-    "number": 9,
-    "title": "Longest Substring Without Repeating Characters",
-    "slug": "longest-substring-without-repeating-characters",
-    "difficulty": "Medium",
-    "description": "Given a string `s`, find the length of the **longest substring** without repeating characters.",
-    "examples": [
+    slug: "merge-intervals",
+    title: "Merge Intervals",
+    difficulty: "MEDIUM",
+    statement: `Given a list of intervals \`[start, end]\`, merge all overlapping intervals and return the result sorted by start.
+
+**Input**
+- Line 1: two integers \`n 2\` (n intervals)
+- Next n lines: \`start end\`
+
+**Output**: the merged intervals, one per line as \`start end\`.`,
+    constraints: `- 1 \u2264 n \u2264 10^4
+- 0 \u2264 start \u2264 end \u2264 10^4`,
+    examples: [
       {
-        "input": 's = "abcabcbb"',
-        "output": "3",
-        "explanation": 'The answer is "abc", with the length of 3.'
+        input: "4 2\n1 3\n2 6\n8 10\n15 18",
+        output: "1 6\n8 10\n15 18",
+        explanation: "[1,3] and [2,6] overlap \u2192 [1,6]."
       },
-      {
-        "input": 's = "bbbbb"',
-        "output": "1",
-        "explanation": 'The answer is "b", with the length of 1.'
-      },
-      {
-        "input": 's = "pwwkew"',
-        "output": "3",
-        "explanation": 'The answer is "wke", with the length of 3.'
+      { input: "2 2\n1 4\n4 5", output: "1 5", explanation: "Touching endpoints merge." }
+    ],
+    hints: [
+      "Sort by start \u2014 overlapping intervals become neighbors.",
+      "Extend the current merged interval while the next one starts at or before its end."
+    ],
+    editorial: `Sort by start, then sweep: keep a current merged interval and either **extend** it (next start \u2264 current end \u2192 end = max of ends) or **emit** it and start fresh. Sorting is the insight that turns pairwise overlap checks into one linear pass. O(n log n) time, O(n) output.`,
+    complexityTime: "O(n log n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode merge intervals"),
+    tags: ["array", "intervals", "sorting"],
+    starterCode: buildStarter("matrix", "intMatrix", "mergeIntervals"),
+    reference: (input) => {
+      const ls = lines(input);
+      const [n] = ints(ls[0]);
+      const iv = [];
+      for (let i = 0; i < n; i++) iv.push(ints(ls[1 + i]));
+      iv.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const out = [];
+      for (const [s, e] of iv) {
+        if (out.length && s <= out[out.length - 1][1]) {
+          out[out.length - 1][1] = Math.max(out[out.length - 1][1], e);
+        } else {
+          out.push([s, e]);
+        }
       }
-    ],
-    "constraints": [
-      "0 <= s.length <= 5 * 10^4",
-      "s consists of English letters, digits, symbols and spaces."
-    ],
-    "testCases": [
-      {
-        "input": '"abcabcbb"',
-        "expected": "3"
-      },
-      {
-        "input": '"bbbbb"',
-        "expected": "1"
-      },
-      {
-        "input": '"pwwkew"',
-        "expected": "3"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def lengthOfLongestSubstring(self, s: str) -> int:\n        pass",
-      "javascript": "var lengthOfLongestSubstring = function(s) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int lengthOfLongestSubstring(string s) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int lengthOfLongestSubstring(String s) {\n        return 0;\n    }\n}",
-      "c": "int lengthOfLongestSubstring(char* s) {\n    \n}"
+      return matOut(out);
     },
-    "tags": [
-      "Hash Table",
-      "String",
-      "Sliding Window"
-    ],
-    "companies": [
-      "Amazon",
-      "Bloomberg",
-      "Google"
-    ],
-    "acceptance": 34.7,
-    "points": 200,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "4 2\n1 3\n2 6\n8 10\n15 18", sample: true },
+      { input: "2 2\n1 4\n4 5", sample: true },
+      { input: "1 2\n0 0" },
+      { input: "3 2\n5 6\n1 2\n3 4" },
+      { input: "3 2\n1 10\n2 3\n4 5" }
+    ]
   },
   {
-    "number": 10,
-    "title": "Trapping Rain Water",
-    "slug": "trapping-rain-water",
-    "difficulty": "Hard",
-    "description": "Given `n` non-negative integers representing an elevation map where the width of each bar is `1`, compute how much water it can trap after raining.",
-    "examples": [
+    slug: "insert-interval",
+    title: "Insert Interval",
+    difficulty: "MEDIUM",
+    statement: `You are given non-overlapping intervals sorted by start, plus one new interval. Insert the new interval and merge as needed so the result stays sorted and non-overlapping.
+
+**Input**
+- Line 1: \`n 2\`
+- Next n lines: the existing intervals
+- Last line: the new interval \`start end\`
+
+**Output**: the resulting intervals, one per line.`,
+    constraints: `- 0 \u2264 n \u2264 10^4
+- Intervals sorted by start, non-overlapping.`,
+    examples: [
+      { input: "2 2\n1 3\n6 9\n2 5", output: "1 5\n6 9" },
       {
-        "input": "height = [0,1,0,2,1,0,1,3,2,1,2,1]",
-        "output": "6",
-        "explanation": "The above elevation map is represented by array [0,1,0,2,1,0,1,3,2,1,2,1]. In this case, 6 units of rain water are trapped."
-      },
-      {
-        "input": "height = [4,2,0,3,2,5]",
-        "output": "9",
-        "explanation": "Traps 9 units of water."
+        input: "5 2\n1 2\n3 5\n6 7\n8 10\n12 16\n4 8",
+        output: "1 2\n3 10\n12 16",
+        explanation: "The new [4,8] swallows [3,5], [6,7], [8,10]."
       }
     ],
-    "constraints": [
-      "n == height.length",
-      "1 <= n <= 2 * 10^4",
-      "0 <= height[i] <= 10^5"
+    hints: [
+      "Three phases: intervals entirely before, the overlapping middle, entirely after.",
+      "Fold every overlapping interval into the new one by min/max of endpoints."
     ],
-    "testCases": [
-      {
-        "input": "[0,1,0,2,1,0,1,3,2,1,2,1]",
-        "expected": "6"
-      },
-      {
-        "input": "[4,2,0,3,2,5]",
-        "expected": "9"
+    editorial: `Emit intervals ending before the new one starts; then absorb every interval that overlaps it (\`newStart = min\`, \`newEnd = max\`); then emit the merged interval and everything after. Sortedness makes each phase a contiguous scan \u2014 one O(n) pass, no re-sort needed.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode insert interval"),
+    tags: ["array", "intervals"],
+    starterCode: buildStarter("matrixK", "intMatrix", "insertInterval"),
+    reference: (input) => {
+      const ls = lines(input);
+      const [n] = ints(ls[0]);
+      const iv = [];
+      for (let i2 = 0; i2 < n; i2++) iv.push(ints(ls[1 + i2]));
+      let [ns, ne] = ints(ls[1 + n]);
+      const out = [];
+      let i = 0;
+      while (i < n && iv[i][1] < ns) out.push(iv[i++]);
+      while (i < n && iv[i][0] <= ne) {
+        ns = Math.min(ns, iv[i][0]);
+        ne = Math.max(ne, iv[i][1]);
+        i++;
       }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def trap(self, height: List[int]) -> int:\n        pass",
-      "javascript": "var trap = function(height) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int trap(vector<int>& height) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int trap(int[] height) {\n        return 0;\n    }\n}",
-      "c": "int trap(int* height, int heightSize) {\n    \n}"
+      out.push([ns, ne]);
+      while (i < n) out.push(iv[i++]);
+      return matOut(out);
     },
-    "tags": [
-      "Array",
-      "Two Pointers",
-      "Dynamic Programming",
-      "Stack"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Meta",
-      "Goldman Sachs"
-    ],
-    "acceptance": 61.2,
-    "points": 400,
-    "premium": true,
-    "hidden": false
+    tests: [
+      { input: "2 2\n1 3\n6 9\n2 5", sample: true },
+      { input: "5 2\n1 2\n3 5\n6 7\n8 10\n12 16\n4 8", sample: true },
+      { input: "0 2\n5 7" },
+      { input: "1 2\n1 5\n2 3" },
+      { input: "2 2\n1 2\n8 9\n4 5" }
+    ]
   },
   {
-    "number": 11,
-    "title": "3Sum",
-    "slug": "3sum",
-    "difficulty": "Medium",
-    "description": "Given an integer array `nums`, return all the triplets `[nums[i], nums[j], nums[k]]` such that `i != j`, `i != k`, and `j != k`, and `nums[i] + nums[j] + nums[k] == 0`.\n\nNotice that the solution set must not contain duplicate triplets.",
-    "examples": [
+    slug: "rotate-array",
+    title: "Rotate Array",
+    difficulty: "EASY",
+    statement: `Rotate the array \`nums\` to the right by \`k\` steps and return it.
+
+**Input**
+- Line 1: space-separated integers \`nums\`
+- Line 2: integer \`k\` (k \u2265 0)
+
+**Output**: the rotated array, space-separated.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^5
+- 0 \u2264 k \u2264 10^5`,
+    examples: [
+      { input: "1 2 3 4 5 6 7\n3", output: "5 6 7 1 2 3 4" },
+      { input: "-1 -100 3 99\n2", output: "3 99 -1 -100" }
+    ],
+    hints: [
+      "k can exceed the length \u2014 reduce it modulo n.",
+      "The O(1)-space trick: reverse the whole array, then reverse both halves."
+    ],
+    editorial: `Take \`k mod n\` first. The elegant in-place method is **three reversals**: reverse everything, then reverse the first k elements, then the rest \u2014 each element lands exactly k positions right of where it started (cyclically). O(n) time, O(1) space.`,
+    approaches: [
       {
-        "input": "nums = [-1,0,1,2,-1,-4]",
-        "output": "[[-1,-1,2],[-1,0,1]]",
-        "explanation": "Distinct triplets that sum to zero."
+        name: "Extra array",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "result[(i + k) % n] = nums[i]."
       },
       {
-        "input": "nums = [0,1,1]",
-        "output": "[]",
-        "explanation": "The only possible triplet does not sum up to 0."
-      },
-      {
-        "input": "nums = [0,0,0]",
-        "output": '[["0","0","0"]]',
-        "explanation": "The only possible triplet sums up to 0."
+        name: "Three reversals",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "Reverse all, reverse first k, reverse the remainder."
       }
     ],
-    "constraints": [
-      "3 <= nums.length <= 3000",
-      "-10^5 <= nums[i] <= 10^5"
-    ],
-    "testCases": [
-      {
-        "input": "[-1,0,1,2,-1,-4]",
-        "expected": "[[-1,-1,2],[-1,0,1]]"
-      },
-      {
-        "input": "[0,1,1]",
-        "expected": "[]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def threeSum(self, nums: List[int]) -> List[List[int]]:\n        pass",
-      "javascript": "var threeSum = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<int>> threeSum(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public List<List<Integer>> threeSum(int[] nums) {\n        return new ArrayList<>();\n    }\n}",
-      "c": "int** threeSum(int* nums, int numsSize, int* returnSize, int** returnColumnSizes) {\n    \n}"
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("rotate array three reversals"),
+    tags: ["array", "two-pointers", "math"],
+    starterCode: buildStarter("intArrayK", "intArray", "rotate"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const k = int(l1) % nums.length;
+      return arrOut([...nums.slice(nums.length - k), ...nums.slice(0, nums.length - k)]);
     },
-    "tags": [
-      "Array",
-      "Two Pointers",
-      "Sorting"
-    ],
-    "companies": [
-      "Amazon",
-      "Meta",
-      "Microsoft",
-      "Google"
-    ],
-    "acceptance": 34.2,
-    "points": 200,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "1 2 3 4 5 6 7\n3", sample: true },
+      { input: "-1 -100 3 99\n2", sample: true },
+      { input: "1\n0" },
+      { input: "1 2\n3" },
+      { input: "1 2 3\n3" }
+    ]
   },
   {
-    "number": 12,
-    "title": "Climbing Stairs",
-    "slug": "climbing-stairs",
-    "difficulty": "Easy",
-    "description": "You are climbing a staircase. It takes `n` steps to reach the top.\n\nEach time you can either climb `1` or `2` steps. In how many distinct ways can you climb to the top?",
-    "examples": [
-      {
-        "input": "n = 2",
-        "output": "2",
-        "explanation": "1. 1 step + 1 step\n2. 2 steps"
-      },
-      {
-        "input": "n = 3",
-        "output": "3",
-        "explanation": "1. 1 + 1 + 1\n2. 1 + 2\n3. 2 + 1"
+    slug: "first-missing-positive",
+    title: "First Missing Positive",
+    difficulty: "HARD",
+    statement: `Given an unsorted integer array, return the smallest **positive** integer not present. Your algorithm must run in O(n) time and O(1) extra space.
+
+**Input**: one line of space-separated integers.
+**Output**: the smallest missing positive.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^5
+- -2^31 \u2264 nums[i] \u2264 2^31 \u2212 1`,
+    examples: [
+      { input: "1 2 0", output: "3" },
+      { input: "3 4 -1 1", output: "2" },
+      { input: "7 8 9 11 12", output: "1" }
+    ],
+    hints: [
+      "The answer is always in [1, n+1] \u2014 values outside that range are irrelevant.",
+      "Use the array itself as a hash table: value v belongs at index v\u22121.",
+      "Cyclic sort: keep swapping nums[i] to its home slot until it can't move."
+    ],
+    editorial: `Key fact: with n elements the answer lies in \`[1, n+1]\`. **Cyclic sort** places each value v \u2208 [1, n] at index v\u22121 by repeated swapping (each swap homes at least one value, so total swaps \u2264 n). A final scan finds the first index i where \`nums[i] \u2260 i+1\` \u2014 that i+1 is the answer; if all match, it's n+1. O(n) time, O(1) space, using the array itself as the hash table.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode first missing positive"),
+    tags: ["array", "hash-table", "cyclic-sort"],
+    starterCode: buildStarter("intArray", "int", "firstMissingPositive"),
+    reference: (input) => {
+      const nums = first(input);
+      const n = nums.length;
+      for (let i = 0; i < n; i++) {
+        while (nums[i] > 0 && nums[i] <= n && nums[nums[i] - 1] !== nums[i]) {
+          const j = nums[i] - 1;
+          [nums[i], nums[j]] = [nums[j], nums[i]];
+        }
       }
-    ],
-    "constraints": [
-      "1 <= n <= 45"
-    ],
-    "testCases": [
-      {
-        "input": "2",
-        "expected": "2"
-      },
-      {
-        "input": "3",
-        "expected": "3"
-      },
-      {
-        "input": "5",
-        "expected": "8"
+      for (let i = 0; i < n; i++) {
+        if (nums[i] !== i + 1) return String(i + 1);
       }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def climbStairs(self, n: int) -> int:\n        pass",
-      "javascript": "var climbStairs = function(n) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int climbStairs(int n) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int climbStairs(int n) {\n        return 0;\n    }\n}",
-      "c": "int climbStairs(int n) {\n    \n}"
+      return String(n + 1);
     },
-    "tags": [
-      "Math",
-      "Dynamic Programming",
-      "Memoization"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Apple"
-    ],
-    "acceptance": 52.8,
-    "points": 100,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "1 2 0", sample: true },
+      { input: "3 4 -1 1", sample: true },
+      { input: "7 8 9 11 12", sample: true },
+      { input: "1" },
+      { input: "2" },
+      { input: "1 1" }
+    ]
   },
   {
-    "number": 13,
-    "title": "Product of Array Except Self",
-    "slug": "product-of-array-except-self",
-    "difficulty": "Medium",
-    "description": "Given an integer array `nums`, return an array `answer` such that `answer[i]` is equal to the product of all the elements of `nums` except `nums[i]`.\n\nThe product of any prefix or suffix of `nums` is guaranteed to fit in a 32-bit integer.\n\nYou must write an algorithm that runs in `O(n)` time and without using the division operation.",
-    "examples": [
+    slug: "longest-consecutive-sequence",
+    title: "Longest Consecutive Sequence",
+    difficulty: "MEDIUM",
+    statement: `Given an unsorted array of integers, return the length of the longest run of consecutive values (e.g. 1, 2, 3, 4) present anywhere in the array. Your algorithm must run in O(n) time \u2014 sorting is the baseline to beat.
+
+**Input**: one line of space-separated integers (may be empty).
+**Output**: the length of the longest consecutive run.`,
+    constraints: `- 0 \u2264 nums.length \u2264 10^5
+- -10^9 \u2264 values \u2264 10^9`,
+    examples: [
       {
-        "input": "nums = [1,2,3,4]",
-        "output": "[24,12,8,6]"
+        input: "100 4 200 1 3 2",
+        output: "4",
+        explanation: "The run 1, 2, 3, 4 has length 4."
+      },
+      { input: "0 3 7 2 5 8 4 6 0 1", output: "9" }
+    ],
+    hints: [
+      "A hash set answers 'does x exist?' in O(1).",
+      "Only start counting from numbers that begin a run \u2014 those with no x\u22121 in the set.",
+      "Each element is then visited at most twice overall."
+    ],
+    editorial: `Dump everything into a hash set. A value x starts a run only if x\u22121 is absent \u2014 so for each such x, walk x+1, x+2, \u2026 while they exist and track the best length. Every element is touched O(1) times amortized (once as a member, once as a potential starter), giving O(n) despite the nested-looking loop. The 'only start at run beginnings' guard is the entire trick \u2014 without it the walk degenerates to O(n\xB2).`,
+    approaches: [
+      {
+        name: "Sort and scan",
+        complexityTime: "O(n log n)",
+        complexitySpace: "O(1)",
+        body: "Sort, then count streaks skipping duplicates. Simple, but misses the O(n) requirement."
       },
       {
-        "input": "nums = [-1,1,0,-3,3]",
-        "output": "[0,0,9,0,0]"
+        name: "Hash set run-starts",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "Set membership + walk upward only from values with no predecessor."
       }
     ],
-    "constraints": [
-      "2 <= nums.length <= 10^5",
-      "-30 <= nums[i] <= 30"
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,3,4]",
-        "expected": "[24,12,8,6]"
-      },
-      {
-        "input": "[-1,1,0,-3,3]",
-        "expected": "[0,0,9,0,0]"
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode longest consecutive sequence"),
+    tags: ["array", "hash-set"],
+    starterCode: buildStarter("intArray", "int", "longestConsecutive"),
+    reference: (input) => {
+      const nums = first(input);
+      const set = new Set(nums);
+      let best = 0;
+      for (const x of set) {
+        if (set.has(x - 1)) continue;
+        let len = 1;
+        while (set.has(x + len)) len++;
+        if (len > best) best = len;
       }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def productExceptSelf(self, nums: List[int]) -> List[int]:\n        pass",
-      "javascript": "var productExceptSelf = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<int> productExceptSelf(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int[] productExceptSelf(int[] nums) {\n        return new int[]{};\n    }\n}",
-      "c": "int* productExceptSelf(int* nums, int numsSize, int* returnSize) {\n    \n}"
+      return String(best);
     },
-    "tags": [
-      "Array",
-      "Prefix Sum"
-    ],
-    "companies": [
-      "Amazon",
-      "Apple",
-      "Meta",
-      "Microsoft"
-    ],
-    "acceptance": 65.4,
-    "points": 200,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "100 4 200 1 3 2", sample: true },
+      { input: "0 3 7 2 5 8 4 6 0 1", sample: true },
+      { input: "" },
+      { input: "5" },
+      { input: "9 1 4 7 3 -1 0 5 8 -1 6" },
+      { input: "-3 -2 -1 0 1" }
+    ]
   },
   {
-    "number": 14,
-    "title": "Search in Rotated Sorted Array",
-    "slug": "search-in-rotated-sorted-array",
-    "difficulty": "Medium",
-    "description": "There is an integer array `nums` sorted in ascending order (with distinct values).\n\nPrior to being passed to your function, `nums` is possibly rotated at an unknown pivot index `k`.\n\nGiven the array `nums` after the possible rotation and an integer `target`, return the index of `target` if it is in `nums`, or `-1` if it is not in `nums`.\n\nYou must write an algorithm with `O(log n)` runtime complexity.",
-    "examples": [
+    slug: "pascals-triangle",
+    title: "Pascal's Triangle",
+    difficulty: "EASY",
+    statement: `Generate the first \`n\` rows of Pascal's triangle, where every number is the sum of the two directly above it.
+
+**Input**: one line, the integer \`n\`.
+**Output**: n lines \u2014 row i contains i space-separated integers.`,
+    constraints: `- 1 \u2264 n \u2264 30`,
+    examples: [
       {
-        "input": "nums = [4,5,6,7,0,1,2], target = 0",
-        "output": "4"
+        input: "5",
+        output: "1\n1 1\n1 2 1\n1 3 3 1\n1 4 6 4 1"
       },
-      {
-        "input": "nums = [4,5,6,7,0,1,2], target = 3",
-        "output": "-1"
+      { input: "1", output: "1" }
+    ],
+    hints: [
+      "Row i has i+1 entries; the first and last are always 1.",
+      "Each interior entry is prev[j-1] + prev[j]."
+    ],
+    editorial: `Build row by row: start each row as all 1s, then fill interior cells from the previous row \u2014 \`row[j] = prev[j\u22121] + prev[j]\`. Total work is 1 + 2 + \u2026 + n = O(n\xB2), which is also the output size, so it's optimal. The follow-up worth knowing: a *single* row k can be produced in O(k) with the multiplicative identity C(n, r+1) = C(n, r) \xB7 (n\u2212r)/(r+1).`,
+    complexityTime: "O(n\xB2)",
+    complexitySpace: "O(n\xB2)",
+    youtubeUrl: yt("pascals triangle leetcode"),
+    tags: ["array", "math", "simulation"],
+    starterCode: buildStarter("int", "intMatrix", "generate"),
+    reference: (input) => {
+      const n = int(lines(input)[0]);
+      const rows = [];
+      for (let i = 0; i < n; i++) {
+        const row = new Array(i + 1).fill(1);
+        for (let j = 1; j < i; j++) row[j] = rows[i - 1][j - 1] + rows[i - 1][j];
+        rows.push(row);
       }
-    ],
-    "constraints": [
-      "1 <= nums.length <= 5000",
-      "-10^4 <= nums[i] <= 10^4"
-    ],
-    "testCases": [
-      {
-        "input": "[4,5,6,7,0,1,2]\n0",
-        "expected": "4"
-      },
-      {
-        "input": "[4,5,6,7,0,1,2]\n3",
-        "expected": "-1"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def search(self, nums: List[int], target: int) -> int:\n        pass",
-      "javascript": "var search = function(nums, target) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int search(vector<int>& nums, int target) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int search(int[] nums, int target) {\n        return -1;\n    }\n}",
-      "c": "int search(int* nums, int numsSize, int target) {\n    \n}"
+      return matOut(rows);
     },
-    "tags": [
-      "Array",
-      "Binary Search"
-    ],
-    "companies": [
-      "Amazon",
-      "Meta",
-      "LinkedIn"
-    ],
-    "acceptance": 40.1,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 15,
-    "title": "Coin Change",
-    "slug": "coin-change",
-    "difficulty": "Medium",
-    "description": "You are given an integer array `coins` representing coins of different denominations and an integer `amount` representing a total amount of money.\n\nReturn the fewest number of coins that you need to make up that amount. If that amount of money cannot be made up by any combination of the coins, return `-1`.\n\nYou may assume that you have an infinite number of each kind of coin.",
-    "examples": [
-      {
-        "input": "coins = [1,2,5], amount = 11",
-        "output": "3",
-        "explanation": "11 = 5 + 5 + 1"
-      },
-      {
-        "input": "coins = [2], amount = 3",
-        "output": "-1"
-      }
-    ],
-    "constraints": [
-      "1 <= coins.length <= 12",
-      "1 <= coins[i] <= 2^31 - 1",
-      "0 <= amount <= 10^4"
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,5]\n11",
-        "expected": "3"
-      },
-      {
-        "input": "[2]\n3",
-        "expected": "-1"
-      },
-      {
-        "input": "[1]\n0",
-        "expected": "0"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def coinChange(self, coins: List[int], amount: int) -> int:\n        pass",
-      "javascript": "var coinChange = function(coins, amount) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int coinChange(vector<int>& coins, int amount) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int coinChange(int[] coins, int amount) {\n        return -1;\n    }\n}",
-      "c": "int coinChange(int* coins, int coinsSize, int amount) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Dynamic Programming",
-      "Breadth-First Search"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Walmart"
-    ],
-    "acceptance": 43.1,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 16,
-    "title": "Group Anagrams",
-    "slug": "group-anagrams",
-    "difficulty": "Medium",
-    "description": "Given an array of strings `strs`, group the anagrams together. You can return the answer in any order.\n\nAn Anagram is a word or phrase formed by rearranging the letters of a different word or phrase, typically using all the original letters exactly once.",
-    "examples": [
-      {
-        "input": 'strs = ["eat","tea","tan","ate","nat","bat"]',
-        "output": '[["bat"],["nat","tan"],["ate","eat","tea"]]'
-      },
-      {
-        "input": 'strs = [""]',
-        "output": '[[""]]',
-        "explanation": "Single empty string."
-      },
-      {
-        "input": 'strs = ["a"]',
-        "output": '[["a"]]',
-        "explanation": "Single character string."
-      }
-    ],
-    "constraints": [
-      "1 <= strs.length <= 10^4",
-      "0 <= strs[i].length <= 100",
-      "strs[i] consists of lowercase English letters."
-    ],
-    "testCases": [
-      {
-        "input": '["eat","tea","tan","ate","nat","bat"]',
-        "expected": '[["eat","tea","ate"],["tan","nat"],["bat"]]'
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def groupAnagrams(self, strs: List[str]) -> List[List[str]]:\n        pass",
-      "javascript": "var groupAnagrams = function(strs) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<string>> groupAnagrams(vector<string>& strs) {\n        \n    }\n};",
-      "java": "class Solution {\n    public List<List<String>> groupAnagrams(String[] strs) {\n        return new ArrayList<>();\n    }\n}",
-      "c": "char*** groupAnagrams(char** strs, int strsSize, int* returnSize, int** returnColumnSizes) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Hash Table",
-      "String",
-      "Sorting"
-    ],
-    "companies": [
-      "Amazon",
-      "Microsoft",
-      "Uber"
-    ],
-    "acceptance": 67.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 17,
-    "title": "Reverse Linked List",
-    "slug": "reverse-linked-list",
-    "difficulty": "Easy",
-    "description": "Given the head of a singly linked list, reverse the list, and return the reversed list.",
-    "examples": [
-      {
-        "input": "head = [1,2,3,4,5]",
-        "output": "[5,4,3,2,1]"
-      },
-      {
-        "input": "head = [1,2]",
-        "output": "[2,1]",
-        "explanation": "Two nodes reversed."
-      },
-      {
-        "input": "head = []",
-        "output": "[]",
-        "explanation": "Empty list remains empty."
-      }
-    ],
-    "constraints": [
-      "The number of nodes in the list is the range [0, 5000].",
-      "-5000 <= Node.val <= 5000"
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,3,4,5]",
-        "expected": "[5,4,3,2,1]"
-      },
-      {
-        "input": "[1,2]",
-        "expected": "[2,1]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def reverseList(self, head: Optional[ListNode]) -> Optional[ListNode]:\n        pass",
-      "javascript": "var reverseList = function(head) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    ListNode* reverseList(ListNode* head) {\n        \n    }\n};",
-      "java": "class Solution {\n    public ListNode reverseList(ListNode head) {\n        return null;\n    }\n}",
-      "c": "struct ListNode* reverseList(struct ListNode* head) {\n    \n}"
-    },
-    "tags": [
-      "Linked List",
-      "Recursion"
-    ],
-    "companies": [
-      "Amazon",
-      "Apple",
-      "Google",
-      "Meta"
-    ],
-    "acceptance": 75.6,
-    "points": 100,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 18,
-    "title": "Longest Palindromic Substring",
-    "slug": "longest-palindromic-substring",
-    "difficulty": "Medium",
-    "description": "Given a string `s`, return the longest palindromic substring in `s`.",
-    "examples": [
-      {
-        "input": 's = "babad"',
-        "output": '"bab"',
-        "explanation": '"aba" is also a valid answer.'
-      },
-      {
-        "input": 's = "cbbd"',
-        "output": '"bb"',
-        "explanation": 'The longest palindromic substring is "bb".'
-      }
-    ],
-    "constraints": [
-      "1 <= s.length <= 1000",
-      "s consist of only digits and English letters."
-    ],
-    "testCases": [
-      {
-        "input": '"babad"',
-        "expected": '"bab"'
-      },
-      {
-        "input": '"cbbd"',
-        "expected": '"bb"'
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def longestPalindrome(self, s: str) -> str:\n        pass",
-      "javascript": "var longestPalindrome = function(s) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    string longestPalindrome(string s) {\n        \n    }\n};",
-      "java": 'class Solution {\n    public String longestPalindrome(String s) {\n        return "";\n    }\n}',
-      "c": "char* longestPalindrome(char* s) {\n    \n}"
-    },
-    "tags": [
-      "String",
-      "Dynamic Programming"
-    ],
-    "companies": [
-      "Amazon",
-      "Microsoft",
-      "Adobe"
-    ],
-    "acceptance": 33.7,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 19,
-    "title": "Word Break",
-    "slug": "word-break",
-    "difficulty": "Medium",
-    "description": "Given a string `s` and a dictionary of strings `wordDict`, return `true` if `s` can be segmented into a space-separated sequence of one or more dictionary words.\n\nNote that the same word in the dictionary may be reused multiple times in the segmentation.",
-    "examples": [
-      {
-        "input": 's = "leetcode", wordDict = ["leet","code"]',
-        "output": "true"
-      },
-      {
-        "input": 's = "applepenapple", wordDict = ["apple","pen"]',
-        "output": "true",
-        "explanation": 'Return true because "applepenapple" can be segmented as "apple pen apple".'
-      },
-      {
-        "input": 's = "catsandog", wordDict = ["cats","dog","sand","and","cat"]',
-        "output": "false",
-        "explanation": "Cannot be segmented."
-      }
-    ],
-    "constraints": [
-      "1 <= s.length <= 300",
-      "1 <= wordDict.length <= 1000"
-    ],
-    "testCases": [
-      {
-        "input": '"leetcode"\n["leet","code"]',
-        "expected": "true"
-      },
-      {
-        "input": '"applepenapple"\n["apple","pen"]',
-        "expected": "true"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def wordBreak(self, s: str, wordDict: List[str]) -> bool:\n        pass",
-      "javascript": "var wordBreak = function(s, wordDict) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    bool wordBreak(string s, vector<string>& wordDict) {\n        \n    }\n};",
-      "java": "class Solution {\n    public boolean wordBreak(String s, List<String> wordDict) {\n        return false;\n    }\n}",
-      "c": "bool wordBreak(char* s, char** wordDict, int wordDictSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Hash Table",
-      "String",
-      "Dynamic Programming",
-      "Trie"
-    ],
-    "companies": [
-      "Amazon",
-      "Meta",
-      "Bloomberg"
-    ],
-    "acceptance": 46.5,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 20,
-    "title": "Number of Islands",
-    "slug": "number-of-islands",
-    "difficulty": "Medium",
-    "description": "Given an `m x n` 2D binary grid `grid` which represents a map of `'1'`s (land) and `'0'`s (water), return the number of islands.\n\nAn island is surrounded by water and is formed by connecting adjacent lands horizontally or vertically. You may assume all four edges of the grid are all surrounded by water.",
-    "examples": [
-      {
-        "input": 'grid = [["1","1","1","1","0"],["1","1","0","1","0"],["1","1","0","0","0"],["0","0","0","0","0"]]',
-        "output": "1"
-      },
-      {
-        "input": 'grid = [["1","1","0","0","0"],["1","1","0","0","0"],["0","0","1","0","0"],["0","0","0","1","1"]]',
-        "output": "3",
-        "explanation": "Three separate connected land groups."
-      }
-    ],
-    "constraints": [
-      "m == grid.length",
-      "n == grid[i].length",
-      "1 <= m, n <= 300"
-    ],
-    "testCases": [
-      {
-        "input": '[["1","1","1","1","0"],["1","1","0","1","0"],["1","1","0","0","0"],["0","0","0","0","0"]]',
-        "expected": "1"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def numIslands(self, grid: List[List[str]]) -> int:\n        pass",
-      "javascript": "var numIslands = function(grid) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int numIslands(vector<vector<char>>& grid) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int numIslands(char[][] grid) {\n        return 0;\n    }\n}",
-      "c": "int numIslands(char** grid, int gridSize, int* gridColSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Depth-First Search",
-      "Breadth-First Search",
-      "Union Find",
-      "Matrix"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Microsoft",
-      "Bloomberg"
-    ],
-    "acceptance": 58.4,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 21,
-    "title": "Rotate Image",
-    "slug": "rotate-image",
-    "difficulty": "Medium",
-    "description": "You are given an `n x n` 2D matrix representing an image, rotate the image by **90 degrees (clockwise)** in-place.",
-    "examples": [
-      {
-        "input": "matrix = [[1,2,3],[4,5,6],[7,8,9]]",
-        "output": "[[7,4,1],[8,5,2],[9,6,3]]"
-      },
-      {
-        "input": "matrix = [[5,1,9,11],[2,4,8,10],[13,3,6,7],[15,14,12,16]]",
-        "output": "[[15,13,2,5],[14,3,4,1],[12,6,8,9],[16,7,10,11]]",
-        "explanation": "Matrix rotated 90 degrees clockwise."
-      }
-    ],
-    "constraints": [
-      "n == matrix.length == matrix[i].length",
-      "1 <= n <= 20"
-    ],
-    "testCases": [
-      {
-        "input": "[[1,2,3],[4,5,6],[7,8,9]]",
-        "expected": "[[7,4,1],[8,5,2],[9,6,3]]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def rotate(self, matrix: List[List[int]]) -> None:\n        pass",
-      "javascript": "var rotate = function(matrix) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    void rotate(vector<vector<int>>& matrix) {\n        \n    }\n};",
-      "java": "class Solution {\n    public void rotate(int[][] matrix) {\n    }\n}",
-      "c": "void rotate(int** matrix, int matrixSize, int* matrixColSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Math",
-      "Matrix"
-    ],
-    "companies": [
-      "Amazon",
-      "Microsoft",
-      "Apple"
-    ],
-    "acceptance": 72.1,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 22,
-    "title": "Spiral Matrix",
-    "slug": "spiral-matrix",
-    "difficulty": "Medium",
-    "description": "Given an `m x n` matrix, return all elements of the matrix in spiral order.",
-    "examples": [
-      {
-        "input": "matrix = [[1,2,3],[4,5,6],[7,8,9]]",
-        "output": "[1,2,3,6,9,8,7,4,5]"
-      },
-      {
-        "input": "matrix = [[1,2,3,4],[5,6,7,8],[9,10,11,12]]",
-        "output": "[1,2,3,4,8,12,11,10,9,5,6,7]",
-        "explanation": "Spiral order traversal."
-      }
-    ],
-    "constraints": [
-      "m == matrix.length",
-      "n == matrix[i].length",
-      "1 <= m, n <= 10"
-    ],
-    "testCases": [
-      {
-        "input": "[[1,2,3],[4,5,6],[7,8,9]]",
-        "expected": "[1,2,3,6,9,8,7,4,5]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def spiralOrder(self, matrix: List[List[int]]) -> List[int]:\n        pass",
-      "javascript": "var spiralOrder = function(matrix) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<int> spiralOrder(vector<vector<int>>& matrix) {\n        \n    }\n};",
-      "java": "class Solution {\n    public List<Integer> spiralOrder(int[][] matrix) {\n        return new ArrayList<>();\n    }\n}",
-      "c": "int* spiralOrder(int** matrix, int matrixSize, int* matrixColSize, int* returnSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Matrix",
-      "Simulation"
-    ],
-    "companies": [
-      "Microsoft",
-      "Amazon",
-      "Apple"
-    ],
-    "acceptance": 48.3,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 23,
-    "title": "Merge Intervals",
-    "slug": "merge-intervals",
-    "difficulty": "Medium",
-    "description": "Given an array of intervals where `intervals[i] = [starti, endi]`, merge all overlapping intervals, and return an array of the non-overlapping intervals that cover all the intervals in the input.",
-    "examples": [
-      {
-        "input": "intervals = [[1,3],[2,6],[8,10],[15,18]]",
-        "output": "[[1,6],[8,10],[15,18]]"
-      },
-      {
-        "input": "intervals = [[1,4],[4,5]]",
-        "output": "[[1,5]]",
-        "explanation": "Intervals [1,4] and [4,5] are considered overlapping."
-      }
-    ],
-    "constraints": [
-      "1 <= intervals.length <= 10^4",
-      "intervals[i].length == 2"
-    ],
-    "testCases": [
-      {
-        "input": "[[1,3],[2,6],[8,10],[15,18]]",
-        "expected": "[[1,6],[8,10],[15,18]]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def merge(self, intervals: List[List[int]]) -> List[List[int]]:\n        pass",
-      "javascript": "var merge = function(intervals) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<int>> merge(vector<vector<int>>& intervals) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int[][] merge(int[][] intervals) {\n        return new int[][]{};\n    }\n}",
-      "c": "int** merge(int** intervals, int intervalsSize, int* intervalsColSize, int* returnSize, int** returnColumnSizes) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Sorting"
-    ],
-    "companies": [
-      "Meta",
-      "Amazon",
-      "Google"
-    ],
-    "acceptance": 46.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 24,
-    "title": "Insert Interval",
-    "slug": "insert-interval",
-    "difficulty": "Medium",
-    "description": "You are given an array of non-overlapping intervals sorted by start time, insert `newInterval` into `intervals` such that intervals is still sorted and non-overlapping.",
-    "examples": [
-      {
-        "input": "intervals = [[1,3],[6,9]], newInterval = [2,5]",
-        "output": "[[1,5],[6,9]]"
-      },
-      {
-        "input": "intervals = [[1,2],[3,5],[6,7],[8,10],[12,16]], newInterval = [4,8]",
-        "output": "[[1,2],[3,10],[12,16]]",
-        "explanation": "Because the new interval [4,8] overlaps with [3,5],[6,7],[8,10]."
-      }
-    ],
-    "constraints": [
-      "0 <= intervals.length <= 10^4",
-      "newInterval.length == 2"
-    ],
-    "testCases": [
-      {
-        "input": "[[1,3],[6,9]]\n[2,5]",
-        "expected": "[[1,5],[6,9]]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def insert(self, intervals: List[List[int]], newInterval: List[int]) -> List[List[int]]:\n        pass",
-      "javascript": "var insert = function(intervals, newInterval) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<int>> insert(vector<vector<int>>& intervals, vector<int>& newInterval) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int[][] insert(int[][] intervals, int[] newInterval) {\n        return new int[][]{};\n    }\n}",
-      "c": "int** insert(int** intervals, int intervalsSize, int* intervalsColSize, int* newInterval, int newIntervalSize, int* returnSize, int** returnColumnSizes) {\n    \n}"
-    },
-    "tags": [
-      "Array"
-    ],
-    "companies": [
-      "Google",
-      "Meta",
-      "Amazon"
-    ],
-    "acceptance": 40.2,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 25,
-    "title": "Combination Sum",
-    "slug": "combination-sum",
-    "difficulty": "Medium",
-    "description": "Given an array of distinct integers `candidates` and a target integer `target`, return a list of all unique combinations of candidates where the chosen numbers sum to target.",
-    "examples": [
-      {
-        "input": "candidates = [2,3,6,7], target = 7",
-        "output": "[[2,2,3],[7]]"
-      },
-      {
-        "input": "candidates = [2,3,5], target = 8",
-        "output": "[[2,2,2,2],[2,3,3],[3,5]]",
-        "explanation": "2, 3, and 5 can form target 8 in multiple combinations."
-      },
-      {
-        "input": "candidates = [2], target = 1",
-        "output": "[]",
-        "explanation": "Target cannot be formed."
-      }
-    ],
-    "constraints": [
-      "1 <= candidates.length <= 30",
-      "2 <= candidates[i] <= 40"
-    ],
-    "testCases": [
-      {
-        "input": "[2,3,6,7]\n7",
-        "expected": "[[2,2,3],[7]]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def combinationSum(self, candidates: List[int], target: int) -> List[List[int]]:\n        pass",
-      "javascript": "var combinationSum = function(candidates, target) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<int>> combinationSum(vector<int>& candidates, int target) {\n        \n    }\n};",
-      "java": "class Solution {\n    public List<List<Integer>> combinationSum(int[] candidates, int target) {\n        return new ArrayList<>();\n    }\n}",
-      "c": "int** combinationSum(int* candidates, int candidatesSize, int target, int* returnSize, int** returnColumnSizes) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Backtracking"
-    ],
-    "companies": [
-      "Amazon",
-      "Airbnb",
-      "Microsoft"
-    ],
-    "acceptance": 70.1,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 26,
-    "title": "Permutations",
-    "slug": "permutations",
-    "difficulty": "Medium",
-    "description": "Given an array `nums` of distinct integers, return all the possible permutations. You can return the answer in any order.",
-    "examples": [
-      {
-        "input": "nums = [1,2,3]",
-        "output": "[[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]]"
-      },
-      {
-        "input": "nums = [0,1]",
-        "output": "[[0,1],[1,0]]",
-        "explanation": "All two permutations."
-      },
-      {
-        "input": "nums = [1]",
-        "output": "[[1]]",
-        "explanation": "Single element array."
-      }
-    ],
-    "constraints": [
-      "1 <= nums.length <= 6",
-      "-10 <= nums[i] <= 10"
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,3]",
-        "expected": "[[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def permute(self, nums: List[int]) -> List[List[int]]:\n        pass",
-      "javascript": "var permute = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<int>> permute(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public List<List<Integer>> permute(int[] nums) {\n        return new ArrayList<>();\n    }\n}",
-      "c": "int** permute(int* nums, int numsSize, int* returnSize, int** returnColumnSizes) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Backtracking"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Meta"
-    ],
-    "acceptance": 77.4,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 27,
-    "title": "Subsets",
-    "slug": "subsets",
-    "difficulty": "Medium",
-    "description": "Given an integer array `nums` of unique elements, return all possible subsets (the power set). The solution set must not contain duplicate subsets.",
-    "examples": [
-      {
-        "input": "nums = [1,2,3]",
-        "output": "[[],[1],[2],[1,2],[3],[1,3],[2,3],[1,2,3]]"
-      },
-      {
-        "input": "nums = [0]",
-        "output": "[[],[0]]",
-        "explanation": "All subsets of [0]."
-      }
-    ],
-    "constraints": [
-      "1 <= nums.length <= 10",
-      "-10 <= nums[i] <= 10"
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,3]",
-        "expected": "[[],[1],[2],[1,2],[3],[1,3],[2,3],[1,2,3]]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def subsets(self, nums: List[int]) -> List[List[int]]:\n        pass",
-      "javascript": "var subsets = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<int>> subsets(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public List<List<Integer>> subsets(int[] nums) {\n        return new ArrayList<>();\n    }\n}",
-      "c": "int** subsets(int* nums, int numsSize, int* returnSize, int** returnColumnSizes) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Backtracking",
-      "Bit Manipulation"
-    ],
-    "companies": [
-      "Amazon",
-      "Meta",
-      "Bloomberg"
-    ],
-    "acceptance": 76.5,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 28,
-    "title": "Word Search",
-    "slug": "word-search",
-    "difficulty": "Medium",
-    "description": "Given an `m x n` grid of characters `board` and a string `word`, return `true` if `word` exists in the grid. The word can be constructed from letters of sequentially adjacent cells.",
-    "examples": [
-      {
-        "input": 'board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], word = "ABCCED"',
-        "output": "true"
-      },
-      {
-        "input": 'board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], word = "SEE"',
-        "output": "true",
-        "explanation": 'Word "SEE" exists in the board.'
-      },
-      {
-        "input": 'board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], word = "ABCB"',
-        "output": "false",
-        "explanation": "Same cell cannot be used twice."
-      }
-    ],
-    "constraints": [
-      "m == board.length",
-      "n == board[i].length",
-      "1 <= m, n <= 6"
-    ],
-    "testCases": [
-      {
-        "input": '[["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]]\n"ABCCED"',
-        "expected": "true"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def exist(self, board: List[List[str]], word: str) -> bool:\n        pass",
-      "javascript": "var exist = function(board, word) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    bool exist(vector<vector<char>>& board, string word) {\n        \n    }\n};",
-      "java": "class Solution {\n    public boolean exist(char[][] board, String word) {\n        return false;\n    }\n}",
-      "c": "bool exist(char** board, int boardSize, int* boardColSize, char* word) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Backtracking",
-      "Matrix"
-    ],
-    "companies": [
-      "Amazon",
-      "Bloomberg",
-      "Microsoft"
-    ],
-    "acceptance": 41.2,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 29,
-    "title": "Validate Binary Search Tree",
-    "slug": "validate-binary-search-tree",
-    "difficulty": "Medium",
-    "description": "Given the root of a binary tree, determine if it is a valid binary search tree (BST).",
-    "examples": [
-      {
-        "input": "root = [2,1,3]",
-        "output": "true"
-      },
-      {
-        "input": "root = [5,1,4,null,null,3,6]",
-        "output": "false",
-        "explanation": "The root node's value is 5 but its right child's value is 4."
-      }
-    ],
-    "constraints": [
-      "The number of nodes in the tree is in the range [1, 10^4]."
-    ],
-    "testCases": [
-      {
-        "input": "[2,1,3]",
-        "expected": "true"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def isValidBST(self, root: Optional[TreeNode]) -> bool:\n        pass",
-      "javascript": "var isValidBST = function(root) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    bool isValidBST(TreeNode* root) {\n        \n    }\n};",
-      "java": "class Solution {\n    public boolean isValidBST(TreeNode root) {\n        return false;\n    }\n}",
-      "c": "bool isValidBST(struct TreeNode* root) {\n    \n}"
-    },
-    "tags": [
-      "Tree",
-      "Depth-First Search",
-      "Binary Search Tree"
-    ],
-    "companies": [
-      "Amazon",
-      "Meta",
-      "Microsoft"
-    ],
-    "acceptance": 32.5,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 30,
-    "title": "Maximum Depth of Binary Tree",
-    "slug": "maximum-depth-of-binary-tree",
-    "difficulty": "Easy",
-    "description": "Given the root of a binary tree, return its maximum depth. Maximum depth is the number of nodes along the longest path from the root node down to the farthest leaf node.",
-    "examples": [
-      {
-        "input": "root = [3,9,20,null,null,15,7]",
-        "output": "3"
-      },
-      {
-        "input": "root = [1,null,2]",
-        "output": "2",
-        "explanation": "The binary tree has depth 2."
-      }
-    ],
-    "constraints": [
-      "The number of nodes in the tree is in the range [0, 10^4]."
-    ],
-    "testCases": [
-      {
-        "input": "[3,9,20,null,null,15,7]",
-        "expected": "3"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def maxDepth(self, root: Optional[TreeNode]) -> int:\n        pass",
-      "javascript": "var maxDepth = function(root) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int maxDepth(TreeNode* root) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int maxDepth(TreeNode root) {\n        return 0;\n    }\n}",
-      "c": "int maxDepth(struct TreeNode* root) {\n    \n}"
-    },
-    "tags": [
-      "Tree",
-      "Depth-First Search",
-      "Breadth-First Search"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Apple"
-    ],
-    "acceptance": 74.9,
-    "points": 100,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 31,
-    "title": "Same Tree",
-    "slug": "same-tree",
-    "difficulty": "Easy",
-    "description": "Given the roots of two binary trees `p` and `q`, write a function to check if they are the same or not.",
-    "examples": [
-      {
-        "input": "p = [1,2,3], q = [1,2,3]",
-        "output": "true"
-      },
-      {
-        "input": "p = [1,2], q = [1,null,2]",
-        "output": "false",
-        "explanation": "Structures are different."
-      },
-      {
-        "input": "p = [1,2,1], q = [1,1,2]",
-        "output": "false",
-        "explanation": "Values are different."
-      }
-    ],
-    "constraints": [
-      "The number of nodes in both trees is in the range [0, 100]."
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,3]\n[1,2,3]",
-        "expected": "true"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def isSameTree(self, p: Optional[TreeNode], q: Optional[TreeNode]) -> bool:\n        pass",
-      "javascript": "var isSameTree = function(p, q) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    bool isSameTree(TreeNode* p, TreeNode* q) {\n        \n    }\n};",
-      "java": "class Solution {\n    public boolean isSameTree(TreeNode p, TreeNode q) {\n        return false;\n    }\n}",
-      "c": "bool isSameTree(struct TreeNode* p, struct TreeNode* q) {\n    \n}"
-    },
-    "tags": [
-      "Tree",
-      "Depth-First Search"
-    ],
-    "companies": [
-      "Amazon",
-      "Google"
-    ],
-    "acceptance": 60.5,
-    "points": 100,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 32,
-    "title": "Binary Tree Level Order Traversal",
-    "slug": "binary-tree-level-order-traversal",
-    "difficulty": "Medium",
-    "description": "Given the root of a binary tree, return the level order traversal of its nodes' values. (i.e., from left to right, level by level).",
-    "examples": [
-      {
-        "input": "root = [3,9,20,null,null,15,7]",
-        "output": "[[3],[9,20],[15,7]]"
-      },
-      {
-        "input": "root = [1]",
-        "output": "[[1]]",
-        "explanation": "Single level root."
-      },
-      {
-        "input": "root = []",
-        "output": "[]",
-        "explanation": "Empty tree."
-      }
-    ],
-    "constraints": [
-      "The number of nodes in the tree is in the range [0, 2000]."
-    ],
-    "testCases": [
-      {
-        "input": "[3,9,20,null,null,15,7]",
-        "expected": "[[3],[9,20],[15,7]]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def levelOrder(self, root: Optional[TreeNode]) -> List[List[int]]:\n        pass",
-      "javascript": "var levelOrder = function(root) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<int>> levelOrder(TreeNode* root) {\n        \n    }\n};",
-      "java": "class Solution {\n    public List<List<Integer>> levelOrder(TreeNode root) {\n        return new ArrayList<>();\n    }\n}",
-      "c": "int** levelOrder(struct TreeNode* root, int* returnSize, int** returnColumnSizes) {\n    \n}"
-    },
-    "tags": [
-      "Tree",
-      "Breadth-First Search"
-    ],
-    "companies": [
-      "Amazon",
-      "Meta",
-      "Microsoft"
-    ],
-    "acceptance": 66.2,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 33,
-    "title": "Lowest Common Ancestor of a BST",
-    "slug": "lowest-common-ancestor-of-a-bst",
-    "difficulty": "Medium",
-    "description": "Given a binary search tree (BST), find the lowest common ancestor (LCA) node of two given nodes in the BST.",
-    "examples": [
-      {
-        "input": "root = [6,2,8,0,4,7,9], p = 2, q = 8",
-        "output": "6"
-      },
-      {
-        "input": "root = [6,2,8,0,4,7,9], p = 2, q = 4",
-        "output": "2",
-        "explanation": "LCA of 2 and 4 is 2 since a node can be an ancestor of itself."
-      }
-    ],
-    "constraints": [
-      "The number of nodes in the tree is in the range [2, 10^5]."
-    ],
-    "testCases": [
-      {
-        "input": "[6,2,8,0,4,7,9]\n2\n8",
-        "expected": "6"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def lowestCommonAncestor(self, root: 'TreeNode', p: 'TreeNode', q: 'TreeNode') -> 'TreeNode':\n        pass",
-      "javascript": "var lowestCommonAncestor = function(root, p, q) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    TreeNode* lowestCommonAncestor(TreeNode* root, TreeNode* p, TreeNode* q) {\n        \n    }\n};",
-      "java": "class Solution {\n    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n        return null;\n    }\n}",
-      "c": "struct TreeNode* lowestCommonAncestor(struct TreeNode* root, struct TreeNode* p, struct TreeNode* q) {\n    \n}"
-    },
-    "tags": [
-      "Tree",
-      "Depth-First Search",
-      "BST"
-    ],
-    "companies": [
-      "Amazon",
-      "Meta",
-      "Google"
-    ],
-    "acceptance": 63.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 34,
-    "title": "Kth Smallest Element in a BST",
-    "slug": "kth-smallest-element-in-a-bst",
-    "difficulty": "Medium",
-    "description": "Given the root of a binary search tree, and an integer `k`, return the `k-th` smallest value (1-indexed) of all the values of the nodes in the tree.",
-    "examples": [
-      {
-        "input": "root = [3,1,4,null,2], k = 1",
-        "output": "1"
-      },
-      {
-        "input": "root = [5,3,6,2,4,null,null,1], k = 3",
-        "output": "3",
-        "explanation": "The 3rd smallest value is 3."
-      }
-    ],
-    "constraints": [
-      "The number of nodes in the tree is n.",
-      "1 <= k <= n <= 10^4"
-    ],
-    "testCases": [
-      {
-        "input": "[3,1,4,null,2]\n1",
-        "expected": "1"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def kthSmallest(self, root: Optional[TreeNode], k: int) -> int:\n        pass",
-      "javascript": "var kthSmallest = function(root, k) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int kthSmallest(TreeNode* root, int k) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int kthSmallest(TreeNode root, int k) {\n        return 0;\n    }\n}",
-      "c": "int kthSmallest(struct TreeNode* root, int k) {\n    \n}"
-    },
-    "tags": [
-      "Tree",
-      "Depth-First Search",
-      "BST"
-    ],
-    "companies": [
-      "Amazon",
-      "Uber"
-    ],
-    "acceptance": 71.9,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 35,
-    "title": "Serialize and Deserialize Binary Tree",
-    "slug": "serialize-and-deserialize-binary-tree",
-    "difficulty": "Hard",
-    "description": "Design an algorithm to serialize and deserialize a binary tree. There is no restriction on how your serialization algorithm works.",
-    "examples": [
-      {
-        "input": "root = [1,2,3,null,null,4,5]",
-        "output": "[1,2,3,null,null,4,5]"
-      },
-      {
-        "input": "root = []",
-        "output": "[]",
-        "explanation": "Deserializing an empty tree returns null/empty."
-      }
-    ],
-    "constraints": [
-      "The number of nodes in the tree is in the range [0, 10^4]."
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,3,null,null,4,5]",
-        "expected": "[1,2,3,null,null,4,5]"
-      }
-    ],
-    "starter": {
-      "python": "class Codec:\n    def serialize(self, root):\n        pass\n    def deserialize(self, data):\n        pass",
-      "javascript": "var serialize = function(root) {}; var deserialize = function(data) {};",
-      "cpp": "class Codec {\npublic:\n    string serialize(TreeNode* root) {}\n    TreeNode* deserialize(string data) {}\n};",
-      "java": 'public class Codec {\n    public String serialize(TreeNode root) { return ""; }\n    public TreeNode deserialize(String data) { return null; }\n}',
-      "c": "char* serialize(struct TreeNode* root) {}\nstruct TreeNode* deserialize(char* data) {}"
-    },
-    "tags": [
-      "String",
-      "Tree",
-      "Breadth-First Search",
-      "Design"
-    ],
-    "companies": [
-      "Meta",
-      "Google",
-      "Amazon"
-    ],
-    "acceptance": 56.1,
-    "points": 400,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 36,
-    "title": "Course Schedule",
-    "slug": "course-schedule",
-    "difficulty": "Medium",
-    "description": "There are a total of `numCourses` courses you have to take, labeled from `0` to `numCourses - 1`. You are given an array `prerequisites` where `prerequisites[i] = [ai, bi]` indicates that you must take course `bi` first if you want to take course `ai`. Return `true` if you can finish all courses.",
-    "examples": [
-      {
-        "input": "numCourses = 2, prerequisites = [[1,0]]",
-        "output": "true"
-      },
-      {
-        "input": "numCourses = 2, prerequisites = [[1,0],[0,1]]",
-        "output": "false",
-        "explanation": "There is a cycle between course 0 and course 1."
-      }
-    ],
-    "constraints": [
-      "1 <= numCourses <= 2000",
-      "0 <= prerequisites.length <= 5000"
-    ],
-    "testCases": [
-      {
-        "input": "2\n[[1,0]]",
-        "expected": "true"
-      },
-      {
-        "input": "2\n[[1,0],[0,1]]",
-        "expected": "false"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def canFinish(self, numCourses: int, prerequisites: List[List[int]]) -> bool:\n        pass",
-      "javascript": "var canFinish = function(numCourses, prerequisites) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    bool canFinish(int numCourses, vector<vector<int>>& prerequisites) {\n        \n    }\n};",
-      "java": "class Solution {\n    public boolean canFinish(int numCourses, int[][] prerequisites) {\n        return false;\n    }\n}",
-      "c": "bool canFinish(int numCourses, int** prerequisites, int prerequisitesSize, int* prerequisitesColSize) {\n    \n}"
-    },
-    "tags": [
-      "Depth-First Search",
-      "Breadth-First Search",
-      "Graph",
-      "Topological Sort"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Uber"
-    ],
-    "acceptance": 46.9,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 37,
-    "title": "Graph Valid Tree",
-    "slug": "graph-valid-tree",
-    "difficulty": "Medium",
-    "description": "You have a graph of `n` nodes labeled from `0` to `n - 1`. Given an integer `n` and a list of `edges`, write a function to check whether these edges make up a valid tree.",
-    "examples": [
-      {
-        "input": "n = 5, edges = [[0,1],[0,2],[0,3],[1,4]]",
-        "output": "true"
-      },
-      {
-        "input": "n = 5, edges = [[0,1],[1,2],[2,3],[1,3],[1,4]]",
-        "output": "false",
-        "explanation": "Cycle exists between nodes 1, 2, 3."
-      }
-    ],
-    "constraints": [
-      "1 <= n <= 2000",
-      "0 <= edges.length <= 5000"
-    ],
-    "testCases": [
-      {
-        "input": "5\n[[0,1],[0,2],[0,3],[1,4]]",
-        "expected": "true"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def validTree(self, n: int, edges: List[List[int]]) -> bool:\n        pass",
-      "javascript": "var validTree = function(n, edges) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    bool validTree(int n, vector<vector<int>>& edges) {\n        \n    }\n};",
-      "java": "class Solution {\n    public boolean validTree(int n, int[][] edges) {\n        return false;\n    }\n}",
-      "c": "bool validTree(int n, int** edges, int edgesSize, int* edgesColSize) {\n    \n}"
-    },
-    "tags": [
-      "Depth-First Search",
-      "Breadth-First Search",
-      "Graph",
-      "Union Find"
-    ],
-    "companies": [
-      "LinkedIn",
-      "Google",
-      "Amazon"
-    ],
-    "acceptance": 47.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 38,
-    "title": "Pacific Atlantic Water Flow",
-    "slug": "pacific-atlantic-water-flow",
-    "difficulty": "Medium",
-    "description": "There is an `m x n` rectangular island that borders both the Pacific Ocean and Atlantic Ocean. Return a 2D list of grid coordinates result where `result[i] = [ri, ci]` denotes that rain water can flow from cell `(ri, ci)` to both oceans.",
-    "examples": [
-      {
-        "input": "heights = [[1,2,2,3,5],[3,2,3,4,4],[2,4,5,3,1],[6,7,1,4,5],[5,1,1,2,4]]",
-        "output": "[[0,4],[1,3],[1,4],[2,2],[3,0],[3,1],[4,0]]"
-      },
-      {
-        "input": "heights = [[1]]",
-        "output": "[[0,0]]",
-        "explanation": "Water from single cell reaches both oceans."
-      }
-    ],
-    "constraints": [
-      "m == heights.length",
-      "n == heights[r].length",
-      "1 <= m, n <= 200"
-    ],
-    "testCases": [
-      {
-        "input": "[[1,2,2,3,5],[3,2,3,4,4],[2,4,5,3,1],[6,7,1,4,5],[5,1,1,2,4]]",
-        "expected": "[[0,4],[1,3],[1,4],[2,2],[3,0],[3,1],[4,0]]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def pacificAtlantic(self, heights: List[List[int]]) -> List[List[int]]:\n        pass",
-      "javascript": "var pacificAtlantic = function(heights) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<vector<int>> pacificAtlantic(vector<vector<int>>& heights) {\n        \n    }\n};",
-      "java": "class Solution {\n    public List<List<Integer>> pacificAtlantic(int[][] heights) {\n        return new ArrayList<>();\n    }\n}",
-      "c": "int** pacificAtlantic(int** heights, int heightsSize, int* heightsColSize, int* returnSize, int** returnColumnSizes) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Depth-First Search",
-      "Breadth-First Search",
-      "Matrix"
-    ],
-    "companies": [
-      "Google",
-      "Amazon"
-    ],
-    "acceptance": 55,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 39,
-    "title": "Longest Consecutive Sequence",
-    "slug": "longest-consecutive-sequence",
-    "difficulty": "Medium",
-    "description": "Given an unsorted array of integers `nums`, return the length of the longest consecutive elements sequence. You must write an algorithm that runs in `O(n)` time.",
-    "examples": [
-      {
-        "input": "nums = [100,4,200,1,3,2]",
-        "output": "4",
-        "explanation": "The longest consecutive elements sequence is [1, 2, 3, 4]. Its length is 4."
-      },
-      {
-        "input": "nums = [0,3,7,2,5,8,4,6,0,1]",
-        "output": "9",
-        "explanation": "Sequence is [0,1,2,3,4,5,6,7,8], length 9."
-      }
-    ],
-    "constraints": [
-      "0 <= nums.length <= 10^5",
-      "-10^9 <= nums[i] <= 10^9"
-    ],
-    "testCases": [
-      {
-        "input": "[100,4,200,1,3,2]",
-        "expected": "4"
-      },
-      {
-        "input": "[0,3,7,2,5,8,4,6,0,1]",
-        "expected": "9"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def longestConsecutive(self, nums: List[int]) -> int:\n        pass",
-      "javascript": "var longestConsecutive = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int longestConsecutive(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int longestConsecutive(int[] nums) {\n        return 0;\n    }\n}",
-      "c": "int longestConsecutive(int* nums, int numsSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Hash Table",
-      "Union Find"
-    ],
-    "companies": [
-      "Google",
-      "Amazon",
-      "Spotify"
-    ],
-    "acceptance": 47.2,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 40,
-    "title": "Alien Dictionary",
-    "slug": "alien-dictionary",
-    "difficulty": "Hard",
-    "description": "There is a new alien language that uses the Latin alphabet. However, the order among the letters is unknown to you. Given a list of strings `words` from the alien language's dictionary, return a string of the unique letters in the new alien language sorted in lexicographically increasing order by the new language's rules.",
-    "examples": [
-      {
-        "input": 'words = ["wrt","wrf","er","ett","rftt"]',
-        "output": '"wertf"'
-      },
-      {
-        "input": 'words = ["z","x"]',
-        "output": '"zx"',
-        "explanation": "Simple two letter order."
-      },
-      {
-        "input": 'words = ["z","x","z"]',
-        "output": '""',
-        "explanation": "Invalid order cycle."
-      }
-    ],
-    "constraints": [
-      "1 <= words.length <= 100",
-      "1 <= words[i].length <= 100"
-    ],
-    "testCases": [
-      {
-        "input": '["wrt","wrf","er","ett","rftt"]',
-        "expected": '"wertf"'
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def alienOrder(self, words: List[str]) -> str:\n        pass",
-      "javascript": "var alienOrder = function(words) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    string alienOrder(vector<string>& words) {\n        \n    }\n};",
-      "java": 'class Solution {\n    public String alienOrder(String[] words) {\n        return "";\n    }\n}',
-      "c": "char* alienOrder(char** words, int wordsSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "String",
-      "Depth-First Search",
-      "Topological Sort"
-    ],
-    "companies": [
-      "Facebook",
-      "Google",
-      "Amazon"
-    ],
-    "acceptance": 35.8,
-    "points": 400,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 41,
-    "title": "House Robber",
-    "slug": "house-robber",
-    "difficulty": "Medium",
-    "description": "You are a professional robber planning to rob houses along a street. Each house has a certain amount of money stashed. Determine the maximum amount of money you can rob tonight without alerting the police.",
-    "examples": [
-      {
-        "input": "nums = [1,2,3,1]",
-        "output": "4",
-        "explanation": "Rob house 1 (money = 1) and rob house 3 (money = 3). Total = 4."
-      },
-      {
-        "input": "nums = [2,7,9,3,1]",
-        "output": "12",
-        "explanation": "Rob house 1 (money = 2), house 3 (money = 9), and house 5 (money = 1). Total = 12."
-      }
-    ],
-    "constraints": [
-      "1 <= nums.length <= 100",
-      "0 <= nums[i] <= 400"
-    ],
-    "testCases": [
-      {
-        "input": "[1,2,3,1]",
-        "expected": "4"
-      },
-      {
-        "input": "[2,7,9,3,1]",
-        "expected": "12"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def rob(self, nums: List[int]) -> int:\n        pass",
-      "javascript": "var rob = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int rob(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int rob(int[] nums) {\n        return 0;\n    }\n}",
-      "c": "int rob(int* nums, int numsSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Dynamic Programming"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Microsoft"
-    ],
-    "acceptance": 50.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 42,
-    "title": "House Robber II",
-    "slug": "house-robber-ii",
-    "difficulty": "Medium",
-    "description": "You are a professional robber planning to rob houses along a street. All houses at this place are arranged in a circle. Return the maximum amount of money you can rob tonight without alerting the police.",
-    "examples": [
-      {
-        "input": "nums = [2,3,2]",
-        "output": "3"
-      },
-      {
-        "input": "nums = [1,2,3,1]",
-        "output": "4",
-        "explanation": "Rob house 1 (money = 1) and house 3 (money = 3)."
-      }
-    ],
-    "constraints": [
-      "1 <= nums.length <= 100",
-      "0 <= nums[i] <= 1000"
-    ],
-    "testCases": [
-      {
-        "input": "[2,3,2]",
-        "expected": "3"
-      },
-      {
-        "input": "[1,2,3,1]",
-        "expected": "4"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def rob(self, nums: List[int]) -> int:\n        pass",
-      "javascript": "var rob = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int rob(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int rob(int[] nums) {\n        return 0;\n    }\n}",
-      "c": "int rob(int* nums, int numsSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Dynamic Programming"
-    ],
-    "companies": [
-      "Amazon",
-      "Microsoft"
-    ],
-    "acceptance": 41.6,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 43,
-    "title": "Decode Ways",
-    "slug": "decode-ways",
-    "difficulty": "Medium",
-    "description": `A message containing letters from A-Z can be encoded into numbers using the mapping 'A' -> "1" ... 'Z' -> "26". Given a string \`s\` containing only digits, return the number of ways to decode it.`,
-    "examples": [
-      {
-        "input": 's = "12"',
-        "output": "2",
-        "explanation": 'It could be decoded as "AB" (1 2) or "L" (12).'
-      },
-      {
-        "input": 's = "226"',
-        "output": "3",
-        "explanation": 'Decoded as "BZ" (2 26), "VF" (22 6), or "BBF" (2 2 6).'
-      },
-      {
-        "input": 's = "06"',
-        "output": "0",
-        "explanation": '"06" cannot be mapped to "F" because of leading zero.'
-      }
-    ],
-    "constraints": [
-      "1 <= s.length <= 100",
-      "s contains only digits and may contain leading zero(s)."
-    ],
-    "testCases": [
-      {
-        "input": '"12"',
-        "expected": "2"
-      },
-      {
-        "input": '"226"',
-        "expected": "3"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def numDecodings(self, s: str) -> int:\n        pass",
-      "javascript": "var numDecodings = function(s) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int numDecodings(string s) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int numDecodings(String s) {\n        return 0;\n    }\n}",
-      "c": "int numDecodings(char* s) {\n    \n}"
-    },
-    "tags": [
-      "String",
-      "Dynamic Programming"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Meta"
-    ],
-    "acceptance": 34.5,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 44,
-    "title": "Unique Paths",
-    "slug": "unique-paths",
-    "difficulty": "Medium",
-    "description": "There is a robot on an `m x n` grid. The robot is initially located at the top-left corner. The robot tries to move to the bottom-right corner. The robot can only move either down or right at any point in time. Given the two integers `m` and `n`, return the number of possible unique paths.",
-    "examples": [
-      {
-        "input": "m = 3, n = 7",
-        "output": "28"
-      },
-      {
-        "input": "m = 3, n = 2",
-        "output": "3",
-        "explanation": "From top-left to bottom-right: Right -> Down -> Down, Down -> Down -> Right, Down -> Right -> Down."
-      }
-    ],
-    "constraints": [
-      "1 <= m, n <= 100"
-    ],
-    "testCases": [
-      {
-        "input": "3\n7",
-        "expected": "28"
-      },
-      {
-        "input": "3\n2",
-        "expected": "3"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def uniquePaths(self, m: int, n: int) -> int:\n        pass",
-      "javascript": "var uniquePaths = function(m, n) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int uniquePaths(int m, int n) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int uniquePaths(int m, int n) {\n        return 0;\n    }\n}",
-      "c": "int uniquePaths(int m, int n) {\n    \n}"
-    },
-    "tags": [
-      "Math",
-      "Dynamic Programming",
-      "Combinatorics"
-    ],
-    "companies": [
-      "Google",
-      "Amazon",
-      "Meta"
-    ],
-    "acceptance": 63.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 45,
-    "title": "Longest Increasing Subsequence",
-    "slug": "longest-increasing-subsequence",
-    "difficulty": "Medium",
-    "description": "Given an integer array `nums`, return the length of the longest strictly increasing subsequence.",
-    "examples": [
-      {
-        "input": "nums = [10,9,2,5,3,7,101,18]",
-        "output": "4",
-        "explanation": "The longest increasing subsequence is [2,3,7,101], length = 4."
-      },
-      {
-        "input": "nums = [0,1,0,3,2,3]",
-        "output": "4",
-        "explanation": "The longest increasing subsequence is [0,1,2,3], length 4."
-      },
-      {
-        "input": "nums = [7,7,7,7,7,7,7]",
-        "output": "1",
-        "explanation": "Strictly increasing requirement means max length is 1."
-      }
-    ],
-    "constraints": [
-      "1 <= nums.length <= 2500",
-      "-10^4 <= nums[i] <= 10^4"
-    ],
-    "testCases": [
-      {
-        "input": "[10,9,2,5,3,7,101,18]",
-        "expected": "4"
-      },
-      {
-        "input": "[0,1,0,3,2,3]",
-        "expected": "4"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def lengthOfLIS(self, nums: List[int]) -> int:\n        pass",
-      "javascript": "var lengthOfLIS = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int lengthOfLIS(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int lengthOfLIS(int[] nums) {\n        return 0;\n    }\n}",
-      "c": "int lengthOfLIS(int* nums, int numsSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Binary Search",
-      "Dynamic Programming"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Microsoft"
-    ],
-    "acceptance": 54.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 46,
-    "title": "Palindromic Substrings",
-    "slug": "palindromic-substrings",
-    "difficulty": "Medium",
-    "description": "Given a string `s`, return the number of palindromic substrings in it. A string is a palindrome when it reads the same backward as forward.",
-    "examples": [
-      {
-        "input": 's = "abc"',
-        "output": "3",
-        "explanation": 'Three palindromic strings: "a", "b", "c".'
-      },
-      {
-        "input": 's = "aaa"',
-        "output": "6",
-        "explanation": 'Palindromic strings: "a", "a", "a", "aa", "aa", "aaa".'
-      }
-    ],
-    "constraints": [
-      "1 <= s.length <= 1000"
-    ],
-    "testCases": [
-      {
-        "input": '"abc"',
-        "expected": "3"
-      },
-      {
-        "input": '"aaa"',
-        "expected": "6"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def countSubstrings(self, s: str) -> int:\n        pass",
-      "javascript": "var countSubstrings = function(s) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int countSubstrings(string s) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int countSubstrings(String s) {\n        return 0;\n    }\n}",
-      "c": "int countSubstrings(char* s) {\n    \n}"
-    },
-    "tags": [
-      "String",
-      "Dynamic Programming"
-    ],
-    "companies": [
-      "Meta",
-      "Amazon"
-    ],
-    "acceptance": 67.5,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 47,
-    "title": "Find Minimum in Rotated Sorted Array",
-    "slug": "find-minimum-in-rotated-sorted-array",
-    "difficulty": "Medium",
-    "description": "Given the sorted rotated array `nums` of unique elements, return the minimum element of this array. You must write an algorithm that runs in `O(log n)` time.",
-    "examples": [
-      {
-        "input": "nums = [3,4,5,1,2]",
-        "output": "1"
-      },
-      {
-        "input": "nums = [4,5,6,7,0,1,2]",
-        "output": "0",
-        "explanation": "The original array was [0,1,2,4,5,6,7] rotated 4 times."
-      },
-      {
-        "input": "nums = [11,13,15,17]",
-        "output": "11",
-        "explanation": "The array was not rotated."
-      }
-    ],
-    "constraints": [
-      "n == nums.length",
-      "1 <= n <= 5000",
-      "-5000 <= nums[i] <= 5000"
-    ],
-    "testCases": [
-      {
-        "input": "[3,4,5,1,2]",
-        "expected": "1"
-      },
-      {
-        "input": "[4,5,6,7,0,1,2]",
-        "expected": "0"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def findMin(self, nums: List[int]) -> int:\n        pass",
-      "javascript": "var findMin = function(nums) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int findMin(vector<int>& nums) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int findMin(int[] nums) {\n        return 0;\n    }\n}",
-      "c": "int findMin(int* nums, int numsSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Binary Search"
-    ],
-    "companies": [
-      "Amazon",
-      "Google",
-      "Meta"
-    ],
-    "acceptance": 49.5,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 48,
-    "title": "Top K Frequent Elements",
-    "slug": "top-k-frequent-elements",
-    "difficulty": "Medium",
-    "description": "Given an integer array `nums` and an integer `k`, return the `k` most frequent elements. You may return the answer in any order.",
-    "examples": [
-      {
-        "input": "nums = [1,1,1,2,2,3], k = 2",
-        "output": "[1,2]"
-      },
-      {
-        "input": "nums = [1], k = 1",
-        "output": "[1]",
-        "explanation": "Single element array."
-      }
-    ],
-    "constraints": [
-      "1 <= nums.length <= 10^5",
-      "k is in the range [1, the number of unique elements in the array]."
-    ],
-    "testCases": [
-      {
-        "input": "[1,1,1,2,2,3]\n2",
-        "expected": "[1,2]"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def topKFrequent(self, nums: List[int], k: int) -> List[int]:\n        pass",
-      "javascript": "var topKFrequent = function(nums, k) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    vector<int> topKFrequent(vector<int>& nums, int k) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int[] topKFrequent(int[] nums, int k) {\n        return new int[]{};\n    }\n}",
-      "c": "int* topKFrequent(int* nums, int numsSize, int k, int* returnSize) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Hash Table",
-      "Divide and Conquer",
-      "Heap",
-      "Bucket Sort"
-    ],
-    "companies": [
-      "Amazon",
-      "Meta",
-      "Google"
-    ],
-    "acceptance": 62.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 49,
-    "title": "Kth Largest Element in an Array",
-    "slug": "kth-largest-element-in-an-array",
-    "difficulty": "Medium",
-    "description": "Given an integer array `nums` and an integer `k`, return the `k-th` largest element in the array. Note that it is the `k-th` largest element in the sorted order, not the `k-th` distinct element.",
-    "examples": [
-      {
-        "input": "nums = [3,2,1,5,6,4], k = 2",
-        "output": "5"
-      },
-      {
-        "input": "nums = [3,2,3,1,2,4,5,5,6], k = 4",
-        "output": "4",
-        "explanation": "4th largest element is 4."
-      }
-    ],
-    "constraints": [
-      "1 <= k <= nums.length <= 10^5",
-      "-10^4 <= nums[i] <= 10^4"
-    ],
-    "testCases": [
-      {
-        "input": "[3,2,1,5,6,4]\n2",
-        "expected": "5"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def findKthLargest(self, nums: List[int], k: int) -> int:\n        pass",
-      "javascript": "var findKthLargest = function(nums, k) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    int findKthLargest(vector<int>& nums, int k) {\n        \n    }\n};",
-      "java": "class Solution {\n    public int findKthLargest(int[] nums, int k) {\n        return 0;\n    }\n}",
-      "c": "int findKthLargest(int* nums, int numsSize, int k) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Divide and Conquer",
-      "Sorting",
-      "Heap",
-      "Quickselect"
-    ],
-    "companies": [
-      "Meta",
-      "Amazon",
-      "Google"
-    ],
-    "acceptance": 66.8,
-    "points": 200,
-    "premium": false,
-    "hidden": false
-  },
-  {
-    "number": 50,
-    "title": "Median of Two Sorted Arrays",
-    "slug": "median-of-two-sorted-arrays",
-    "difficulty": "Hard",
-    "description": "Given two sorted arrays `nums1` and `nums2` of size `m` and `n` respectively, return the median of the two sorted arrays. The overall run time complexity should be `O(log (m+n))`.",
-    "examples": [
-      {
-        "input": "nums1 = [1,3], nums2 = [2]",
-        "output": "2.0"
-      },
-      {
-        "input": "nums1 = [1,2], nums2 = [3,4]",
-        "output": "2.5",
-        "explanation": "Merged array = [1,2,3,4] and median is (2 + 3) / 2 = 2.5."
-      }
-    ],
-    "constraints": [
-      "nums1.length == m",
-      "nums2.length == n",
-      "0 <= m, n <= 1000"
-    ],
-    "testCases": [
-      {
-        "input": "[1,3]\n[2]",
-        "expected": "2.0"
-      },
-      {
-        "input": "[1,2]\n[3,4]",
-        "expected": "2.5"
-      }
-    ],
-    "starter": {
-      "python": "class Solution:\n    def findMedianSortedArrays(self, nums1: List[int], nums2: List[int]) -> float:\n        pass",
-      "javascript": "var findMedianSortedArrays = function(nums1, nums2) {\n    \n};",
-      "cpp": "class Solution {\npublic:\n    double findMedianSortedArrays(vector<int>& nums1, vector<int>& nums2) {\n        \n    }\n};",
-      "java": "class Solution {\n    public double findMedianSortedArrays(int[] nums1, int[] nums2) {\n        return 0.0;\n    }\n}",
-      "c": "double findMedianSortedArrays(int* nums1, int nums1Size, int* nums2, int nums2Size) {\n    \n}"
-    },
-    "tags": [
-      "Array",
-      "Binary Search",
-      "Divide and Conquer"
-    ],
-    "companies": [
-      "Google",
-      "Amazon",
-      "Meta"
-    ],
-    "acceptance": 39.5,
-    "points": 400,
-    "premium": false,
-    "hidden": false
+    tests: [
+      { input: "5", sample: true },
+      { input: "1", sample: true },
+      { input: "2" },
+      { input: "10" },
+      { input: "30" }
+    ]
   }
 ];
-async function seedCodingProblems() {
-  try {
-    console.log("\u{1F331} Syncing initial coding problems...");
-    for (const p of INITIAL_PROBLEMS) {
-      await CodingProblem.updateOne({ slug: p.slug }, { $set: p }, { upsert: true });
-    }
-    console.log(`\u2705 Successfully synced ${INITIAL_PROBLEMS.length} problems!`);
-  } catch (err) {
-    console.error("\u274C Failed to seed initial problems:", err.message);
+
+// src/data/problems/strings.ts
+var line0 = (input) => input.split("\n")[0] ?? "";
+var strings = [
+  {
+    slug: "valid-anagram",
+    title: "Valid Anagram",
+    difficulty: "EASY",
+    statement: `Given two strings \`s\` and \`t\`, return \`true\` if \`t\` is an anagram of \`s\` (same characters with the same frequencies), otherwise \`false\`.
+
+**Input**: line 1 is \`s\`, line 2 is \`t\`.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 s.length, t.length \u2264 5\xB710^4
+- s and t consist of lowercase English letters.`,
+    examples: [
+      { input: "anagram\nnagaram", output: "true" },
+      { input: "rat\ncar", output: "false" }
+    ],
+    hints: [
+      "Anagrams have identical character counts.",
+      "Count characters of s, then decrement for t \u2014 any mismatch means false."
+    ],
+    editorial: `Count the frequency of each character in \`s\`, then walk \`t\` decrementing counts. If any count goes negative or a character is missing, they aren't anagrams. Different lengths are an immediate \`false\`. O(n) time, O(1) space (fixed alphabet).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode valid anagram"),
+    tags: ["string", "hash-table", "sorting"],
+    starterCode: buildStarter("twoStrings", "bool", "isAnagram"),
+    reference: (input) => {
+      const [s, t] = input.split("\n");
+      const a = s ?? "";
+      const b = t ?? "";
+      if (a.length !== b.length) return boolOut(false);
+      const cnt = {};
+      for (const c of a) cnt[c] = (cnt[c] ?? 0) + 1;
+      for (const c of b) {
+        if (!cnt[c]) return boolOut(false);
+        cnt[c]--;
+      }
+      return boolOut(true);
+    },
+    tests: [
+      { input: "anagram\nnagaram", sample: true },
+      { input: "rat\ncar", sample: true },
+      { input: "a\nab" },
+      { input: "ab\nba" },
+      { input: "aacc\nccac" }
+    ]
+  },
+  {
+    slug: "valid-palindrome",
+    title: "Valid Palindrome",
+    difficulty: "EASY",
+    statement: `A phrase is a palindrome if, after lowercasing and removing all non-alphanumeric characters, it reads the same forwards and backwards. Return \`true\` if \`s\` is a palindrome.
+
+**Input**: one line \`s\` (may contain spaces and punctuation).
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 s.length \u2264 2\xB710^5
+- s consists of printable ASCII characters.`,
+    examples: [
+      { input: "A man, a plan, a canal: Panama", output: "true" },
+      { input: "race a car", output: "false" }
+    ],
+    hints: [
+      "Normalize first: lowercase and keep only letters and digits.",
+      "Then use two pointers from both ends moving inward."
+    ],
+    editorial: `Filter the string to lowercase alphanumeric characters, then compare with two pointers moving inward from both ends. Any mismatch means it isn't a palindrome. O(n) time, O(1) extra space if you skip characters in place.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode valid palindrome"),
+    tags: ["string", "two-pointers"],
+    starterCode: buildStarter("string", "bool", "isPalindrome"),
+    reference: (input) => {
+      const s = line0(input);
+      const t = s.toLowerCase().replace(/[^a-z0-9]/g, "");
+      let i = 0;
+      let j = t.length - 1;
+      while (i < j) {
+        if (t[i] !== t[j]) return boolOut(false);
+        i++;
+        j--;
+      }
+      return boolOut(true);
+    },
+    tests: [
+      { input: "A man, a plan, a canal: Panama", sample: true },
+      { input: "race a car", sample: true },
+      { input: "0P" },
+      { input: "ab_a" },
+      { input: "Was it a car or a cat I saw?" }
+    ]
+  },
+  {
+    slug: "longest-substring-without-repeating-characters",
+    title: "Longest Substring Without Repeating Characters",
+    difficulty: "MEDIUM",
+    statement: `Given a string \`s\`, return the length of the longest substring that contains no repeating characters.
+
+**Input**: one line \`s\`.
+**Output**: the length as an integer.`,
+    constraints: `- 0 \u2264 s.length \u2264 5\xB710^4
+- s consists of English letters, digits, symbols, and spaces.`,
+    examples: [
+      { input: "abcabcbb", output: "3", explanation: '"abc" has length 3.' },
+      { input: "bbbbb", output: "1", explanation: '"b" has length 1.' }
+    ],
+    hints: [
+      "Use a sliding window over the string.",
+      "Remember the last index of each character; when you see a repeat inside the window, jump the left edge past it."
+    ],
+    editorial: `Maintain a sliding window \`[start, i]\` and a map of each character's last seen index. When the current character was seen at or after \`start\`, move \`start\` to one past that index. The answer is the maximum window width \`i \u2212 start + 1\`. O(n) time.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(min(n, alphabet))",
+    youtubeUrl: yt("neetcode longest substring without repeating characters"),
+    tags: ["string", "sliding-window", "hash-table"],
+    starterCode: buildStarter("string", "int", "lengthOfLongestSubstring"),
+    reference: (input) => {
+      const s = line0(input);
+      const last = /* @__PURE__ */ new Map();
+      let start = 0;
+      let best = 0;
+      for (let i = 0; i < s.length; i++) {
+        const c = s[i];
+        if (last.has(c) && last.get(c) >= start) {
+          start = last.get(c) + 1;
+        }
+        last.set(c, i);
+        best = Math.max(best, i - start + 1);
+      }
+      return String(best);
+    },
+    tests: [
+      { input: "abcabcbb", sample: true },
+      { input: "bbbbb", sample: true },
+      { input: "pwwkew" },
+      { input: "" },
+      { input: "dvdf" },
+      { input: "abba" }
+    ]
+  },
+  {
+    slug: "valid-parentheses",
+    title: "Valid Parentheses",
+    difficulty: "EASY",
+    statement: `Given a string \`s\` containing only the characters \`()[]{}\`, determine if it is valid: brackets must close in the correct order and every opening bracket has a matching closing bracket of the same type.
+
+**Input**: one line \`s\`.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 s.length \u2264 10^4
+- s consists only of the characters ()[]{}.`,
+    examples: [
+      { input: "()[]{}", output: "true" },
+      { input: "(]", output: "false" }
+    ],
+    hints: [
+      "A stack naturally models nesting.",
+      "Push opening brackets; on a closing bracket, the top of the stack must be its match."
+    ],
+    editorial: `Scan the string with a stack. Push each opening bracket. On a closing bracket, the stack top must be the matching opener \u2014 otherwise it's invalid. At the end the stack must be empty. O(n) time and space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode valid parentheses"),
+    tags: ["string", "stack"],
+    starterCode: buildStarter("string", "bool", "isValid"),
+    reference: (input) => {
+      const s = line0(input);
+      const st = [];
+      const m = { ")": "(", "]": "[", "}": "{" };
+      for (const c of s) {
+        if (c === "(" || c === "[" || c === "{") st.push(c);
+        else if (st.pop() !== m[c]) return boolOut(false);
+      }
+      return boolOut(st.length === 0);
+    },
+    tests: [
+      { input: "()[]{}", sample: true },
+      { input: "(]", sample: true },
+      { input: "()" },
+      { input: "([)]" },
+      { input: "{[]}" },
+      { input: "(" }
+    ]
+  },
+  {
+    slug: "longest-palindromic-substring",
+    title: "Longest Palindromic Substring",
+    difficulty: "MEDIUM",
+    statement: `Given a string \`s\`, return the longest substring of \`s\` that is a palindrome. If several have the same length, return the one that appears first.
+
+**Input**: one line \`s\`.
+**Output**: the longest palindromic substring.`,
+    constraints: `- 1 \u2264 s.length \u2264 1000
+- s consists of digits and English letters.`,
+    examples: [
+      { input: "babad", output: "bab", explanation: '"aba" is also valid, but "bab" appears first.' },
+      { input: "cbbd", output: "bb" }
+    ],
+    hints: [
+      "Every palindrome has a center \u2014 either a character or a gap between two characters.",
+      "Expand outward from each of the 2n\u22121 possible centers and track the longest."
+    ],
+    editorial: `**Expand around center.** There are \`2n \u2212 1\` centers (each character and each gap). Expand outward from each while both sides match, tracking the longest palindrome found. O(n\xB2) time, O(1) space \u2014 simple and fast enough for n \u2264 1000.`,
+    approaches: [
+      {
+        name: "Expand around center",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(1)",
+        body: "Try all centers, expand while characters match, keep the longest window."
+      }
+    ],
+    complexityTime: "O(n\xB2)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode longest palindromic substring"),
+    tags: ["string", "dynamic-programming", "two-pointers"],
+    starterCode: buildStarter("string", "string", "longestPalindrome"),
+    reference: (input) => {
+      const s = line0(input);
+      if (s.length < 1) return "";
+      let start = 0;
+      let end = 0;
+      const expand = (l, r) => {
+        while (l >= 0 && r < s.length && s[l] === s[r]) {
+          l--;
+          r++;
+        }
+        return [l + 1, r - 1];
+      };
+      for (let i = 0; i < s.length; i++) {
+        for (const [l, r] of [expand(i, i), expand(i, i + 1)]) {
+          if (r - l > end - start) {
+            start = l;
+            end = r;
+          }
+        }
+      }
+      return s.slice(start, end + 1);
+    },
+    tests: [
+      { input: "babad", sample: true },
+      { input: "cbbd", sample: true },
+      { input: "a" },
+      { input: "ac" },
+      { input: "aaaa" },
+      { input: "abacdfgdcaba" }
+    ]
+  },
+  {
+    slug: "longest-common-prefix",
+    title: "Longest Common Prefix",
+    difficulty: "EASY",
+    statement: `Find the longest common prefix among an array of strings. If there is none, print an empty line.
+
+**Input**: one line of space-separated words.
+**Output**: the longest common prefix.`,
+    constraints: `- 1 \u2264 words \u2264 200
+- 1 \u2264 word length \u2264 200; lowercase letters.`,
+    examples: [
+      { input: "flower flow flight", output: "fl" },
+      { input: "dog racecar car", output: "", explanation: "No common prefix." }
+    ],
+    hints: [
+      "Compare character-by-character across all words (vertical scan).",
+      "Stop at the first column where words disagree or run out."
+    ],
+    editorial: `**Vertical scan**: take the first word as the candidate and check each character column against every other word, stopping at the first mismatch or end-of-word. Worst case O(total characters), and it exits early on the common short-prefix cases. Sorting-based and divide-and-conquer variants exist but add nothing here.`,
+    complexityTime: "O(\u03A3 characters)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("longest common prefix leetcode"),
+    tags: ["string", "trie"],
+    starterCode: buildStarter("stringArray", "string", "longestCommonPrefix"),
+    reference: (input) => {
+      const ws = words(lines(input)[0]);
+      let prefix = ws[0] ?? "";
+      for (const w of ws.slice(1)) {
+        let i = 0;
+        while (i < prefix.length && i < w.length && prefix[i] === w[i]) i++;
+        prefix = prefix.slice(0, i);
+        if (!prefix) break;
+      }
+      return prefix;
+    },
+    tests: [
+      { input: "flower flow flight", sample: true },
+      { input: "dog racecar car", sample: true },
+      { input: "single" },
+      { input: "ab a" },
+      { input: "interspecies interstellar interstate" }
+    ]
+  },
+  {
+    slug: "group-anagrams",
+    title: "Group Anagrams",
+    difficulty: "MEDIUM",
+    statement: `Group the words that are anagrams of each other.
+
+**Input**: one line of space-separated words.
+**Output**: one group per line, the words within a group in **sorted order** (groups themselves may be produced in any order \u2014 the template prints them canonically).`,
+    constraints: `- 1 \u2264 words \u2264 10^4
+- 0 \u2264 word length \u2264 100; lowercase letters.`,
+    examples: [
+      {
+        input: "eat tea tan ate nat bat",
+        output: "ate eat tea\nbat\nnat tan",
+        explanation: "Anagram groups: {eat,tea,ate}, {tan,nat}, {bat}."
+      },
+      { input: "a", output: "a" }
+    ],
+    hints: [
+      "Anagrams share the same sorted character sequence \u2014 use it as a map key.",
+      "A 26-letter count signature avoids the per-word sort."
+    ],
+    editorial: `Hash each word by a canonical form: its sorted characters (O(L log L) per word) or a 26-count signature (O(L)). Words mapping to the same key are anagrams \u2014 collect the map's values as groups. O(n \xB7 L) with the counting key. Sorting within each group just makes output deterministic.`,
+    complexityTime: "O(n \xB7 L)",
+    complexitySpace: "O(n \xB7 L)",
+    youtubeUrl: yt("neetcode group anagrams"),
+    tags: ["string", "hash-table", "sorting"],
+    starterCode: buildStarter("stringArray", "sortedLines", "groupAnagrams"),
+    reference: (input) => {
+      const ws = words(lines(input)[0]);
+      const groups = /* @__PURE__ */ new Map();
+      for (const w of ws) {
+        const key = w.split("").sort().join("");
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(w);
+      }
+      const out = [];
+      for (const g of groups.values()) out.push(g.sort().join(" "));
+      return sortedLinesOut(out);
+    },
+    tests: [
+      { input: "eat tea tan ate nat bat", sample: true },
+      { input: "a", sample: true },
+      { input: "abc cba bca xyz" },
+      { input: "listen silent enlist inlets google" }
+    ]
+  },
+  {
+    slug: "roman-to-integer",
+    title: "Roman to Integer",
+    difficulty: "EASY",
+    statement: `Convert a Roman numeral to an integer. Symbols: I=1, V=5, X=10, L=50, C=100, D=500, M=1000. A smaller symbol before a larger one subtracts (IV=4, IX=9, XL=40, XC=90, CD=400, CM=900).
+
+**Input**: one line, the Roman numeral.
+**Output**: the integer value.`,
+    constraints: `- 1 \u2264 length \u2264 15
+- Valid Roman numeral in [1, 3999].`,
+    examples: [
+      { input: "III", output: "3" },
+      { input: "LVIII", output: "58" },
+      { input: "MCMXCIV", output: "1994", explanation: "M + CM + XC + IV." }
+    ],
+    hints: [
+      "Scan left to right comparing each symbol with its successor.",
+      "If the current value is smaller than the next, subtract it; otherwise add it."
+    ],
+    editorial: `One rule covers all six subtractive pairs: a symbol whose value is **less than its right neighbor** is subtracted, all others are added. Single pass with a value lookup table \u2014 O(n) time, O(1) space, no special-casing needed.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("roman to integer leetcode"),
+    tags: ["string", "hash-table", "math"],
+    starterCode: buildStarter("string", "int", "romanToInt"),
+    reference: (input) => {
+      const s = (lines(input)[0] ?? "").trim();
+      const val = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1e3 };
+      let total = 0;
+      for (let i = 0; i < s.length; i++) {
+        if (i + 1 < s.length && val[s[i]] < val[s[i + 1]]) total -= val[s[i]];
+        else total += val[s[i]];
+      }
+      return String(total);
+    },
+    tests: [
+      { input: "III", sample: true },
+      { input: "LVIII", sample: true },
+      { input: "MCMXCIV", sample: true },
+      { input: "IX" },
+      { input: "MMMCMXCIX" }
+    ]
+  },
+  {
+    slug: "string-to-integer-atoi",
+    title: "String to Integer (atoi)",
+    difficulty: "MEDIUM",
+    statement: `Implement \`atoi\`: skip leading spaces, read an optional sign, read digits until a non-digit, and clamp the result to the 32-bit signed range [\u22122\xB3\xB9, 2\xB3\xB9\u22121]. Anything unreadable yields 0.
+
+**Input**: one line, the raw string.
+**Output**: the parsed integer.`,
+    constraints: `- 0 \u2264 length \u2264 200
+- Letters, digits, spaces, '+', '-', '.'.`,
+    examples: [
+      { input: "42", output: "42" },
+      { input: "   -042", output: "-42" },
+      { input: "1337c0d3", output: "1337", explanation: "Parsing stops at 'c'." },
+      { input: "words and 987", output: "0" }
+    ],
+    hints: [
+      "Follow the spec mechanically: whitespace \u2192 sign \u2192 digits \u2192 stop.",
+      "Check for overflow before multiplying by 10, or accumulate in a wider type and clamp."
+    ],
+    editorial: `A small state machine: consume leading spaces, one optional sign, then digits, ignoring everything after. The interview substance is **overflow handling** \u2014 either test \`result > (INT_MAX \u2212 digit) / 10\` before each step or accumulate in a 64-bit value and clamp to \`[\u22122\xB3\xB9, 2\xB3\xB9\u22121]\`. O(n) single pass.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("string to integer atoi leetcode"),
+    tags: ["string", "simulation"],
+    starterCode: buildStarter("string", "int", "myAtoi"),
+    reference: (input) => {
+      const s = lines(input)[0] ?? "";
+      let i = 0;
+      while (i < s.length && s[i] === " ") i++;
+      let sign = 1;
+      if (s[i] === "+" || s[i] === "-") {
+        if (s[i] === "-") sign = -1;
+        i++;
+      }
+      let num = 0;
+      while (i < s.length && s[i] >= "0" && s[i] <= "9") {
+        num = num * 10 + (s.charCodeAt(i) - 48);
+        if (sign === 1 && num > 2147483647) return "2147483647";
+        if (sign === -1 && num > 2147483648) return "-2147483648";
+        i++;
+      }
+      return String(sign * num);
+    },
+    tests: [
+      { input: "42", sample: true },
+      { input: "   -042", sample: true },
+      { input: "1337c0d3", sample: true },
+      { input: "words and 987" },
+      { input: "-91283472332" },
+      { input: "+1" }
+    ]
+  },
+  {
+    slug: "find-the-index-of-the-first-occurrence-in-a-string",
+    title: "Find the Index of the First Occurrence in a String",
+    difficulty: "EASY",
+    statement: `Return the index of the first occurrence of \`needle\` in \`haystack\`, or \`-1\` if absent.
+
+**Input**
+- Line 1: \`haystack\`
+- Line 2: \`needle\`
+
+**Output**: the index, or -1.`,
+    constraints: `- 1 \u2264 lengths \u2264 10^4
+- Lowercase English letters.`,
+    examples: [
+      { input: "sadbutsad\nsad", output: "0" },
+      { input: "leetcode\nleeto", output: "-1" }
+    ],
+    hints: [
+      "Try aligning the needle at every possible start \u2014 O(n\xB7m) is accepted here.",
+      "KMP builds a failure table so the scan never re-examines matched text \u2014 O(n + m)."
+    ],
+    editorial: `The sliding comparison \u2014 try each alignment and compare \u2014 is O(n\xB7m) and perfectly acceptable. The classic follow-up is **KMP**: precompute the needle's longest-proper-prefix-suffix table so that on a mismatch you shift by the table instead of restarting, giving O(n + m). Mentioning (and sketching) KMP is what separates the answer.`,
+    approaches: [
+      {
+        name: "Brute-force alignment",
+        complexityTime: "O(n\xB7m)",
+        complexitySpace: "O(1)",
+        body: "Compare the needle at every start index."
+      },
+      {
+        name: "KMP",
+        complexityTime: "O(n + m)",
+        complexitySpace: "O(m)",
+        body: "Failure-function table avoids re-scanning matched characters."
+      }
+    ],
+    complexityTime: "O(n + m)",
+    complexitySpace: "O(m)",
+    youtubeUrl: yt("find first occurrence strstr kmp"),
+    tags: ["string", "two-pointers", "kmp"],
+    starterCode: buildStarter("twoStrings", "int", "strStr"),
+    reference: (input) => {
+      const [haystack = "", needle = ""] = lines(input);
+      return String(haystack.indexOf(needle));
+    },
+    tests: [
+      { input: "sadbutsad\nsad", sample: true },
+      { input: "leetcode\nleeto", sample: true },
+      { input: "a\na" },
+      { input: "mississippi\nissip" },
+      { input: "abc\nabcd" }
+    ]
+  },
+  {
+    slug: "isomorphic-strings",
+    title: "Isomorphic Strings",
+    difficulty: "EASY",
+    statement: `Two strings are isomorphic if the characters of \`s\` can be replaced (via a consistent one-to-one mapping) to obtain \`t\`. Every occurrence of a character must map to the same character, and no two characters may map to the same one.
+
+**Input**
+- Line 1: string \`s\`
+- Line 2: string \`t\` (same length)
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 s.length = t.length \u2264 5\xB710^4
+- Printable ASCII characters.`,
+    examples: [
+      { input: "egg\nadd", output: "true", explanation: "e\u2192a, g\u2192d." },
+      { input: "foo\nbar", output: "false", explanation: "o would need to map to both a and r." },
+      { input: "badc\nbaba", output: "false", explanation: "b and d would both map to b." }
+    ],
+    hints: [
+      "Track the mapping s[i] \u2192 t[i] and reject contradictions.",
+      "One map isn't enough \u2014 'badc'/'baba' needs the reverse mapping checked too."
+    ],
+    editorial: `Walk both strings once with two hash maps: forward (s-char \u2192 t-char) and backward (t-char \u2192 s-char). At each position, if either map already holds a *different* partner for the current character, fail. The backward map is the part people forget \u2014 without it, two source characters can silently collapse onto one target ('badc' \u2192 'baba'). One pass, O(n) time, O(k) space over the alphabet. Equivalent one-map trick: compare first-occurrence index patterns of both strings.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(k) \u2014 alphabet size",
+    youtubeUrl: yt("isomorphic strings leetcode"),
+    tags: ["string", "hash-map"],
+    starterCode: buildStarter("twoStrings", "bool", "isIsomorphic"),
+    reference: (input) => {
+      const [s = "", t = ""] = lines(input);
+      if (s.length !== t.length) return boolOut(false);
+      const fwd = /* @__PURE__ */ new Map();
+      const bwd = /* @__PURE__ */ new Map();
+      for (let i = 0; i < s.length; i++) {
+        const a = s[i];
+        const b = t[i];
+        if (fwd.has(a) && fwd.get(a) !== b) return boolOut(false);
+        if (bwd.has(b) && bwd.get(b) !== a) return boolOut(false);
+        fwd.set(a, b);
+        bwd.set(b, a);
+      }
+      return boolOut(true);
+    },
+    tests: [
+      { input: "egg\nadd", sample: true },
+      { input: "foo\nbar", sample: true },
+      { input: "badc\nbaba", sample: true },
+      { input: "paper\ntitle" },
+      { input: "a\na" },
+      { input: "ab\naa" }
+    ]
+  },
+  {
+    slug: "zigzag-conversion",
+    title: "Zigzag Conversion",
+    difficulty: "MEDIUM",
+    statement: `Write the string in a zigzag pattern over \`numRows\` rows (down the first column, diagonally up to the top, repeat), then read it row by row.
+
+For \`"PAYPALISHIRING"\` with 3 rows:
+
+\`\`\`
+P   A   H   N
+A P L S I I G
+Y   I   R
+\`\`\`
+
+Reading row-by-row gives \`"PAHNAPLSIIGYIR"\`.
+
+**Input**
+- Line 1: the string \`s\`
+- Line 2: the integer \`numRows\`
+
+**Output**: the converted string.`,
+    constraints: `- 1 \u2264 s.length \u2264 1000
+- 1 \u2264 numRows \u2264 1000`,
+    examples: [
+      { input: "PAYPALISHIRING\n3", output: "PAHNAPLSIIGYIR" },
+      { input: "PAYPALISHIRING\n4", output: "PINALSIGYAHRPI" },
+      { input: "AB\n1", output: "AB" }
+    ],
+    hints: [
+      "You never need the 2D grid \u2014 only which row each character lands in.",
+      "Walk the string appending to a current-row buffer; bounce direction at row 0 and row numRows\u22121.",
+      "numRows = 1 is the classic edge case \u2014 no bouncing possible."
+    ],
+    editorial: `Simulate the zigzag with one counter: keep an array of numRows string builders, a current row, and a direction. Append each character to its row, flipping direction whenever you touch the top or bottom row, then concatenate the rows. O(n) time, O(n) space, and no geometry required. Guard numRows = 1 (or \u2265 s.length) by returning s unchanged \u2014 the bounce logic would otherwise divide the walk by zero conceptually. The pure-math variant jumps indices by cycle length 2\xB7numRows\u22122 per row; it's O(1) extra space but far easier to get wrong under pressure.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("zigzag conversion leetcode"),
+    tags: ["string", "simulation"],
+    starterCode: buildStarter("stringInt", "string", "convert"),
+    reference: (input) => {
+      const s = lines(input)[0] ?? "";
+      const k = int(lines(input)[1]);
+      if (k <= 1 || k >= s.length) return s;
+      const rows = new Array(k).fill("");
+      let r = 0;
+      let dir = -1;
+      for (const ch of s) {
+        rows[r] += ch;
+        if (r === 0 || r === k - 1) dir = -dir;
+        r += dir;
+      }
+      return rows.join("");
+    },
+    tests: [
+      { input: "PAYPALISHIRING\n3", sample: true },
+      { input: "PAYPALISHIRING\n4", sample: true },
+      { input: "AB\n1", sample: true },
+      { input: "A\n5" },
+      { input: "ABCDEFGHIJ\n2" },
+      { input: "ABCD\n4" }
+    ]
   }
+];
+
+// src/data/problems/two-pointers.ts
+var first2 = (s) => ints(s.split("\n")[0]);
+var twoPointers = [
+  {
+    slug: "two-sum-ii-input-array-is-sorted",
+    title: "Two Sum II \u2014 Input Array Is Sorted",
+    difficulty: "MEDIUM",
+    statement: `Given a **1-indexed** array of integers \`nums\` sorted in non-decreasing order and an integer \`target\`, find two numbers that add up to \`target\` and return their 1-based indices \`i < j\`. Exactly one solution exists; use only O(1) extra space.
+
+**Input**
+- Line 1: space-separated integers \`nums\` (sorted)
+- Line 2: integer \`target\`
+
+**Output**
+- The two 1-based indices, space-separated.`,
+    constraints: `- 2 \u2264 nums.length \u2264 3\xB710^4
+- nums is sorted in non-decreasing order
+- Exactly one valid pair exists.`,
+    examples: [
+      { input: "2 7 11 15\n9", output: "1 2", explanation: "2 + 7 = 9 \u2192 indices 1 and 2." },
+      { input: "-1 0\n-1", output: "1 2" }
+    ],
+    hints: [
+      "The array is sorted \u2014 that's the whole trick.",
+      "Start pointers at both ends. If the sum is too big, which pointer must move?"
+    ],
+    editorial: `Place one pointer at each end. If the pair sums above \`target\`, only moving the right pointer left can reduce the sum; if below, only moving the left pointer right can increase it. Each step discards one candidate, so the scan is O(n) with O(1) space \u2014 the sorted order guarantees you never skip the answer.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode two sum ii sorted"),
+    tags: ["two-pointers", "array", "binary-search"],
+    starterCode: buildStarter("intArrayTarget", "intArray", "twoSumSorted"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const target = int(l1);
+      let l = 0;
+      let r = nums.length - 1;
+      while (l < r) {
+        const s = nums[l] + nums[r];
+        if (s === target) return `${l + 1} ${r + 1}`;
+        if (s < target) l++;
+        else r--;
+      }
+      return "";
+    },
+    tests: [
+      { input: "2 7 11 15\n9", sample: true },
+      { input: "-1 0\n-1", sample: true },
+      { input: "1 2 3 4 4 9 56 90\n8" },
+      { input: "5 25 75\n100" },
+      { input: "-3 -1 2 6\n5" }
+    ]
+  },
+  {
+    slug: "3sum",
+    title: "3Sum",
+    difficulty: "MEDIUM",
+    statement: `Given an integer array \`nums\`, find all **unique** triplets \`[a, b, c]\` such that \`a + b + c = 0\`.
+
+**Input**: one line of space-separated integers.
+**Output**: each triplet on its own line with its three numbers in non-decreasing order. Triplets may be produced in any order \u2014 the template prints them in a canonical order. Print nothing if there are none.`,
+    constraints: `- 3 \u2264 nums.length \u2264 3000
+- -10^5 \u2264 nums[i] \u2264 10^5`,
+    examples: [
+      {
+        input: "-1 0 1 2 -1 -4",
+        output: "-1 -1 2\n-1 0 1",
+        explanation: "The distinct zero-sum triplets are (-1,-1,2) and (-1,0,1)."
+      },
+      { input: "0 1 1", output: "", explanation: "No triplet sums to 0." }
+    ],
+    hints: [
+      "Sort the array first \u2014 duplicates become adjacent and easy to skip.",
+      "Fix the smallest element, then the problem reduces to Two Sum II on the rest.",
+      "After finding a match, advance both pointers past equal values to avoid duplicate triplets."
+    ],
+    editorial: `Sort \`nums\`. For each index \`i\` (skipping repeated values), run the two-pointer sum search on the subarray to its right looking for \`-nums[i]\`. On a hit, record the triplet and advance both pointers past duplicates. Sorting costs O(n log n) and each fixed \`i\` does an O(n) scan \u2192 O(n\xB2) total.`,
+    approaches: [
+      {
+        name: "Hash set per element",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(n)",
+        body: "For each pair, look up the complement in a set. Deduplication is fiddly \u2014 you must canonicalize triplets."
+      },
+      {
+        name: "Sort + two pointers",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(1)",
+        body: "Sort, fix the first element, then converge two pointers. Skipping adjacent duplicates gives uniqueness for free."
+      }
+    ],
+    complexityTime: "O(n\xB2)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode 3sum"),
+    tags: ["two-pointers", "array", "sorting"],
+    starterCode: buildStarter("intArray", "sortedIntMatrix", "threeSum"),
+    reference: (input) => {
+      const nums = first2(input).sort((a, b) => a - b);
+      const rows = [];
+      for (let i = 0; i < nums.length - 2; i++) {
+        if (i > 0 && nums[i] === nums[i - 1]) continue;
+        let l = i + 1;
+        let r = nums.length - 1;
+        while (l < r) {
+          const s = nums[i] + nums[l] + nums[r];
+          if (s === 0) {
+            rows.push([nums[i], nums[l], nums[r]]);
+            while (l < r && nums[l] === nums[l + 1]) l++;
+            while (l < r && nums[r] === nums[r - 1]) r--;
+            l++;
+            r--;
+          } else if (s < 0) l++;
+          else r--;
+        }
+      }
+      return sortedMatOut(rows);
+    },
+    tests: [
+      { input: "-1 0 1 2 -1 -4", sample: true },
+      { input: "0 1 1", sample: true },
+      { input: "0 0 0" },
+      { input: "-2 0 1 1 2" },
+      { input: "3 -2 1 0" },
+      { input: "-4 -2 -2 -2 0 1 2 2 2 3 3 4 4 6 6" }
+    ]
+  },
+  {
+    slug: "3sum-closest",
+    title: "3Sum Closest",
+    difficulty: "MEDIUM",
+    statement: `Given an integer array \`nums\` and an integer \`target\`, find three integers in \`nums\` whose sum is **closest** to \`target\` and return that sum. Each input has exactly one answer.
+
+**Input**
+- Line 1: space-separated integers \`nums\`
+- Line 2: integer \`target\`
+
+**Output**: the closest achievable sum.`,
+    constraints: `- 3 \u2264 nums.length \u2264 500
+- -1000 \u2264 nums[i] \u2264 1000
+- Exactly one answer is closest.`,
+    examples: [
+      { input: "-1 2 1 -4\n1", output: "2", explanation: "-1 + 2 + 1 = 2 is closest to 1." },
+      { input: "0 0 0\n1", output: "0" }
+    ],
+    hints: [
+      "Sort, fix one element, and two-pointer the rest \u2014 just like 3Sum.",
+      "Track the best sum seen by absolute distance to target."
+    ],
+    editorial: `Sort the array. Fix each index and converge two pointers on the remainder; at every step compare \`|sum \u2212 target|\` against the best so far and move the pointer that brings the sum toward \`target\`. O(n\xB2) time, O(1) space.`,
+    complexityTime: "O(n\xB2)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("3sum closest leetcode"),
+    tags: ["two-pointers", "array", "sorting"],
+    starterCode: buildStarter("intArrayTarget", "int", "threeSumClosest"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0).sort((a, b) => a - b);
+      const target = int(l1);
+      let best = nums[0] + nums[1] + nums[2];
+      for (let i = 0; i < nums.length - 2; i++) {
+        let l = i + 1;
+        let r = nums.length - 1;
+        while (l < r) {
+          const s = nums[i] + nums[l] + nums[r];
+          if (Math.abs(s - target) < Math.abs(best - target)) best = s;
+          if (s === target) return String(s);
+          if (s < target) l++;
+          else r--;
+        }
+      }
+      return String(best);
+    },
+    tests: [
+      { input: "-1 2 1 -4\n1", sample: true },
+      { input: "0 0 0\n1", sample: true },
+      { input: "1 1 1 0\n-100" },
+      { input: "4 0 5 -5 3 3 0 -4 -5\n-2" }
+    ]
+  },
+  {
+    slug: "container-with-most-water",
+    title: "Container With Most Water",
+    difficulty: "MEDIUM",
+    statement: `You are given an array \`height\` where the i-th element is the height of a vertical line at position \`i\`. Choose two lines that, together with the x-axis, form a container holding the most water. Return the maximum amount of water.
+
+**Input**: one line of space-separated integers \`height\`.
+**Output**: the maximum area.`,
+    constraints: `- 2 \u2264 height.length \u2264 10^5
+- 0 \u2264 height[i] \u2264 10^4`,
+    examples: [
+      { input: "1 8 6 2 5 4 8 3 7", output: "49", explanation: "Lines at indices 1 and 8: min(8,7) \xD7 7 = 49." },
+      { input: "1 1", output: "1" }
+    ],
+    hints: [
+      "Area = min(left, right) \xD7 width. Start with maximum width.",
+      "Moving the taller line inward can never help \u2014 the height is capped by the shorter one."
+    ],
+    editorial: `Start with pointers at both ends (max width) and repeatedly move the **shorter** line inward. Moving the taller one can only shrink or keep the limiting height while reducing width, so it's never better. Track the best area along the way \u2014 O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode container with most water"),
+    tags: ["two-pointers", "array", "greedy"],
+    starterCode: buildStarter("intArray", "int", "maxArea"),
+    reference: (input) => {
+      const h = first2(input);
+      let l = 0;
+      let r = h.length - 1;
+      let best = 0;
+      while (l < r) {
+        best = Math.max(best, Math.min(h[l], h[r]) * (r - l));
+        if (h[l] < h[r]) l++;
+        else r--;
+      }
+      return String(best);
+    },
+    tests: [
+      { input: "1 8 6 2 5 4 8 3 7", sample: true },
+      { input: "1 1", sample: true },
+      { input: "4 3 2 1 4" },
+      { input: "1 2 1" },
+      { input: "2 3 4 5 18 17 6" }
+    ]
+  },
+  {
+    slug: "trapping-rain-water",
+    title: "Trapping Rain Water",
+    difficulty: "HARD",
+    statement: `Given \`n\` non-negative integers representing an elevation map where each bar has width 1, compute how much water it can trap after raining.
+
+**Input**: one line of space-separated integers \`height\`.
+**Output**: total units of trapped water.`,
+    constraints: `- 1 \u2264 height.length \u2264 2\xB710^4
+- 0 \u2264 height[i] \u2264 10^5`,
+    examples: [
+      { input: "0 1 0 2 1 0 1 3 2 1 2 1", output: "6" },
+      { input: "4 2 0 3 2 5", output: "9" }
+    ],
+    hints: [
+      "Water above position i is min(maxLeft, maxRight) \u2212 height[i].",
+      "Precomputing both max arrays works in O(n) space. Can two pointers avoid that?",
+      "Whichever side has the smaller running max is the binding constraint \u2014 process from that side."
+    ],
+    editorial: `Water at index \`i\` equals \`min(maxLeft, maxRight) \u2212 height[i]\`. With two pointers and running maxes from each end, the side with the **smaller** running max is fully determined (the other side is at least as tall somewhere), so we can settle that cell and advance. One pass, O(n) time, O(1) space.`,
+    approaches: [
+      {
+        name: "Prefix/suffix max arrays",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "Precompute maxLeft[i] and maxRight[i]; sum min of both minus height."
+      },
+      {
+        name: "Two pointers",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "Advance from the side with the smaller running max; that max bounds the water there."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode trapping rain water"),
+    tags: ["two-pointers", "array", "stack", "dynamic-programming"],
+    starterCode: buildStarter("intArray", "int", "trap"),
+    reference: (input) => {
+      const h = first2(input);
+      let l = 0;
+      let r = h.length - 1;
+      let lm = 0;
+      let rm = 0;
+      let res = 0;
+      while (l < r) {
+        if (h[l] < h[r]) {
+          lm = Math.max(lm, h[l]);
+          res += lm - h[l];
+          l++;
+        } else {
+          rm = Math.max(rm, h[r]);
+          res += rm - h[r];
+          r--;
+        }
+      }
+      return String(res);
+    },
+    tests: [
+      { input: "0 1 0 2 1 0 1 3 2 1 2 1", sample: true },
+      { input: "4 2 0 3 2 5", sample: true },
+      { input: "1" },
+      { input: "5 4 1 2" },
+      { input: "3 0 3" },
+      { input: "0 0 0" }
+    ]
+  },
+  {
+    slug: "remove-duplicates-from-sorted-array",
+    title: "Remove Duplicates from Sorted Array",
+    difficulty: "EASY",
+    statement: `Given a sorted integer array \`nums\`, remove the duplicates **in place** so that each unique element appears only once, keeping the relative order. Return the resulting deduplicated array.
+
+**Input**: one line of space-separated integers (sorted).
+**Output**: the deduplicated array, space-separated.`,
+    constraints: `- 1 \u2264 nums.length \u2264 3\xB710^4
+- nums is sorted in non-decreasing order.`,
+    examples: [
+      { input: "1 1 2", output: "1 2" },
+      { input: "0 0 1 1 1 2 2 3 3 4", output: "0 1 2 3 4" }
+    ],
+    hints: [
+      "Because the array is sorted, duplicates are adjacent.",
+      "Keep a slow 'write' pointer for the last unique value placed."
+    ],
+    editorial: `Use a slow/fast pointer pair. The fast pointer scans every element; whenever it sees a value different from the last written one, the slow pointer writes it and advances. Sorted order guarantees all duplicates are adjacent, so one pass suffices \u2014 O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode remove duplicates from sorted array"),
+    tags: ["two-pointers", "array"],
+    starterCode: buildStarter("intArray", "intArray", "removeDuplicates"),
+    reference: (input) => {
+      const nums = first2(input);
+      const res = nums.filter((x, i) => i === 0 || x !== nums[i - 1]);
+      return arrOut(res);
+    },
+    tests: [
+      { input: "1 1 2", sample: true },
+      { input: "0 0 1 1 1 2 2 3 3 4", sample: true },
+      { input: "7" },
+      { input: "-3 -3 -3" },
+      { input: "1 2 3" }
+    ]
+  },
+  {
+    slug: "sort-colors",
+    title: "Sort Colors",
+    difficulty: "MEDIUM",
+    statement: `Given an array \`nums\` with values \`0\`, \`1\`, and \`2\` representing red, white, and blue, sort them in place so that same colors are adjacent in the order red \u2192 white \u2192 blue. Do it in one pass without the library sort. Return the sorted array.
+
+**Input**: one line of space-separated integers (each 0, 1, or 2).
+**Output**: the sorted array, space-separated.`,
+    constraints: `- 1 \u2264 nums.length \u2264 300
+- nums[i] \u2208 {0, 1, 2}`,
+    examples: [
+      { input: "2 0 2 1 1 0", output: "0 0 1 1 2 2" },
+      { input: "2 0 1", output: "0 1 2" }
+    ],
+    hints: [
+      "Counting sort works in two passes. The Dutch National Flag algorithm does it in one.",
+      "Maintain three regions with pointers low, mid, high: 0s before low, 2s after high.",
+      "When you swap a 2 to the back, don't advance mid \u2014 the swapped-in value is unexamined."
+    ],
+    editorial: `**Dutch National Flag** (Dijkstra). Keep three pointers: everything before \`low\` is 0, everything after \`high\` is 2, and \`mid\` scans. On 0 \u2192 swap to \`low\`, advance both; on 2 \u2192 swap to \`high\`, shrink \`high\` only (the incoming value is unseen); on 1 \u2192 advance \`mid\`. One pass, O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode sort colors dutch national flag"),
+    tags: ["two-pointers", "array", "sorting"],
+    starterCode: buildStarter("intArray", "intArray", "sortColors"),
+    reference: (input) => {
+      const nums = first2(input);
+      return arrOut(nums.sort((a, b) => a - b));
+    },
+    tests: [
+      { input: "2 0 2 1 1 0", sample: true },
+      { input: "2 0 1", sample: true },
+      { input: "0" },
+      { input: "1 1 1" },
+      { input: "2 2 1 1 0 0" }
+    ]
+  },
+  {
+    slug: "is-subsequence",
+    title: "Is Subsequence",
+    difficulty: "EASY",
+    statement: `Given strings \`s\` and \`t\`, return \`true\` if \`s\` is a subsequence of \`t\` \u2014 i.e. \`s\` can be formed by deleting characters of \`t\` without reordering the rest.
+
+**Input**
+- Line 1: string \`s\`
+- Line 2: string \`t\`
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 0 \u2264 s.length \u2264 100
+- 0 \u2264 t.length \u2264 10^4
+- Lowercase English letters only.`,
+    examples: [
+      { input: "abc\nahbgdc", output: "true" },
+      { input: "axc\nahbgdc", output: "false" }
+    ],
+    hints: [
+      "Walk t once; advance a pointer into s whenever characters match.",
+      "s is a subsequence iff the s-pointer reaches the end."
+    ],
+    editorial: `Greedy single pass: scan \`t\` with one pointer while a second pointer tracks the next needed character of \`s\`. Matching the first available occurrence is always safe \u2014 it leaves the most room for the remaining characters. O(|t|) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("is subsequence leetcode two pointers"),
+    tags: ["two-pointers", "string", "greedy"],
+    starterCode: buildStarter("twoStrings", "bool", "isSubsequence"),
+    reference: (input) => {
+      const [s = "", t = ""] = lines(input);
+      let i = 0;
+      for (const ch of t) {
+        if (i < s.length && s[i] === ch) i++;
+      }
+      return boolOut(i === s.length);
+    },
+    tests: [
+      { input: "abc\nahbgdc", sample: true },
+      { input: "axc\nahbgdc", sample: true },
+      { input: "\nanything" },
+      { input: "b\nabc" },
+      { input: "aaaaaa\nbbaaaa" }
+    ]
+  },
+  {
+    slug: "merge-sorted-arrays",
+    title: "Merge Two Sorted Arrays",
+    difficulty: "EASY",
+    statement: `Given two integer arrays \`nums1\` and \`nums2\`, each sorted in non-decreasing order, merge them into a single sorted array and return it.
+
+**Input**
+- Line 1: space-separated integers \`nums1\` (may be empty)
+- Line 2: space-separated integers \`nums2\` (may be empty)
+
+**Output**: the merged sorted array, space-separated.`,
+    constraints: `- 0 \u2264 nums1.length, nums2.length \u2264 200
+- -10^9 \u2264 values \u2264 10^9`,
+    examples: [
+      { input: "1 2 3\n2 5 6", output: "1 2 2 3 5 6" },
+      { input: "\n1", output: "1" }
+    ],
+    hints: [
+      "Compare the front of both arrays and take the smaller.",
+      "Don't forget the leftovers when one array is exhausted."
+    ],
+    editorial: `The classic merge step of merge sort: two read pointers, always append the smaller front element, then append whatever remains. O(m + n) time and output space \u2014 this exact routine is the building block of merge sort and external sorting.`,
+    complexityTime: "O(m + n)",
+    complexitySpace: "O(m + n)",
+    youtubeUrl: yt("merge sorted array leetcode"),
+    tags: ["two-pointers", "array", "sorting"],
+    starterCode: buildStarter("twoIntArrays", "intArray", "mergeArrays"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const a = ints(l0);
+      const b = ints(l1);
+      const res = [];
+      let i = 0;
+      let j = 0;
+      while (i < a.length || j < b.length) {
+        if (j >= b.length || i < a.length && a[i] <= b[j]) res.push(a[i++]);
+        else res.push(b[j++]);
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "1 2 3\n2 5 6", sample: true },
+      { input: "\n1", sample: true },
+      { input: "4\n" },
+      { input: "-5 0 5\n-6 6" },
+      { input: "1 1 1\n1 1" }
+    ]
+  },
+  {
+    slug: "valid-palindrome-ii",
+    title: "Valid Palindrome II",
+    difficulty: "EASY",
+    statement: `Given a string \`s\`, return \`true\` if it can become a palindrome after deleting **at most one** character.
+
+**Input**: one line, the string \`s\`.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 s.length \u2264 10^5
+- Lowercase English letters only.`,
+    examples: [
+      { input: "aba", output: "true" },
+      { input: "abca", output: "true", explanation: "Delete 'c' (or 'b')." },
+      { input: "abc", output: "false" }
+    ],
+    hints: [
+      "Converge two pointers as in a normal palindrome check.",
+      "On the first mismatch you have exactly two options: skip the left char or skip the right char."
+    ],
+    editorial: `Run the standard two-pointer palindrome check. At the first mismatch, the only hope is deleting one of the two mismatched characters \u2014 so check whether \`s[l+1..r]\` or \`s[l..r\u22121]\` is a palindrome. Either branch is a plain O(n) check, so the whole thing is O(n).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("valid palindrome ii leetcode"),
+    tags: ["two-pointers", "string", "greedy"],
+    starterCode: buildStarter("string", "bool", "validPalindrome"),
+    reference: (input) => {
+      const s = lines(input)[0] ?? "";
+      const isPal = (l2, r2) => {
+        while (l2 < r2) {
+          if (s[l2] !== s[r2]) return false;
+          l2++;
+          r2--;
+        }
+        return true;
+      };
+      let l = 0;
+      let r = s.length - 1;
+      while (l < r) {
+        if (s[l] !== s[r]) return boolOut(isPal(l + 1, r) || isPal(l, r - 1));
+        l++;
+        r--;
+      }
+      return boolOut(true);
+    },
+    tests: [
+      { input: "aba", sample: true },
+      { input: "abca", sample: true },
+      { input: "abc" },
+      { input: "a" },
+      { input: "deeee" },
+      { input: "cuucu" }
+    ]
+  },
+  {
+    slug: "boats-to-save-people",
+    title: "Boats to Save People",
+    difficulty: "MEDIUM",
+    statement: `Each boat carries at most **two** people, subject to a weight \`limit\`. Given everyone's weights, return the minimum number of boats needed to carry every person.
+
+**Input**
+- Line 1: space-separated weights
+- Line 2: the integer \`limit\`
+
+**Output**: the minimum number of boats.`,
+    constraints: `- 1 \u2264 people.length \u2264 5\xB710^4
+- 1 \u2264 people[i] \u2264 limit \u2264 3\xB710^4`,
+    examples: [
+      { input: "1 2\n3", output: "1" },
+      {
+        input: "3 2 2 1\n3",
+        output: "3",
+        explanation: "Boats: (1,2), (2), (3)."
+      },
+      { input: "3 5 3 4\n5", output: "4", explanation: "No two fit together." }
+    ],
+    hints: [
+      "Sort. Who should share a boat with the heaviest person?",
+      "If the lightest can't pair with the heaviest, the heaviest rides alone \u2014 no better partner exists.",
+      "Two pointers converging from both ends; one boat per step."
+    ],
+    editorial: `Sort the weights and converge two pointers. Each round, the heaviest remaining person boards a boat; the lightest joins them if the pair fits under the limit, otherwise the heavy one sails alone. The greedy is safe because the heaviest person's only possible partner is *someone*, and the lightest is the most likely candidate \u2014 if even they don't fit, nobody does. Since each person can only pair with one other (capacity two), no cleverer matching exists. O(n log n) for the sort, O(1) extra beyond it.`,
+    approaches: [
+      {
+        name: "Sort + two pointers",
+        complexityTime: "O(n log n)",
+        complexitySpace: "O(1)",
+        body: "Pair lightest with heaviest when possible; heaviest goes alone otherwise."
+      }
+    ],
+    complexityTime: "O(n log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("boats to save people leetcode"),
+    tags: ["two-pointers", "greedy", "sorting"],
+    starterCode: buildStarter("intArrayK", "int", "numRescueBoats"),
+    reference: (input) => {
+      const people = ints(lines(input)[0]).sort((a, b) => a - b);
+      const limit = int(lines(input)[1]);
+      let i = 0;
+      let j = people.length - 1;
+      let boats = 0;
+      while (i <= j) {
+        if (people[i] + people[j] <= limit) i++;
+        j--;
+        boats++;
+      }
+      return String(boats);
+    },
+    tests: [
+      { input: "1 2\n3", sample: true },
+      { input: "3 2 2 1\n3", sample: true },
+      { input: "3 5 3 4\n5", sample: true },
+      { input: "5\n5" },
+      { input: "1 1 1 1\n2" },
+      { input: "2 4 5 1 3 6\n6" }
+    ]
+  }
+];
+
+// src/data/problems/sliding-window.ts
+var first3 = (s) => ints(s.split("\n")[0]);
+var slidingWindow = [
+  {
+    slug: "maximum-average-subarray-i",
+    title: "Maximum Average Subarray I",
+    difficulty: "EASY",
+    statement: `Given an integer array \`nums\` and an integer \`k\`, find the contiguous subarray of length exactly \`k\` with the maximum average, and return that average.
+
+**Input**
+- Line 1: space-separated integers \`nums\`
+- Line 2: integer \`k\`
+
+**Output**: the maximum average, printed with two decimal places (the template formats it for you).`,
+    constraints: `- 1 \u2264 k \u2264 nums.length \u2264 10^5
+- -10^4 \u2264 nums[i] \u2264 10^4`,
+    examples: [
+      { input: "1 12 -5 -6 50 3\n4", output: "12.75", explanation: "(12 - 5 - 6 + 50) / 4 = 12.75." },
+      { input: "5\n1", output: "5.00" }
+    ],
+    hints: [
+      "Recomputing each window sum from scratch is O(n\xB7k).",
+      "Slide the window: add the entering element, subtract the leaving one."
+    ],
+    editorial: `Compute the sum of the first \`k\` elements, then slide the window one step at a time: add the new element, subtract the one that left. Track the maximum sum and divide by \`k\` at the end. O(n) time, O(1) space \u2014 the canonical fixed-size sliding window.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("maximum average subarray sliding window"),
+    tags: ["sliding-window", "array"],
+    starterCode: buildStarter("intArrayK", "float2", "findMaxAverage"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const k = int(l1);
+      let sum = 0;
+      for (let i = 0; i < k; i++) sum += nums[i];
+      let best = sum;
+      for (let i = k; i < nums.length; i++) {
+        sum += nums[i] - nums[i - k];
+        best = Math.max(best, sum);
+      }
+      return (best / k).toFixed(2);
+    },
+    tests: [
+      { input: "1 12 -5 -6 50 3\n4", sample: true },
+      { input: "5\n1", sample: true },
+      { input: "0 4 0 3 2\n1" },
+      { input: "-1 -2 -3 -4\n2" },
+      { input: "8 2 4 6\n4" }
+    ]
+  },
+  {
+    slug: "minimum-size-subarray-sum",
+    title: "Minimum Size Subarray Sum",
+    difficulty: "MEDIUM",
+    statement: `Given an array of **positive** integers \`nums\` and a positive integer \`target\`, return the minimal length of a contiguous subarray whose sum is \u2265 \`target\`. If there is no such subarray, return \`0\`.
+
+**Input**
+- Line 1: space-separated positive integers \`nums\`
+- Line 2: integer \`target\`
+
+**Output**: the minimal length, or 0.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^5
+- 1 \u2264 nums[i] \u2264 10^4
+- 1 \u2264 target \u2264 10^9`,
+    examples: [
+      { input: "2 3 1 2 4 3\n7", output: "2", explanation: "[4,3] has sum 7 with length 2." },
+      { input: "1 1 1 1\n11", output: "0" }
+    ],
+    hints: [
+      "All numbers are positive, so growing the window only increases the sum.",
+      "Expand the right edge until the sum reaches target, then shrink from the left while it still holds."
+    ],
+    editorial: `A variable-size window works because every element is positive: the window sum is monotonic in both directions. Expand right until \`sum \u2265 target\`, then contract left as far as possible, recording the window length at each valid state. Each index enters and leaves the window once \u2192 O(n).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("minimum size subarray sum sliding window"),
+    tags: ["sliding-window", "array", "binary-search"],
+    starterCode: buildStarter("intArrayTarget", "int", "minSubArrayLen"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const target = int(l1);
+      let best = Infinity;
+      let sum = 0;
+      let l = 0;
+      for (let r = 0; r < nums.length; r++) {
+        sum += nums[r];
+        while (sum >= target) {
+          best = Math.min(best, r - l + 1);
+          sum -= nums[l++];
+        }
+      }
+      return String(best === Infinity ? 0 : best);
+    },
+    tests: [
+      { input: "2 3 1 2 4 3\n7", sample: true },
+      { input: "1 1 1 1\n11", sample: true },
+      { input: "1 4 4\n4" },
+      { input: "5\n5" },
+      { input: "1 2 3 4 5\n15" }
+    ]
+  },
+  {
+    slug: "longest-repeating-character-replacement",
+    title: "Longest Repeating Character Replacement",
+    difficulty: "MEDIUM",
+    statement: `You are given a string \`s\` of uppercase English letters and an integer \`k\`. You may replace at most \`k\` characters with any other letter. Return the length of the longest substring containing a single repeated letter achievable this way.
+
+**Input**
+- Line 1: string \`s\`
+- Line 2: integer \`k\`
+
+**Output**: the maximum length.`,
+    constraints: `- 1 \u2264 s.length \u2264 10^5
+- 0 \u2264 k \u2264 s.length
+- Uppercase English letters only.`,
+    examples: [
+      { input: "ABAB\n2", output: "4", explanation: "Replace both A's (or both B's) \u2192 AAAA." },
+      { input: "AABABBA\n1", output: "4", explanation: "Replace the middle A \u2192 AABBBBA, window BBBB." }
+    ],
+    hints: [
+      "A window is fixable iff (window length \u2212 count of its most frequent letter) \u2264 k.",
+      "Grow the right edge; when the window becomes invalid, slide the left edge forward.",
+      "maxFreq never needs to decrease \u2014 a stale value only makes the window criterion stricter, never wrong."
+    ],
+    editorial: `Maintain letter counts in a window and \`maxFreq\`, the highest count seen. The window is valid when \`len \u2212 maxFreq \u2264 k\` (the other characters can all be replaced). Expand right; if invalid, advance left one step. Since the answer only cares about the largest valid window and \`maxFreq\` never shrinking keeps the window size monotone, the single pass is O(n) with an O(26) counter.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode longest repeating character replacement"),
+    tags: ["sliding-window", "string", "hash-table"],
+    starterCode: buildStarter("stringInt", "int", "characterReplacement"),
+    reference: (input) => {
+      const [s = "", kline] = lines(input);
+      const k = int(kline);
+      const count = /* @__PURE__ */ new Map();
+      let l = 0;
+      let maxFreq = 0;
+      let best = 0;
+      for (let r = 0; r < s.length; r++) {
+        count.set(s[r], (count.get(s[r]) ?? 0) + 1);
+        maxFreq = Math.max(maxFreq, count.get(s[r]));
+        while (r - l + 1 - maxFreq > k) {
+          count.set(s[l], count.get(s[l]) - 1);
+          l++;
+        }
+        best = Math.max(best, r - l + 1);
+      }
+      return String(best);
+    },
+    tests: [
+      { input: "ABAB\n2", sample: true },
+      { input: "AABABBA\n1", sample: true },
+      { input: "AAAA\n0" },
+      { input: "ABCDE\n1" },
+      { input: "BAAAB\n2" }
+    ]
+  },
+  {
+    slug: "permutation-in-string",
+    title: "Permutation in String",
+    difficulty: "MEDIUM",
+    statement: `Given two strings \`s1\` and \`s2\`, return \`true\` if \`s2\` contains a permutation of \`s1\` as a substring.
+
+**Input**
+- Line 1: string \`s1\`
+- Line 2: string \`s2\`
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 s1.length, s2.length \u2264 10^4
+- Lowercase English letters only.`,
+    examples: [
+      { input: "ab\neidbaooo", output: "true", explanation: '"ba" is a permutation of "ab".' },
+      { input: "ab\neidboaoo", output: "false" }
+    ],
+    hints: [
+      "Two strings are permutations of each other iff their letter counts match.",
+      "Slide a window of length |s1| across s2, updating counts incrementally."
+    ],
+    editorial: `A permutation match is a frequency match. Keep a count array for \`s1\` and one for the current window of length \`|s1|\` in \`s2\`; slide the window one character at a time, incrementing the entering letter and decrementing the leaving one, and compare counts (or track how many of the 26 letters currently match). O(n) time, O(26) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode permutation in string"),
+    tags: ["sliding-window", "string", "hash-table"],
+    starterCode: buildStarter("twoStrings", "bool", "checkInclusion"),
+    reference: (input) => {
+      const [s1 = "", s2 = ""] = lines(input);
+      if (s1.length > s2.length) return boolOut(false);
+      const need = new Array(26).fill(0);
+      const win = new Array(26).fill(0);
+      const idx = (c) => c.charCodeAt(0) - 97;
+      for (const c of s1) need[idx(c)]++;
+      for (let i = 0; i < s2.length; i++) {
+        win[idx(s2[i])]++;
+        if (i >= s1.length) win[idx(s2[i - s1.length])]--;
+        if (i >= s1.length - 1 && need.every((v, j) => v === win[j])) return boolOut(true);
+      }
+      return boolOut(false);
+    },
+    tests: [
+      { input: "ab\neidbaooo", sample: true },
+      { input: "ab\neidboaoo", sample: true },
+      { input: "a\na" },
+      { input: "abc\nccccbbbbaaaa" },
+      { input: "adc\ndcda" }
+    ]
+  },
+  {
+    slug: "find-all-anagrams-in-a-string",
+    title: "Find All Anagrams in a String",
+    difficulty: "MEDIUM",
+    statement: `Given two strings \`s\` and \`p\`, return the start indices of all anagrams of \`p\` inside \`s\`, in increasing order.
+
+**Input**
+- Line 1: string \`s\`
+- Line 2: string \`p\`
+
+**Output**: the start indices, space-separated (nothing if none).`,
+    constraints: `- 1 \u2264 s.length, p.length \u2264 3\xB710^4
+- Lowercase English letters only.`,
+    examples: [
+      { input: "cbaebabacd\nabc", output: "0 6", explanation: '"cba" at 0 and "bac" at 6.' },
+      { input: "abab\nab", output: "0 1 2" }
+    ],
+    hints: [
+      "Same idea as Permutation in String, but collect every matching window.",
+      "Maintain letter counts for a window of length |p| and compare as you slide."
+    ],
+    editorial: `Slide a fixed window of length \`|p|\` across \`s\`, maintaining a letter-count array that is updated in O(1) per step. Whenever the window's counts equal \`p\`'s counts, record the window start. O(n \xB7 26) worst case, effectively O(n).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("find all anagrams in a string leetcode"),
+    tags: ["sliding-window", "string", "hash-table"],
+    starterCode: buildStarter("twoStrings", "intArray", "findAnagrams"),
+    reference: (input) => {
+      const [s = "", p = ""] = lines(input);
+      if (p.length > s.length) return "";
+      const need = new Array(26).fill(0);
+      const win = new Array(26).fill(0);
+      const idx = (c) => c.charCodeAt(0) - 97;
+      for (const c of p) need[idx(c)]++;
+      const res = [];
+      for (let i = 0; i < s.length; i++) {
+        win[idx(s[i])]++;
+        if (i >= p.length) win[idx(s[i - p.length])]--;
+        if (i >= p.length - 1 && need.every((v, j) => v === win[j])) res.push(i - p.length + 1);
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "cbaebabacd\nabc", sample: true },
+      { input: "abab\nab", sample: true },
+      { input: "aaaa\naa" },
+      { input: "xyz\nabc" },
+      { input: "af\nbe" }
+    ]
+  },
+  {
+    slug: "fruit-into-baskets",
+    title: "Fruit Into Baskets",
+    difficulty: "MEDIUM",
+    statement: `You walk along a row of trees; \`fruits[i]\` is the fruit type of the i-th tree. You have two baskets, each holding only one type. Starting anywhere, you pick one fruit per tree moving right, stopping when a tree's fruit fits neither basket. Return the maximum number of fruits you can collect \u2014 i.e. the longest subarray with at most **two distinct** values.
+
+**Input**: one line of space-separated integers \`fruits\`.
+**Output**: the maximum number of fruits.`,
+    constraints: `- 1 \u2264 fruits.length \u2264 10^5
+- 0 \u2264 fruits[i] \u2264 10^5`,
+    examples: [
+      { input: "1 2 1", output: "3" },
+      { input: "0 1 2 2", output: "3", explanation: "[1,2,2] uses two types." },
+      { input: "1 2 3 2 2", output: "4", explanation: "[2,3,2,2]." }
+    ],
+    hints: [
+      "This is 'longest subarray with at most 2 distinct elements' in disguise.",
+      "Track counts per type in the window; shrink from the left when a third type appears."
+    ],
+    editorial: `Maintain a window and a map \`type \u2192 count\`. Expand right; when the map grows beyond two keys, shrink from the left, decrementing counts and deleting zeros, until only two types remain. Every element is added and removed at most once \u2192 O(n).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("fruit into baskets sliding window"),
+    tags: ["sliding-window", "array", "hash-table"],
+    starterCode: buildStarter("intArray", "int", "totalFruit"),
+    reference: (input) => {
+      const fruits = first3(input);
+      const count = /* @__PURE__ */ new Map();
+      let l = 0;
+      let best = 0;
+      for (let r = 0; r < fruits.length; r++) {
+        count.set(fruits[r], (count.get(fruits[r]) ?? 0) + 1);
+        while (count.size > 2) {
+          const c = count.get(fruits[l]) - 1;
+          if (c === 0) count.delete(fruits[l]);
+          else count.set(fruits[l], c);
+          l++;
+        }
+        best = Math.max(best, r - l + 1);
+      }
+      return String(best);
+    },
+    tests: [
+      { input: "1 2 1", sample: true },
+      { input: "0 1 2 2", sample: true },
+      { input: "1 2 3 2 2", sample: true },
+      { input: "3 3 3 1 2 1 1 2 3 3 4" },
+      { input: "5" }
+    ]
+  },
+  {
+    slug: "max-consecutive-ones-iii",
+    title: "Max Consecutive Ones III",
+    difficulty: "MEDIUM",
+    statement: `Given a binary array \`nums\` and an integer \`k\`, return the length of the longest contiguous run of 1s achievable if you may flip at most \`k\` zeros.
+
+**Input**
+- Line 1: space-separated 0/1 integers
+- Line 2: integer \`k\`
+
+**Output**: the maximum length.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^5
+- nums[i] \u2208 {0, 1}
+- 0 \u2264 k \u2264 nums.length`,
+    examples: [
+      { input: "1 1 1 0 0 0 1 1 1 1 0\n2", output: "6", explanation: "Flip the last two 0s in the window [0,0,1,1,1,1]." },
+      { input: "0 0 1 1 0 0 1 1 1 0 1 1 0 0 0 1 1 1 1\n3", output: "10" }
+    ],
+    hints: [
+      "Reframe: longest window containing at most k zeros.",
+      "Count zeros in the window; when the count exceeds k, move the left edge."
+    ],
+    editorial: `The answer is the longest window with at most \`k\` zeros. Expand the right edge, incrementing a zero counter; when it exceeds \`k\`, advance the left edge (decrementing when a zero leaves). Track the best window length. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("max consecutive ones iii sliding window"),
+    tags: ["sliding-window", "array"],
+    starterCode: buildStarter("intArrayK", "int", "longestOnes"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const k = int(l1);
+      let l = 0;
+      let zeros = 0;
+      let best = 0;
+      for (let r = 0; r < nums.length; r++) {
+        if (nums[r] === 0) zeros++;
+        while (zeros > k) {
+          if (nums[l] === 0) zeros--;
+          l++;
+        }
+        best = Math.max(best, r - l + 1);
+      }
+      return String(best);
+    },
+    tests: [
+      { input: "1 1 1 0 0 0 1 1 1 1 0\n2", sample: true },
+      { input: "0 0 1 1 0 0 1 1 1 0 1 1 0 0 0 1 1 1 1\n3", sample: true },
+      { input: "0 0 0\n0" },
+      { input: "1 1 1\n0" },
+      { input: "0 0 0 1\n4" }
+    ]
+  },
+  {
+    slug: "longest-subarray-of-1s-after-deleting-one-element",
+    title: "Longest Subarray of 1's After Deleting One Element",
+    difficulty: "MEDIUM",
+    statement: `Given a binary array \`nums\`, you must delete exactly one element. Return the length of the longest run of 1s in the resulting array.
+
+**Input**: one line of space-separated 0/1 integers.
+**Output**: the maximum length (0 if none).`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^5
+- nums[i] \u2208 {0, 1}`,
+    examples: [
+      { input: "1 1 0 1", output: "3", explanation: "Delete the 0 \u2192 [1,1,1]." },
+      { input: "0 1 1 1 0 1 1 0 1", output: "5", explanation: "Delete the middle 0 \u2192 run of 5." },
+      { input: "1 1 1", output: "2", explanation: "You must delete something." }
+    ],
+    hints: [
+      "This is a window with at most one zero \u2014 minus one for the mandatory deletion.",
+      "Answer = longest such window length \u2212 1."
+    ],
+    editorial: `Find the longest window containing at most one zero (same pattern as Max Consecutive Ones III with k = 1), then subtract 1 because one element \u2014 a zero if present, otherwise a one \u2014 must be deleted. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("longest subarray of 1s after deleting one element"),
+    tags: ["sliding-window", "array"],
+    starterCode: buildStarter("intArray", "int", "longestSubarray"),
+    reference: (input) => {
+      const nums = first3(input);
+      let l = 0;
+      let zeros = 0;
+      let best = 0;
+      for (let r = 0; r < nums.length; r++) {
+        if (nums[r] === 0) zeros++;
+        while (zeros > 1) {
+          if (nums[l] === 0) zeros--;
+          l++;
+        }
+        best = Math.max(best, r - l + 1);
+      }
+      return String(best - 1);
+    },
+    tests: [
+      { input: "1 1 0 1", sample: true },
+      { input: "0 1 1 1 0 1 1 0 1", sample: true },
+      { input: "1 1 1", sample: true },
+      { input: "0" },
+      { input: "0 0 0" }
+    ]
+  },
+  {
+    slug: "sliding-window-maximum",
+    title: "Sliding Window Maximum",
+    difficulty: "HARD",
+    statement: `Given an integer array \`nums\` and a window size \`k\`, return the maximum of each contiguous window of size \`k\` as it slides left to right.
+
+**Input**
+- Line 1: space-separated integers \`nums\`
+- Line 2: integer \`k\`
+
+**Output**: the window maximums, space-separated.`,
+    constraints: `- 1 \u2264 k \u2264 nums.length \u2264 10^5
+- -10^4 \u2264 nums[i] \u2264 10^4`,
+    examples: [
+      {
+        input: "1 3 -1 -3 5 3 6 7\n3",
+        output: "3 3 5 5 6 7",
+        explanation: "Windows: [1,3,-1] [3,-1,-3] [-1,-3,5] [-3,5,3] [5,3,6] [3,6,7]."
+      },
+      { input: "1\n1", output: "1" }
+    ],
+    hints: [
+      "Recomputing each window max is O(n\xB7k). A heap gets O(n log n). Can you reach O(n)?",
+      "Keep a deque of indices whose values are strictly decreasing.",
+      "A smaller element behind a newer, larger one can never be a future maximum \u2014 drop it."
+    ],
+    editorial: `Use a **monotonic deque** of indices with decreasing values. For each new element: pop smaller values from the back (they're dominated), push the index, and pop the front if it slid out of the window. The front is always the current maximum. Every index enters and leaves the deque once \u2192 O(n).`,
+    approaches: [
+      {
+        name: "Max-heap of (value, index)",
+        complexityTime: "O(n log n)",
+        complexitySpace: "O(n)",
+        body: "Push everything; lazily discard heap tops that are outside the window."
+      },
+      {
+        name: "Monotonic deque",
+        complexityTime: "O(n)",
+        complexitySpace: "O(k)",
+        body: "Maintain decreasing values; front of the deque is the window max."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(k)",
+    youtubeUrl: yt("neetcode sliding window maximum"),
+    tags: ["sliding-window", "deque", "heap", "monotonic-stack"],
+    starterCode: buildStarter("intArrayK", "intArray", "maxSlidingWindow"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const k = int(l1);
+      const res = [];
+      for (let i = 0; i + k <= nums.length; i++) {
+        res.push(Math.max(...nums.slice(i, i + k)));
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "1 3 -1 -3 5 3 6 7\n3", sample: true },
+      { input: "1\n1", sample: true },
+      { input: "9 8 7 6 5\n2" },
+      { input: "1 2 3 4 5\n5" },
+      { input: "4 -2\n2" }
+    ]
+  },
+  {
+    slug: "minimum-window-substring",
+    title: "Minimum Window Substring",
+    difficulty: "HARD",
+    statement: `Given strings \`s\` and \`t\`, return the minimum-length substring of \`s\` that contains every character of \`t\` (including duplicates). If no such window exists, print an empty line. The answer is guaranteed unique.
+
+**Input**
+- Line 1: string \`s\`
+- Line 2: string \`t\`
+
+**Output**: the minimum window, or empty output if none.`,
+    constraints: `- 1 \u2264 s.length, t.length \u2264 10^5
+- English letters (upper and lower case).`,
+    examples: [
+      { input: "ADOBECODEBANC\nABC", output: "BANC" },
+      { input: "a\na", output: "a" },
+      { input: "a\naa", output: "", explanation: "Two 'a's are required but only one exists." }
+    ],
+    hints: [
+      "Track how many of t's required characters the window currently satisfies.",
+      "Expand right until the window is valid; then shrink left while it stays valid.",
+      "Only characters that appear in t affect validity \u2014 count them with a 'have vs need' counter."
+    ],
+    editorial: `Keep \`need\` counts for \`t\` and a \`have\` counter of how many distinct characters currently meet their required count. Expand the right edge; when \`have\` equals the number of required distinct characters, contract from the left recording the best window, until validity breaks. Each pointer moves at most n steps \u2192 O(|s| + |t|).`,
+    complexityTime: "O(n + m)",
+    complexitySpace: "O(m)",
+    youtubeUrl: yt("neetcode minimum window substring"),
+    tags: ["sliding-window", "string", "hash-table"],
+    starterCode: buildStarter("twoStrings", "string", "minWindow"),
+    reference: (input) => {
+      const [s = "", t = ""] = lines(input);
+      if (t.length > s.length) return "";
+      const need = /* @__PURE__ */ new Map();
+      for (const c of t) need.set(c, (need.get(c) ?? 0) + 1);
+      let have = 0;
+      const required = need.size;
+      const win = /* @__PURE__ */ new Map();
+      let best = "";
+      let bestLen = Infinity;
+      let l = 0;
+      for (let r = 0; r < s.length; r++) {
+        const c = s[r];
+        win.set(c, (win.get(c) ?? 0) + 1);
+        if (need.has(c) && win.get(c) === need.get(c)) have++;
+        while (have === required) {
+          if (r - l + 1 < bestLen) {
+            bestLen = r - l + 1;
+            best = s.slice(l, r + 1);
+          }
+          const lc = s[l];
+          win.set(lc, win.get(lc) - 1);
+          if (need.has(lc) && win.get(lc) < need.get(lc)) have--;
+          l++;
+        }
+      }
+      return best;
+    },
+    tests: [
+      { input: "ADOBECODEBANC\nABC", sample: true },
+      { input: "a\na", sample: true },
+      { input: "a\naa" },
+      { input: "aaflslflsldkalskaaa\naaa" },
+      { input: "cabwefgewcwaefgcf\ncae" }
+    ]
+  },
+  {
+    slug: "subarray-product-less-than-k",
+    title: "Subarray Product Less Than K",
+    difficulty: "MEDIUM",
+    statement: `Given an array of positive integers and an integer \`k\`, count the number of contiguous subarrays whose product is strictly less than \`k\`.
+
+**Input**
+- Line 1: space-separated positive integers
+- Line 2: the integer \`k\`
+
+**Output**: the count of qualifying subarrays.`,
+    constraints: `- 1 \u2264 nums.length \u2264 3\xB710^4
+- 1 \u2264 nums[i] \u2264 1000
+- 0 \u2264 k \u2264 10^6`,
+    examples: [
+      {
+        input: "10 5 2 6\n100",
+        output: "8",
+        explanation: "[10], [5], [2], [6], [10 5], [5 2], [2 6], [5 2 6]."
+      },
+      { input: "1 2 3\n0", output: "0" }
+    ],
+    hints: [
+      "All values are \u2265 1, so extending a window never shrinks its product \u2014 that monotonicity is what makes a sliding window valid.",
+      "For each right endpoint, how many valid subarrays *end* there?",
+      "Exactly right \u2212 left + 1, where left is the smallest index keeping the product < k."
+    ],
+    editorial: `Grow a window rightward, multiplying the product; while it reaches or exceeds k, divide off the left edge. Once the window [left, right] is valid, every subarray ending at right and starting at or after left is valid too \u2014 that's \`right \u2212 left + 1\` new subarrays, counted in O(1). Because all numbers are \u2265 1, the product is monotone in window size, so left only moves forward: O(n) total. Two traps: k \u2264 1 means *nothing* qualifies (answer 0 \u2014 guard it before the loop), and the counting-per-endpoint idea is the same one behind most 'count subarrays' window problems, so internalize it.`,
+    approaches: [
+      {
+        name: "Shrinking window with per-endpoint counting",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "Maintain the maximal valid window per right endpoint; add its length."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("subarray product less than k leetcode"),
+    tags: ["sliding-window", "array", "two-pointers"],
+    starterCode: buildStarter("intArrayK", "int", "numSubarrayProductLessThanK"),
+    reference: (input) => {
+      const nums = ints(lines(input)[0]);
+      const k = int(lines(input)[1]);
+      if (k <= 1) return "0";
+      let prod = 1;
+      let left = 0;
+      let count = 0;
+      for (let right = 0; right < nums.length; right++) {
+        prod *= nums[right];
+        while (prod >= k) prod /= nums[left++];
+        count += right - left + 1;
+      }
+      return String(count);
+    },
+    tests: [
+      { input: "10 5 2 6\n100", sample: true },
+      { input: "1 2 3\n0", sample: true },
+      { input: "1 1 1\n2" },
+      { input: "9\n10" },
+      { input: "9\n9" },
+      { input: "2 5 3 10 4 2\n30" }
+    ]
+  }
+];
+
+// src/data/problems/binary-search.ts
+var first4 = (s) => ints(s.split("\n")[0]);
+var binarySearch = [
+  {
+    slug: "binary-search",
+    title: "Binary Search",
+    difficulty: "EASY",
+    statement: `Given a sorted (ascending) integer array \`nums\` of distinct values and an integer \`target\`, return the index of \`target\`, or \`-1\` if it is not present. Your algorithm must run in O(log n).
+
+**Input**
+- Line 1: space-separated integers \`nums\` (sorted, distinct)
+- Line 2: integer \`target\`
+
+**Output**: the index, or -1.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^4
+- All values are distinct and sorted ascending.`,
+    examples: [
+      { input: "-1 0 3 5 9 12\n9", output: "4" },
+      { input: "-1 0 3 5 9 12\n2", output: "-1" }
+    ],
+    hints: [
+      "Compare the middle element with the target and discard half the array.",
+      "Beware off-by-one: use lo \u2264 hi with hi = n \u2212 1, or lo < hi with hi = n \u2014 pick one convention and stick to it."
+    ],
+    editorial: `Classic binary search: maintain an inclusive range \`[lo, hi]\`, probe the midpoint, and discard the half that cannot contain the target. Each step halves the search space \u2192 O(log n). The two standard invariant styles (inclusive-inclusive vs half-open) both work; mixing them is where bugs come from.`,
+    complexityTime: "O(log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode binary search"),
+    tags: ["binary-search", "array"],
+    starterCode: buildStarter("intArrayTarget", "int", "search"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const target = int(l1);
+      let lo = 0;
+      let hi = nums.length - 1;
+      while (lo <= hi) {
+        const mid = lo + hi >> 1;
+        if (nums[mid] === target) return String(mid);
+        if (nums[mid] < target) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      return "-1";
+    },
+    tests: [
+      { input: "-1 0 3 5 9 12\n9", sample: true },
+      { input: "-1 0 3 5 9 12\n2", sample: true },
+      { input: "5\n5" },
+      { input: "5\n-5" },
+      { input: "1 3\n3" }
+    ]
+  },
+  {
+    slug: "search-insert-position",
+    title: "Search Insert Position",
+    difficulty: "EASY",
+    statement: `Given a sorted array of distinct integers \`nums\` and a \`target\`, return the index of \`target\` if found; otherwise return the index where it would be inserted to keep the array sorted. Must run in O(log n).
+
+**Input**
+- Line 1: space-separated integers (sorted, distinct)
+- Line 2: integer \`target\`
+
+**Output**: the index.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^4
+- Distinct values, sorted ascending.`,
+    examples: [
+      { input: "1 3 5 6\n5", output: "2" },
+      { input: "1 3 5 6\n2", output: "1" },
+      { input: "1 3 5 6\n7", output: "4" }
+    ],
+    hints: [
+      "You're looking for the first index whose value is \u2265 target \u2014 a lower bound.",
+      "When the loop ends, lo is exactly that boundary."
+    ],
+    editorial: `This is **lower bound**: the first position with value \u2265 target. Binary search with a half-open range \`[lo, hi)\`: if \`nums[mid] < target\` move \`lo = mid + 1\`, else \`hi = mid\`. When the range empties, \`lo\` is both the found index and the insertion point \u2014 no special cases needed.`,
+    complexityTime: "O(log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("search insert position binary search"),
+    tags: ["binary-search", "array"],
+    starterCode: buildStarter("intArrayTarget", "int", "searchInsert"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const target = int(l1);
+      let lo = 0;
+      let hi = nums.length;
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        if (nums[mid] < target) lo = mid + 1;
+        else hi = mid;
+      }
+      return String(lo);
+    },
+    tests: [
+      { input: "1 3 5 6\n5", sample: true },
+      { input: "1 3 5 6\n2", sample: true },
+      { input: "1 3 5 6\n7", sample: true },
+      { input: "1\n0" },
+      { input: "1 3\n2" }
+    ]
+  },
+  {
+    slug: "sqrtx",
+    title: "Sqrt(x)",
+    difficulty: "EASY",
+    statement: `Given a non-negative integer \`x\`, return the integer square root of \`x\` \u2014 the largest integer \`r\` such that \`r\xB2 \u2264 x\`. Do not use built-in exponent/sqrt functions.
+
+**Input**: one line, the integer \`x\`.
+**Output**: the integer square root.`,
+    constraints: `- 0 \u2264 x \u2264 2^31 \u2212 1`,
+    examples: [
+      { input: "4", output: "2" },
+      { input: "8", output: "2", explanation: "\u221A8 \u2248 2.83, truncated to 2." }
+    ],
+    hints: [
+      "Binary search the answer space [0, x].",
+      "Find the largest mid with mid\xB7mid \u2264 x. Watch for overflow in languages with fixed ints."
+    ],
+    editorial: `Binary search over the **answer space**: the predicate \`mid\xB2 \u2264 x\` is monotone (true then false), so find the last true. In fixed-width languages compare via \`mid \u2264 x / mid\` to dodge overflow. O(log x).`,
+    complexityTime: "O(log x)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("sqrt x binary search leetcode"),
+    tags: ["binary-search", "math"],
+    starterCode: buildStarter("int", "int", "mySqrt"),
+    reference: (input) => {
+      const x = int(lines(input)[0]);
+      let lo = 0;
+      let hi = x;
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (mid * mid <= x) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      return String(hi);
+    },
+    tests: [
+      { input: "4", sample: true },
+      { input: "8", sample: true },
+      { input: "0" },
+      { input: "1" },
+      { input: "2147395599" }
+    ]
+  },
+  {
+    slug: "peak-index-in-a-mountain-array",
+    title: "Peak Index in a Mountain Array",
+    difficulty: "MEDIUM",
+    statement: `A mountain array increases strictly to a single peak and then decreases strictly. Given a mountain array \`arr\`, return the index of the peak in O(log n).
+
+**Input**: one line of space-separated integers (a valid mountain).
+**Output**: the peak index.`,
+    constraints: `- 3 \u2264 arr.length \u2264 10^5
+- arr is guaranteed to be a mountain.`,
+    examples: [
+      { input: "0 1 0", output: "1" },
+      { input: "0 10 5 2", output: "1" },
+      { input: "3 9 8 6 4", output: "1" }
+    ],
+    hints: [
+      "Compare arr[mid] with arr[mid + 1].",
+      "If it's rising you're on the left slope; if falling, the peak is at mid or left of it."
+    ],
+    editorial: `Binary search on the slope: if \`arr[mid] < arr[mid+1]\` you are strictly left of the peak (move \`lo = mid + 1\`), otherwise the peak is at \`mid\` or before (\`hi = mid\`). The invariant converges to the single peak in O(log n).`,
+    complexityTime: "O(log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("peak index mountain array binary search"),
+    tags: ["binary-search", "array"],
+    starterCode: buildStarter("intArray", "int", "peakIndexInMountainArray"),
+    reference: (input) => {
+      const arr = first4(input);
+      let lo = 0;
+      let hi = arr.length - 1;
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        if (arr[mid] < arr[mid + 1]) lo = mid + 1;
+        else hi = mid;
+      }
+      return String(lo);
+    },
+    tests: [
+      { input: "0 1 0", sample: true },
+      { input: "0 10 5 2", sample: true },
+      { input: "3 9 8 6 4", sample: true },
+      { input: "1 2 3 4 5 3 1" },
+      { input: "24 69 100 99 79 78 67 36 26 19" }
+    ]
+  },
+  {
+    slug: "search-in-rotated-sorted-array",
+    title: "Search in Rotated Sorted Array",
+    difficulty: "MEDIUM",
+    statement: `A sorted array of **distinct** integers was rotated at an unknown pivot (e.g. \`[0,1,2,4,5,6,7]\` \u2192 \`[4,5,6,7,0,1,2]\`). Given the rotated array \`nums\` and a \`target\`, return its index or \`-1\`, in O(log n).
+
+**Input**
+- Line 1: space-separated integers (rotated sorted, distinct)
+- Line 2: integer \`target\`
+
+**Output**: the index, or -1.`,
+    constraints: `- 1 \u2264 nums.length \u2264 5000
+- Distinct values.`,
+    examples: [
+      { input: "4 5 6 7 0 1 2\n0", output: "4" },
+      { input: "4 5 6 7 0 1 2\n3", output: "-1" }
+    ],
+    hints: [
+      "At any midpoint, at least one half is perfectly sorted.",
+      "Check whether the target lies inside that sorted half; if not, search the other half."
+    ],
+    editorial: `At every step one side of \`mid\` is sorted (compare \`nums[lo]\` with \`nums[mid]\`). If the target's value falls within the sorted side's range, binary-search there; otherwise recurse into the unsorted side, which is itself a rotated sorted array. Each iteration halves the range \u2192 O(log n).`,
+    complexityTime: "O(log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode search in rotated sorted array"),
+    tags: ["binary-search", "array"],
+    starterCode: buildStarter("intArrayTarget", "int", "searchRotated"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const target = int(l1);
+      let lo = 0;
+      let hi = nums.length - 1;
+      while (lo <= hi) {
+        const mid = lo + hi >> 1;
+        if (nums[mid] === target) return String(mid);
+        if (nums[lo] <= nums[mid]) {
+          if (nums[lo] <= target && target < nums[mid]) hi = mid - 1;
+          else lo = mid + 1;
+        } else {
+          if (nums[mid] < target && target <= nums[hi]) lo = mid + 1;
+          else hi = mid - 1;
+        }
+      }
+      return "-1";
+    },
+    tests: [
+      { input: "4 5 6 7 0 1 2\n0", sample: true },
+      { input: "4 5 6 7 0 1 2\n3", sample: true },
+      { input: "1\n1" },
+      { input: "5 1 3\n3" },
+      { input: "1 2 3 4 5\n4" }
+    ]
+  },
+  {
+    slug: "find-minimum-in-rotated-sorted-array",
+    title: "Find Minimum in Rotated Sorted Array",
+    difficulty: "MEDIUM",
+    statement: `A sorted array of distinct integers was rotated between 1 and n times. Find the minimum element in O(log n).
+
+**Input**: one line of space-separated integers (rotated sorted, distinct).
+**Output**: the minimum value.`,
+    constraints: `- 1 \u2264 nums.length \u2264 5000
+- Distinct values.`,
+    examples: [
+      { input: "3 4 5 1 2", output: "1" },
+      { input: "4 5 6 7 0 1 2", output: "0" },
+      { input: "11 13 15 17", output: "11" }
+    ],
+    hints: [
+      "Compare nums[mid] against nums[hi], not nums[lo].",
+      "If nums[mid] > nums[hi], the minimum is strictly right of mid."
+    ],
+    editorial: `Compare the midpoint with the right end. If \`nums[mid] > nums[hi]\` the rotation point (and minimum) lies right of \`mid\`, so \`lo = mid + 1\`; otherwise the minimum is at \`mid\` or left, so \`hi = mid\`. The loop converges on the smallest element in O(log n).`,
+    complexityTime: "O(log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode find minimum in rotated sorted array"),
+    tags: ["binary-search", "array"],
+    starterCode: buildStarter("intArray", "int", "findMin"),
+    reference: (input) => {
+      const nums = first4(input);
+      let lo = 0;
+      let hi = nums.length - 1;
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        if (nums[mid] > nums[hi]) lo = mid + 1;
+        else hi = mid;
+      }
+      return String(nums[lo]);
+    },
+    tests: [
+      { input: "3 4 5 1 2", sample: true },
+      { input: "4 5 6 7 0 1 2", sample: true },
+      { input: "11 13 15 17", sample: true },
+      { input: "2 1" },
+      { input: "1" }
+    ]
+  },
+  {
+    slug: "find-first-and-last-position-of-element-in-sorted-array",
+    title: "Find First and Last Position of Element in Sorted Array",
+    difficulty: "MEDIUM",
+    statement: `Given a non-decreasing integer array \`nums\` and a \`target\`, return the first and last index of \`target\`. If it is absent, return \`-1 -1\`. Must run in O(log n).
+
+**Input**
+- Line 1: space-separated integers (sorted, may repeat)
+- Line 2: integer \`target\`
+
+**Output**: two indices, space-separated.`,
+    constraints: `- 0 \u2264 nums.length \u2264 10^5
+- Sorted non-decreasing.`,
+    examples: [
+      { input: "5 7 7 8 8 10\n8", output: "3 4" },
+      { input: "5 7 7 8 8 10\n6", output: "-1 -1" }
+    ],
+    hints: [
+      "Run two binary searches: a lower bound for the first occurrence and an upper bound for one past the last.",
+      "If lowerBound points past the array or at a different value, the target is absent."
+    ],
+    editorial: `Two boundary searches: **lower bound** (first index with value \u2265 target) gives the start; **upper bound** (first index with value > target) minus one gives the end. If the lower bound doesn't land on the target, return \`-1 -1\`. Two O(log n) passes, no linear scanning.`,
+    complexityTime: "O(log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("find first and last position binary search"),
+    tags: ["binary-search", "array"],
+    starterCode: buildStarter("intArrayTarget", "intArray", "searchRange"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const target = int(l1);
+      const bound = (gt) => {
+        let lo = 0;
+        let hi = nums.length;
+        while (lo < hi) {
+          const mid = lo + hi >> 1;
+          if (nums[mid] < target || gt && nums[mid] === target) lo = mid + 1;
+          else hi = mid;
+        }
+        return lo;
+      };
+      const start = bound(false);
+      if (start === nums.length || nums[start] !== target) return "-1 -1";
+      return `${start} ${bound(true) - 1}`;
+    },
+    tests: [
+      { input: "5 7 7 8 8 10\n8", sample: true },
+      { input: "5 7 7 8 8 10\n6", sample: true },
+      { input: "\n0" },
+      { input: "1\n1" },
+      { input: "2 2 2 2\n2" }
+    ]
+  },
+  {
+    slug: "koko-eating-bananas",
+    title: "Koko Eating Bananas",
+    difficulty: "MEDIUM",
+    statement: `Koko has \`piles\` of bananas and \`h\` hours. Each hour she picks one pile and eats up to \`k\` bananas from it (a pile smaller than \`k\` still costs the whole hour). Return the minimum integer speed \`k\` that finishes all piles within \`h\` hours.
+
+**Input**
+- Line 1: space-separated integers \`piles\`
+- Line 2: integer \`h\`
+
+**Output**: the minimum k.`,
+    constraints: `- 1 \u2264 piles.length \u2264 10^4
+- piles.length \u2264 h \u2264 10^9
+- 1 \u2264 piles[i] \u2264 10^9`,
+    examples: [
+      { input: "3 6 7 11\n8", output: "4" },
+      { input: "30 11 23 4 20\n5", output: "30" },
+      { input: "30 11 23 4 20\n6", output: "23" }
+    ],
+    hints: [
+      "For a fixed k, hours needed = \u03A3 ceil(pile / k) \u2014 checkable in O(n).",
+      "That predicate is monotone in k: faster speeds always finish sooner. Binary search k."
+    ],
+    editorial: `Binary search the **answer space** k \u2208 [1, max(piles)]. For a candidate speed, the required time \`\u03A3 ceil(pile/k)\` decreases monotonically as k grows, so find the smallest k whose time is \u2264 h. O(n log max(piles)).`,
+    complexityTime: "O(n log M)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode koko eating bananas"),
+    tags: ["binary-search", "array"],
+    starterCode: buildStarter("intArrayK", "int", "minEatingSpeed"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const piles = ints(l0);
+      const h = int(l1);
+      let lo = 1;
+      let hi = Math.max(...piles);
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        const hours = piles.reduce((acc, p) => acc + Math.ceil(p / mid), 0);
+        if (hours <= h) hi = mid;
+        else lo = mid + 1;
+      }
+      return String(lo);
+    },
+    tests: [
+      { input: "3 6 7 11\n8", sample: true },
+      { input: "30 11 23 4 20\n5", sample: true },
+      { input: "30 11 23 4 20\n6", sample: true },
+      { input: "1\n1" },
+      { input: "312884470\n312884469" }
+    ]
+  },
+  {
+    slug: "search-a-2d-matrix",
+    title: "Search a 2D Matrix",
+    difficulty: "MEDIUM",
+    statement: `You are given an \`r \xD7 c\` matrix where each row is sorted ascending and the first value of each row is greater than the last value of the previous row. Determine whether \`target\` exists in the matrix, in O(log(r\xB7c)).
+
+**Input**
+- Line 1: two integers \`r c\`
+- Next r lines: the matrix rows
+- Last line: the integer \`target\`
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 r, c \u2264 100
+- Rows sorted; row starts exceed previous row ends.`,
+    examples: [
+      { input: "3 4\n1 3 5 7\n10 11 16 20\n23 30 34 60\n3", output: "true" },
+      { input: "3 4\n1 3 5 7\n10 11 16 20\n23 30 34 60\n13", output: "false" }
+    ],
+    hints: [
+      "The whole matrix is one sorted list read row by row.",
+      "Binary search indices 0 \u2026 r\xB7c\u22121 and map i \u2192 (i / c, i % c)."
+    ],
+    editorial: `Because rows chain in sorted order, the matrix is a single sorted array of length r\xB7c viewed through index arithmetic: element \`i\` lives at row \`\u230Ai/c\u230B\`, column \`i mod c\`. One standard binary search over that virtual array gives O(log(r\xB7c)) with no extra space.`,
+    complexityTime: "O(log(r\xB7c))",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode search 2d matrix"),
+    tags: ["binary-search", "matrix"],
+    starterCode: buildStarter("matrixK", "bool", "searchMatrix"),
+    reference: (input) => {
+      const ls = lines(input);
+      const [r, c] = ints(ls[0]);
+      const grid = [];
+      for (let i = 0; i < r; i++) grid.push(ints(ls[1 + i]));
+      const target = int(ls[1 + r]);
+      let lo = 0;
+      let hi = r * c - 1;
+      while (lo <= hi) {
+        const mid = lo + hi >> 1;
+        const v = grid[Math.floor(mid / c)][mid % c];
+        if (v === target) return boolOut(true);
+        if (v < target) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      return boolOut(false);
+    },
+    tests: [
+      { input: "3 4\n1 3 5 7\n10 11 16 20\n23 30 34 60\n3", sample: true },
+      { input: "3 4\n1 3 5 7\n10 11 16 20\n23 30 34 60\n13", sample: true },
+      { input: "1 1\n5\n5" },
+      { input: "1 2\n1 3\n2" },
+      { input: "2 2\n1 3\n5 7\n7" }
+    ]
+  },
+  {
+    slug: "median-of-two-sorted-arrays",
+    title: "Median of Two Sorted Arrays",
+    difficulty: "HARD",
+    statement: `Given two sorted arrays \`nums1\` and \`nums2\`, return the median of the combined sorted data. The intended solution runs in O(log(min(m, n))).
+
+**Input**
+- Line 1: space-separated integers \`nums1\` (may be empty)
+- Line 2: space-separated integers \`nums2\` (may be empty)
+
+**Output**: the median with two decimal places (the template formats it).`,
+    constraints: `- 0 \u2264 m, n \u2264 1000, m + n \u2265 1
+- -10^6 \u2264 values \u2264 10^6`,
+    examples: [
+      { input: "1 3\n2", output: "2.00", explanation: "Merged: [1,2,3], median 2." },
+      { input: "1 2\n3 4", output: "2.50", explanation: "Merged: [1,2,3,4], median (2+3)/2." }
+    ],
+    hints: [
+      "A merge gives O(m+n). The target bound demands partitioning, not merging.",
+      "Binary search a cut in the shorter array; the cut in the other array is forced by the half-length.",
+      "A correct partition has every left element \u2264 every right element across both arrays."
+    ],
+    editorial: `Binary search the cut position in the shorter array. A cut of \`i\` elements there forces \`(m+n+1)/2 \u2212 i\` from the other array. The partition is correct when \`maxLeft\u2081 \u2264 minRight\u2082\` and \`maxLeft\u2082 \u2264 minRight\u2081\`; then the median comes from the boundary values. Each probe adjusts the cut like standard binary search \u2192 O(log min(m, n)).`,
+    approaches: [
+      {
+        name: "Merge and index",
+        complexityTime: "O(m + n)",
+        complexitySpace: "O(m + n)",
+        body: "Merge both arrays and read the middle. Simple, and fine when the log bound isn't required."
+      },
+      {
+        name: "Partition binary search",
+        complexityTime: "O(log min(m, n))",
+        complexitySpace: "O(1)",
+        body: "Search the cut point satisfying the cross inequalities; median from boundary max/min values."
+      }
+    ],
+    complexityTime: "O(log min(m, n))",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode median of two sorted arrays"),
+    tags: ["binary-search", "array", "divide-and-conquer"],
+    starterCode: buildStarter("twoIntArrays", "float2", "findMedianSortedArrays"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const merged = [...ints(l0), ...ints(l1)].sort((a, b) => a - b);
+      const n = merged.length;
+      const median = n % 2 === 1 ? merged[(n - 1) / 2] : (merged[n / 2 - 1] + merged[n / 2]) / 2;
+      return median.toFixed(2);
+    },
+    tests: [
+      { input: "1 3\n2", sample: true },
+      { input: "1 2\n3 4", sample: true },
+      { input: "\n1" },
+      { input: "2\n" },
+      { input: "1 1 1\n1 1" },
+      { input: "-5 3 6 12 15\n-12 -10 -6 -3 4 10" }
+    ]
+  },
+  {
+    slug: "capacity-to-ship-packages-within-d-days",
+    title: "Capacity to Ship Packages Within D Days",
+    difficulty: "MEDIUM",
+    statement: `A conveyor belt has packages with given weights that must be shipped **in order**, splitting them across at most \`days\` days. The ship has a fixed daily capacity. Return the minimum capacity that ships everything within \`days\` days.
+
+**Input**
+- Line 1: space-separated package weights (in belt order)
+- Line 2: the integer \`days\`
+
+**Output**: the minimum ship capacity.`,
+    constraints: `- 1 \u2264 weights.length \u2264 5\xB710^4
+- 1 \u2264 weights[i] \u2264 500
+- 1 \u2264 days \u2264 weights.length`,
+    examples: [
+      {
+        input: "1 2 3 4 5 6 7 8 9 10\n5",
+        output: "15",
+        explanation: "Days: (1 2 3 4 5), (6 7), (8), (9), (10)."
+      },
+      { input: "3 2 2 4 1 4\n3", output: "6" },
+      { input: "1 2 3 1 1\n4", output: "3" }
+    ],
+    hints: [
+      "You can't reorder packages \u2014 a day is a contiguous chunk.",
+      "For a fixed capacity, checking feasibility is a greedy O(n) scan. That's the shape of binary-search-on-the-answer.",
+      "The answer lies between max(weights) (must fit the biggest package) and sum(weights) (one day ships all)."
+    ],
+    editorial: `Binary search over the *answer space*, not the array. Feasibility is monotone: if capacity C works, every capacity above C works too \u2014 exactly the sorted-boolean structure binary search needs. \`canShip(C)\` greedily packs each day until adding the next package would overflow, counting days; it's optimal per capacity because deferring a package never helps. Search [max(weights), sum(weights)], keeping the smallest feasible C. O(n log(sum \u2212 max)). This is the same template as Koko Eating Bananas \u2014 recognizing 'minimize X such that check(X) passes, check is monotone' is the entire skill.`,
+    approaches: [
+      {
+        name: "Binary search on capacity",
+        complexityTime: "O(n log \u03A3w)",
+        complexitySpace: "O(1)",
+        body: "Greedy day-count feasibility check inside a search over [max, sum]."
+      }
+    ],
+    complexityTime: "O(n log \u03A3w)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("capacity to ship packages within d days neetcode"),
+    tags: ["binary-search", "greedy", "answer-space"],
+    starterCode: buildStarter("intArrayK", "int", "shipWithinDays"),
+    reference: (input) => {
+      const weights = ints(lines(input)[0]);
+      const days = int(lines(input)[1]);
+      let lo = Math.max(...weights);
+      let hi = weights.reduce((a, b) => a + b, 0);
+      const canShip = (cap) => {
+        let d = 1;
+        let cur = 0;
+        for (const w of weights) {
+          if (cur + w > cap) {
+            d++;
+            cur = 0;
+          }
+          cur += w;
+        }
+        return d <= days;
+      };
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        if (canShip(mid)) hi = mid;
+        else lo = mid + 1;
+      }
+      return String(lo);
+    },
+    tests: [
+      { input: "1 2 3 4 5 6 7 8 9 10\n5", sample: true },
+      { input: "3 2 2 4 1 4\n3", sample: true },
+      { input: "1 2 3 1 1\n4", sample: true },
+      { input: "10\n1" },
+      { input: "5 5 5 5\n4" },
+      { input: "500 200 300 100 400\n2" }
+    ]
+  }
+];
+
+// src/data/problems/stacks-queues.ts
+var first5 = (s) => ints(s.split("\n")[0]);
+var stacksQueues = [
+  {
+    slug: "min-stack",
+    title: "Min Stack",
+    difficulty: "MEDIUM",
+    statement: `Design a stack that supports \`push\`, \`pop\`, \`top\`, and retrieving the minimum element \u2014 all in O(1).
+
+**Input**: one operation per line \u2014
+- \`push x\` \u2014 push integer x
+- \`pop\` \u2014 remove the top
+- \`top\` \u2014 read the top
+- \`getMin\` \u2014 read the minimum
+
+**Output**: one line per operation \u2014 \`push\` and \`pop\` print \`null\`; \`top\` and \`getMin\` print their result. Operations are always valid (no pop/top on an empty stack).`,
+    constraints: `- Up to 3\xB710^4 operations
+- -2^31 \u2264 x \u2264 2^31 \u2212 1`,
+    examples: [
+      {
+        input: "push -2\npush 0\npush -3\ngetMin\npop\ntop\ngetMin",
+        output: "null\nnull\nnull\n-3\nnull\n0\n-2"
+      }
+    ],
+    hints: [
+      "A single min variable breaks when the minimum gets popped.",
+      "Store the minimum *so far* alongside every element \u2014 or keep a second stack of minimums."
+    ],
+    editorial: `Keep a second stack that records the minimum of everything at or below each position: on \`push x\`, push \`min(x, minStack.top)\`; on \`pop\`, pop both. \`getMin\` is then just the top of the min stack. Every operation is a plain stack operation \u2192 O(1) each, O(n) space.`,
+    complexityTime: "O(1) per operation",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode min stack"),
+    tags: ["stack", "design"],
+    starterCode: buildStarter("ops", "lines", "processOps"),
+    reference: (input) => {
+      const ops = lines(input).filter((l) => l.trim().length > 0);
+      const st = [];
+      const mins = [];
+      const out = [];
+      for (const op of ops) {
+        const parts = op.trim().split(/\s+/);
+        if (parts[0] === "push") {
+          const x = parseInt(parts[1], 10);
+          st.push(x);
+          mins.push(mins.length ? Math.min(x, mins[mins.length - 1]) : x);
+          out.push("null");
+        } else if (parts[0] === "pop") {
+          st.pop();
+          mins.pop();
+          out.push("null");
+        } else if (parts[0] === "top") {
+          out.push(String(st[st.length - 1]));
+        } else {
+          out.push(String(mins[mins.length - 1]));
+        }
+      }
+      return linesOut(out);
+    },
+    tests: [
+      { input: "push -2\npush 0\npush -3\ngetMin\npop\ntop\ngetMin", sample: true },
+      { input: "push 5\ntop\ngetMin\npush 3\ngetMin\npop\ngetMin" },
+      { input: "push 1\npush 1\npush 1\ngetMin\npop\npop\ntop" },
+      { input: "push 2147483647\ngetMin\npush -2147483648\ngetMin\npop\ngetMin" }
+    ]
+  },
+  {
+    slug: "implement-queue-using-stacks",
+    title: "Implement Queue using Stacks",
+    difficulty: "EASY",
+    statement: `Implement a FIFO queue using only two stacks.
+
+**Input**: one operation per line \u2014
+- \`push x\` \u2014 enqueue integer x
+- \`pop\` \u2014 dequeue and print the front
+- \`peek\` \u2014 print the front
+- \`empty\` \u2014 print \`true\`/\`false\`
+
+**Output**: one line per operation \u2014 \`push\` prints \`null\`; the others print their result.`,
+    constraints: `- Up to 100 operations; pop/peek are always valid.`,
+    examples: [
+      {
+        input: "push 1\npush 2\npeek\npop\nempty",
+        output: "null\nnull\n1\n1\nfalse"
+      }
+    ],
+    hints: [
+      "Two stacks: one for inbox, one for outbox.",
+      "Only flip the inbox into the outbox when the outbox is empty \u2014 that preserves order."
+    ],
+    editorial: `Push everything onto an **in** stack. When popping or peeking, if the **out** stack is empty, pour the in-stack into it (reversing order \u2014 oldest ends up on top), then serve from out. Each element moves at most twice, so operations are **amortized O(1)**.`,
+    complexityTime: "Amortized O(1)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("implement queue using stacks leetcode"),
+    tags: ["stack", "queue", "design"],
+    starterCode: buildStarter("ops", "lines", "processOps"),
+    reference: (input) => {
+      const ops = lines(input).filter((l) => l.trim().length > 0);
+      const q = [];
+      const out = [];
+      for (const op of ops) {
+        const parts = op.trim().split(/\s+/);
+        if (parts[0] === "push") {
+          q.push(parseInt(parts[1], 10));
+          out.push("null");
+        } else if (parts[0] === "pop") {
+          out.push(String(q.shift()));
+        } else if (parts[0] === "peek") {
+          out.push(String(q[0]));
+        } else {
+          out.push(q.length === 0 ? "true" : "false");
+        }
+      }
+      return linesOut(out);
+    },
+    tests: [
+      { input: "push 1\npush 2\npeek\npop\nempty", sample: true },
+      { input: "empty\npush 7\nempty\npop\nempty" },
+      { input: "push 1\npush 2\npush 3\npop\npop\npush 4\npop\npop\nempty" }
+    ]
+  },
+  {
+    slug: "evaluate-reverse-polish-notation",
+    title: "Evaluate Reverse Polish Notation",
+    difficulty: "MEDIUM",
+    statement: `Evaluate an arithmetic expression given in Reverse Polish (postfix) notation. Valid operators are \`+\`, \`-\`, \`*\`, \`/\`. Division truncates toward zero. The expression is always valid and no division by zero occurs.
+
+**Input**: one line of space-separated tokens.
+**Output**: the value of the expression.`,
+    constraints: `- 1 \u2264 tokens.length \u2264 10^4
+- Intermediate values fit in a 32-bit integer.`,
+    examples: [
+      { input: "2 1 + 3 *", output: "9", explanation: "(2 + 1) \xD7 3." },
+      { input: "4 13 5 / +", output: "6", explanation: "4 + (13 / 5) = 4 + 2." },
+      { input: "10 6 9 3 + -11 * / * 17 + 5 +", output: "22" }
+    ],
+    hints: [
+      "Push numbers; on an operator, pop two operands, apply, push the result.",
+      "Order matters for - and /: the second pop is the left operand.",
+      "Truncate division toward zero (not floor) \u2014 mind negative results."
+    ],
+    editorial: `Postfix expressions evaluate naturally with a stack: operands are pushed, and each operator consumes the top two values (the first popped is the **right** operand) and pushes the result. Division must truncate toward zero, which differs from floor division for negatives. One pass, O(n) time and space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode evaluate reverse polish notation"),
+    tags: ["stack", "array", "math"],
+    starterCode: buildStarter("stringArray", "int", "evalRPN"),
+    reference: (input) => {
+      const tokens = words(lines(input)[0]);
+      const st = [];
+      for (const t of tokens) {
+        if (t === "+" || t === "-" || t === "*" || t === "/") {
+          const b = st.pop();
+          const a = st.pop();
+          let v;
+          if (t === "+") v = a + b;
+          else if (t === "-") v = a - b;
+          else if (t === "*") v = a * b;
+          else v = Math.trunc(a / b);
+          st.push(v);
+        } else {
+          st.push(parseInt(t, 10));
+        }
+      }
+      return String(st[0]);
+    },
+    tests: [
+      { input: "2 1 + 3 *", sample: true },
+      { input: "4 13 5 / +", sample: true },
+      { input: "10 6 9 3 + -11 * / * 17 + 5 +" },
+      { input: "42" },
+      { input: "-7 3 /" }
+    ]
+  },
+  {
+    slug: "daily-temperatures",
+    title: "Daily Temperatures",
+    difficulty: "MEDIUM",
+    statement: `Given an array \`temperatures\`, return an array \`answer\` where \`answer[i]\` is the number of days you must wait after day \`i\` for a warmer temperature, or \`0\` if none exists.
+
+**Input**: one line of space-separated integers.
+**Output**: the answer array, space-separated.`,
+    constraints: `- 1 \u2264 temperatures.length \u2264 10^5
+- 30 \u2264 temperatures[i] \u2264 100`,
+    examples: [
+      { input: "73 74 75 71 69 72 76 73", output: "1 1 4 2 1 1 0 0" },
+      { input: "30 40 50 60", output: "1 1 1 0" }
+    ],
+    hints: [
+      "Brute force scans forward for each day \u2014 O(n\xB2).",
+      "Keep a stack of indices whose warmer day hasn't been found yet.",
+      "When a warmer temperature arrives, it resolves every colder index on the stack."
+    ],
+    editorial: `Maintain a **monotonic stack** of indices with strictly decreasing temperatures. Each new day pops every index whose temperature is lower \u2014 the wait for those days is the index difference \u2014 then pushes itself. Every index is pushed and popped once \u2192 O(n).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode daily temperatures"),
+    tags: ["stack", "monotonic-stack", "array"],
+    starterCode: buildStarter("intArray", "intArray", "dailyTemperatures"),
+    reference: (input) => {
+      const t = first5(input);
+      const res = new Array(t.length).fill(0);
+      const st = [];
+      for (let i = 0; i < t.length; i++) {
+        while (st.length && t[i] > t[st[st.length - 1]]) {
+          const j = st.pop();
+          res[j] = i - j;
+        }
+        st.push(i);
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "73 74 75 71 69 72 76 73", sample: true },
+      { input: "30 40 50 60", sample: true },
+      { input: "30 60 90" },
+      { input: "90 60 30" },
+      { input: "55" }
+    ]
+  },
+  {
+    slug: "next-greater-element-ii",
+    title: "Next Greater Element II",
+    difficulty: "MEDIUM",
+    statement: `Given a **circular** integer array \`nums\`, return for each element the next greater element scanning forward (wrapping around); use \`-1\` if none exists.
+
+**Input**: one line of space-separated integers.
+**Output**: the result array, space-separated.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^4
+- -10^9 \u2264 nums[i] \u2264 10^9`,
+    examples: [
+      { input: "1 2 1", output: "2 -1 2", explanation: "The last 1 wraps around to find 2." },
+      { input: "1 2 3 4 3", output: "2 3 4 -1 4" }
+    ],
+    hints: [
+      "Handle circularity by iterating the array twice (indices mod n).",
+      "Use the same decreasing monotonic stack as in Daily Temperatures."
+    ],
+    editorial: `Run the standard next-greater monotonic stack over indices \`0 \u2026 2n\u22121\`, taking values at \`i mod n\`. The second lap lets elements near the end see candidates at the front, and only the first lap pushes indices. O(n) time, O(n) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("next greater element ii monotonic stack"),
+    tags: ["stack", "monotonic-stack", "array"],
+    starterCode: buildStarter("intArray", "intArray", "nextGreaterElements"),
+    reference: (input) => {
+      const nums = first5(input);
+      const n = nums.length;
+      const res = new Array(n).fill(-1);
+      const st = [];
+      for (let i = 0; i < 2 * n; i++) {
+        const v = nums[i % n];
+        while (st.length && nums[st[st.length - 1]] < v) {
+          res[st.pop()] = v;
+        }
+        if (i < n) st.push(i);
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "1 2 1", sample: true },
+      { input: "1 2 3 4 3", sample: true },
+      { input: "5 4 3 2 1" },
+      { input: "1 1 1" },
+      { input: "7" }
+    ]
+  },
+  {
+    slug: "asteroid-collision",
+    title: "Asteroid Collision",
+    difficulty: "MEDIUM",
+    statement: `Asteroids move along a line: the absolute value is size, the sign is direction (positive \u2192 right, negative \u2192 left). All move at the same speed. When two collide, the smaller explodes (both if equal). Asteroids moving the same direction never meet. Return the state after all collisions.
+
+**Input**: one line of space-separated non-zero integers.
+**Output**: the surviving asteroids, space-separated (empty if none survive).`,
+    constraints: `- 2 \u2264 asteroids.length \u2264 10^4
+- -1000 \u2264 asteroids[i] \u2264 1000, non-zero.`,
+    examples: [
+      { input: "5 10 -5", output: "5 10", explanation: "10 destroys -5." },
+      { input: "8 -8", output: "", explanation: "Mutual destruction." },
+      { input: "10 2 -5", output: "10", explanation: "-5 destroys 2, then 10 destroys -5." }
+    ],
+    hints: [
+      "Collisions only happen when a right-mover is followed by a left-mover.",
+      "Keep survivors on a stack; a new left-mover fights the stack top repeatedly."
+    ],
+    editorial: `Scan left to right with a stack of survivors. A new asteroid only fights while the stack top moves right and the newcomer moves left: pop smaller right-movers, annihilate on ties, and discard the newcomer if the top is bigger. Each asteroid is pushed/popped at most once \u2192 O(n).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("asteroid collision leetcode stack"),
+    tags: ["stack", "array", "simulation"],
+    starterCode: buildStarter("intArray", "intArray", "asteroidCollision"),
+    reference: (input) => {
+      const asteroids = first5(input);
+      const st = [];
+      for (const a of asteroids) {
+        let alive = true;
+        while (alive && a < 0 && st.length && st[st.length - 1] > 0) {
+          const top = st[st.length - 1];
+          if (top < -a) {
+            st.pop();
+          } else if (top === -a) {
+            st.pop();
+            alive = false;
+          } else {
+            alive = false;
+          }
+        }
+        if (alive) st.push(a);
+      }
+      return arrOut(st);
+    },
+    tests: [
+      { input: "5 10 -5", sample: true },
+      { input: "8 -8", sample: true },
+      { input: "10 2 -5", sample: true },
+      { input: "-2 -1 1 2" },
+      { input: "1 -2 -2 -2" }
+    ]
+  },
+  {
+    slug: "simplify-path",
+    title: "Simplify Path",
+    difficulty: "MEDIUM",
+    statement: `Given an absolute Unix file path, return the simplified canonical path: it starts with a single \`/\`, has no trailing slash (unless it is the root), no \`.\` or \`..\` segments, and no double slashes.
+
+**Input**: one line, the path.
+**Output**: the canonical path.`,
+    constraints: `- 1 \u2264 path.length \u2264 3000
+- Consists of letters, digits, '.', '/', '_'.
+- Always starts with '/'.`,
+    examples: [
+      { input: "/home/", output: "/home" },
+      { input: "/../", output: "/", explanation: "You cannot go above the root." },
+      { input: "/home//foo/", output: "/home/foo" },
+      { input: "/a/./b/../../c/", output: "/c" }
+    ],
+    hints: [
+      "Split on '/' and process each segment.",
+      "'..' pops the last directory; '.' and empty segments are ignored."
+    ],
+    editorial: `Split on \`/\` and fold the segments through a stack: normal names push, \`..\` pops (if anything to pop), while \`.\` and empty segments (from doubled slashes) are skipped. Join the stack with \`/\` and prefix the root. O(n) time and space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("simplify path leetcode stack"),
+    tags: ["stack", "string"],
+    starterCode: buildStarter("string", "string", "simplifyPath"),
+    reference: (input) => {
+      const path = lines(input)[0] ?? "";
+      const st = [];
+      for (const seg of path.split("/")) {
+        if (seg === "" || seg === ".") continue;
+        if (seg === "..") st.pop();
+        else st.push(seg);
+      }
+      return "/" + st.join("/");
+    },
+    tests: [
+      { input: "/home/", sample: true },
+      { input: "/../", sample: true },
+      { input: "/home//foo/", sample: true },
+      { input: "/a/./b/../../c/" },
+      { input: "/.../a/../b/c/../d/./" }
+    ]
+  },
+  {
+    slug: "decode-string",
+    title: "Decode String",
+    difficulty: "MEDIUM",
+    statement: `Given an encoded string where \`k[encoded]\` means the bracketed content is repeated \`k\` times (nestable), return the decoded string.
+
+**Input**: one line, the encoded string.
+**Output**: the decoded string.`,
+    constraints: `- 1 \u2264 s.length \u2264 30
+- k is a positive integer \u2264 300; input is always valid.
+- Output length \u2264 10^5.`,
+    examples: [
+      { input: "3[a]2[bc]", output: "aaabcbc" },
+      { input: "3[a2[c]]", output: "accaccacc" },
+      { input: "2[abc]3[cd]ef", output: "abcabccdcdcdef" }
+    ],
+    hints: [
+      "Nesting screams stack (or recursion).",
+      "On '[' push the current string and count; on ']' pop and combine.",
+      "Numbers can be multi-digit \u2014 accumulate them."
+    ],
+    editorial: `Walk the string keeping a current segment and repeat count. On \`[\`, push both onto a stack and reset; on \`]\`, pop \`(prev, k)\` and set current = prev + current\xD7k. Digits accumulate into the count (they can be multi-digit). Each character is processed once \u2192 O(n + output).`,
+    complexityTime: "O(n + |output|)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode decode string"),
+    tags: ["stack", "string", "recursion"],
+    starterCode: buildStarter("string", "string", "decodeString"),
+    reference: (input) => {
+      const s = lines(input)[0] ?? "";
+      const st = [];
+      let cur = "";
+      let k = 0;
+      for (const ch of s) {
+        if (ch >= "0" && ch <= "9") {
+          k = k * 10 + (ch.charCodeAt(0) - 48);
+        } else if (ch === "[") {
+          st.push([cur, k]);
+          cur = "";
+          k = 0;
+        } else if (ch === "]") {
+          const [prev, times] = st.pop();
+          cur = prev + cur.repeat(times);
+        } else {
+          cur += ch;
+        }
+      }
+      return cur;
+    },
+    tests: [
+      { input: "3[a]2[bc]", sample: true },
+      { input: "3[a2[c]]", sample: true },
+      { input: "2[abc]3[cd]ef", sample: true },
+      { input: "abc" },
+      { input: "10[a]" }
+    ]
+  },
+  {
+    slug: "remove-k-digits",
+    title: "Remove K Digits",
+    difficulty: "MEDIUM",
+    statement: `Given a string \`num\` representing a non-negative integer and an integer \`k\`, remove exactly \`k\` digits so the remaining number is the smallest possible. Strip leading zeros; if nothing remains, return \`0\`.
+
+**Input**
+- Line 1: the digit string \`num\`
+- Line 2: integer \`k\`
+
+**Output**: the smallest resulting number as a string.`,
+    constraints: `- 1 \u2264 num.length \u2264 10^5
+- 0 \u2264 k \u2264 num.length
+- No leading zeros in the input (except "0" itself).`,
+    examples: [
+      { input: "1432219\n3", output: "1219", explanation: "Remove 4, 3, 2." },
+      { input: "10200\n1", output: "200", explanation: "Remove the 1; leading zeros are stripped." },
+      { input: "10\n2", output: "0" }
+    ],
+    hints: [
+      "A bigger digit followed by a smaller one should be deleted \u2014 greedily, from the left.",
+      "Keep a stack of digits; pop while the top exceeds the incoming digit and removals remain.",
+      "If removals are left over at the end, trim from the tail."
+    ],
+    editorial: `Build the answer with a **monotonic non-decreasing stack** of digits: while the incoming digit is smaller than the stack top and removals remain, pop. Leftover removals come off the end (the tail is the largest suffix). Finally strip leading zeros. Each digit is pushed and popped at most once \u2192 O(n).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("remove k digits monotonic stack"),
+    tags: ["stack", "monotonic-stack", "greedy", "string"],
+    starterCode: buildStarter("stringInt", "string", "removeKdigits"),
+    reference: (input) => {
+      const [num = "", kline] = lines(input);
+      let k = int(kline);
+      const st = [];
+      for (const d of num) {
+        while (k > 0 && st.length && st[st.length - 1] > d) {
+          st.pop();
+          k--;
+        }
+        st.push(d);
+      }
+      while (k > 0) {
+        st.pop();
+        k--;
+      }
+      const res = st.join("").replace(/^0+/, "");
+      return res === "" ? "0" : res;
+    },
+    tests: [
+      { input: "1432219\n3", sample: true },
+      { input: "10200\n1", sample: true },
+      { input: "10\n2", sample: true },
+      { input: "9\n0" },
+      { input: "112\n1" },
+      { input: "5337\n2" }
+    ]
+  },
+  {
+    slug: "largest-rectangle-in-histogram",
+    title: "Largest Rectangle in Histogram",
+    difficulty: "HARD",
+    statement: `Given an array \`heights\` of bar heights (width 1 each), return the area of the largest rectangle that fits inside the histogram.
+
+**Input**: one line of space-separated integers.
+**Output**: the maximum area.`,
+    constraints: `- 1 \u2264 heights.length \u2264 10^5
+- 0 \u2264 heights[i] \u2264 10^4`,
+    examples: [
+      { input: "2 1 5 6 2 3", output: "10", explanation: "Bars 5 and 6 give 5 \xD7 2 = 10." },
+      { input: "2 4", output: "4" }
+    ],
+    hints: [
+      "For each bar, the best rectangle using its height extends to the nearest shorter bar on each side.",
+      "A monotonic increasing stack finds both boundaries as bars are popped.",
+      "Append a sentinel height 0 to flush the stack at the end."
+    ],
+    editorial: `Sweep with a stack of indices whose heights increase. When the incoming bar is lower, pop: the popped bar's rectangle is bounded on the right by the current index and on the left by the new stack top. A trailing sentinel of height 0 flushes everything. Each bar enters and leaves the stack once \u2192 O(n).`,
+    approaches: [
+      {
+        name: "Divide and conquer on the minimum",
+        complexityTime: "O(n log n) average",
+        complexitySpace: "O(log n)",
+        body: "Best rectangle spans the minimum bar or lies entirely on one side of it."
+      },
+      {
+        name: "Monotonic stack",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "Pop when a shorter bar arrives; the pop computes that bar's maximal width."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode largest rectangle in histogram"),
+    tags: ["stack", "monotonic-stack", "array"],
+    starterCode: buildStarter("intArray", "int", "largestRectangleArea"),
+    reference: (input) => {
+      const heights = first5(input);
+      const st = [];
+      let best = 0;
+      const h = [...heights, 0];
+      for (let i = 0; i < h.length; i++) {
+        while (st.length && h[st[st.length - 1]] > h[i]) {
+          const height = h[st.pop()];
+          const left = st.length ? st[st.length - 1] : -1;
+          best = Math.max(best, height * (i - left - 1));
+        }
+        st.push(i);
+      }
+      return String(best);
+    },
+    tests: [
+      { input: "2 1 5 6 2 3", sample: true },
+      { input: "2 4", sample: true },
+      { input: "1" },
+      { input: "0 0" },
+      { input: "5 5 5 5" },
+      { input: "6 7 5 2 4 5 9 3" }
+    ]
+  },
+  {
+    slug: "next-greater-element-i",
+    title: "Next Greater Element I",
+    difficulty: "EASY",
+    statement: `\`nums1\` is a subset of \`nums2\` (all values distinct). For each element of \`nums1\`, find the first element **greater than it** appearing to its right in \`nums2\`, or \u22121 if none exists.
+
+**Input**
+- Line 1: space-separated integers \u2014 \`nums1\`
+- Line 2: space-separated integers \u2014 \`nums2\`
+
+**Output**: the answers for \`nums1\`, space-separated.`,
+    constraints: `- 1 \u2264 nums1.length \u2264 nums2.length \u2264 1000
+- All values in nums2 are distinct; every nums1 value appears in nums2.`,
+    examples: [
+      {
+        input: "4 1 2\n1 3 4 2",
+        output: "-1 3 -1",
+        explanation: "Nothing right of 4 is bigger; 3 follows 1; nothing follows 2."
+      },
+      { input: "2 4\n1 2 3 4", output: "3 -1" }
+    ],
+    hints: [
+      "Solve it entirely on nums2 first; nums1 just reads the answers.",
+      "A monotonic decreasing stack: while the new element beats the stack top, the top just found its next-greater.",
+      "Store the results in a map keyed by value (values are distinct)."
+    ],
+    editorial: `One pass over nums2 with a monotonic stack: push each element; whenever the incoming value exceeds the stack top, pop it and record incoming as its next-greater in a hash map. Elements left on the stack at the end have no answer (\u22121). Then map nums1 through the answers. Every element is pushed and popped at most once \u2014 O(n + m). This is the miniature version of the monotonic-stack pattern behind Daily Temperatures and stock spans: the stack always holds elements still waiting for something bigger.`,
+    approaches: [
+      {
+        name: "Monotonic stack + map",
+        complexityTime: "O(n + m)",
+        complexitySpace: "O(n)",
+        body: "Precompute next-greater for all of nums2; answer nums1 by lookup."
+      }
+    ],
+    complexityTime: "O(n + m)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("next greater element i monotonic stack"),
+    tags: ["stack", "monotonic-stack", "hash-map"],
+    starterCode: buildStarter("twoIntArrays", "intArray", "nextGreaterElement"),
+    reference: (input) => {
+      const nums1 = ints(lines(input)[0]);
+      const nums2 = ints(lines(input)[1]);
+      const next = /* @__PURE__ */ new Map();
+      const stack = [];
+      for (const x of nums2) {
+        while (stack.length && stack[stack.length - 1] < x) {
+          next.set(stack.pop(), x);
+        }
+        stack.push(x);
+      }
+      return arrOut(nums1.map((x) => next.get(x) ?? -1));
+    },
+    tests: [
+      { input: "4 1 2\n1 3 4 2", sample: true },
+      { input: "2 4\n1 2 3 4", sample: true },
+      { input: "5\n5" },
+      { input: "1 3 5 2 4\n6 5 4 3 2 1" },
+      { input: "3 1 4 2\n1 2 3 4" }
+    ]
+  }
+];
+
+// src/data/problems/linked-list.ts
+var first6 = (s) => ints(s.split("\n")[0]);
+var linkedList = [
+  {
+    slug: "reverse-linked-list",
+    title: "Reverse Linked List",
+    difficulty: "EASY",
+    statement: `Given the head of a singly linked list, reverse it and return the new head.
+
+**Input**: one line of space-separated integers \u2014 the list values in order (may be empty).
+**Output**: the reversed list's values, space-separated.`,
+    constraints: `- 0 \u2264 list length \u2264 5000
+- -5000 \u2264 node values \u2264 5000`,
+    examples: [
+      { input: "1 2 3 4 5", output: "5 4 3 2 1" },
+      { input: "1 2", output: "2 1" },
+      { input: "", output: "" }
+    ],
+    hints: [
+      "Walk the list keeping prev and curr pointers; flip one .next per step.",
+      "Save curr.next before overwriting it."
+    ],
+    editorial: `Iterate with two pointers: at each node, remember its successor, point \`curr.next\` back at \`prev\`, then advance both. When \`curr\` runs off the end, \`prev\` is the new head. O(n) time, O(1) space. The recursive version is elegant but costs O(n) stack.`,
+    approaches: [
+      {
+        name: "Iterative pointer flip",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "prev/curr walk; reverse one link per step."
+      },
+      {
+        name: "Recursive",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "Reverse the tail, then attach the head behind it."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode reverse linked list"),
+    tags: ["linked-list", "recursion"],
+    starterCode: buildStarter("list", "list", "reverseList"),
+    reference: (input) => arrOut(first6(input).reverse()),
+    tests: [
+      { input: "1 2 3 4 5", sample: true },
+      { input: "1 2", sample: true },
+      { input: "" },
+      { input: "7" },
+      { input: "-1 0 1" }
+    ]
+  },
+  {
+    slug: "middle-of-the-linked-list",
+    title: "Middle of the Linked List",
+    difficulty: "EASY",
+    statement: `Given the head of a singly linked list, return the **middle node** (the second middle if there are two). The output prints the list from that node to the end.
+
+**Input**: one line of space-separated integers \u2014 the list values.
+**Output**: values from the middle node onward, space-separated.`,
+    constraints: `- 1 \u2264 list length \u2264 100`,
+    examples: [
+      { input: "1 2 3 4 5", output: "3 4 5" },
+      { input: "1 2 3 4 5 6", output: "4 5 6", explanation: "Two middles (3, 4) \u2014 return the second." }
+    ],
+    hints: [
+      "Fast and slow pointers: the fast one moves two steps per iteration.",
+      "When fast reaches the end, slow is at the middle."
+    ],
+    editorial: `The classic **tortoise and hare**: advance \`slow\` one step and \`fast\` two steps until \`fast\` falls off the list. \`slow\` then sits exactly at the middle (the second one for even lengths, because \`fast\` starts at the head). One pass, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("middle of the linked list fast slow pointers"),
+    tags: ["linked-list", "two-pointers"],
+    starterCode: buildStarter("list", "list", "middleNode"),
+    reference: (input) => {
+      const vals = first6(input);
+      return arrOut(vals.slice(Math.floor(vals.length / 2)));
+    },
+    tests: [
+      { input: "1 2 3 4 5", sample: true },
+      { input: "1 2 3 4 5 6", sample: true },
+      { input: "9" },
+      { input: "1 2" }
+    ]
+  },
+  {
+    slug: "merge-two-sorted-lists",
+    title: "Merge Two Sorted Lists",
+    difficulty: "EASY",
+    statement: `Merge two sorted linked lists \`l1\` and \`l2\` into one sorted list by splicing their nodes, and return its head.
+
+**Input**
+- Line 1: values of \`l1\` (sorted, may be empty)
+- Line 2: values of \`l2\` (sorted, may be empty)
+
+**Output**: the merged list's values, space-separated.`,
+    constraints: `- 0 \u2264 each list's length \u2264 50
+- -100 \u2264 node values \u2264 100`,
+    examples: [
+      { input: "1 2 4\n1 3 4", output: "1 1 2 3 4 4" },
+      { input: "\n", output: "" },
+      { input: "\n0", output: "0" }
+    ],
+    hints: [
+      "A dummy head node removes all the 'is this the first node?' special cases.",
+      "Advance whichever list has the smaller front value; attach the leftover tail at the end."
+    ],
+    editorial: `Use a **dummy head** and a tail pointer. Repeatedly attach the smaller of the two front nodes and advance that list; when one empties, attach the other's remainder wholesale. O(m + n) time, O(1) extra space since nodes are reused.`,
+    complexityTime: "O(m + n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode merge two sorted lists"),
+    tags: ["linked-list", "recursion"],
+    starterCode: buildStarter("twoLists", "list", "mergeTwoLists"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const a = ints(l0);
+      const b = ints(l1);
+      const res = [];
+      let i = 0;
+      let j = 0;
+      while (i < a.length || j < b.length) {
+        if (j >= b.length || i < a.length && a[i] <= b[j]) res.push(a[i++]);
+        else res.push(b[j++]);
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "1 2 4\n1 3 4", sample: true },
+      { input: "\n", sample: true },
+      { input: "\n0", sample: true },
+      { input: "-3 5\n-10 -3 20" },
+      { input: "1 1 1\n" }
+    ]
+  },
+  {
+    slug: "linked-list-cycle",
+    title: "Linked List Cycle",
+    difficulty: "EASY",
+    statement: `Determine whether a linked list contains a cycle \u2014 i.e. some node can be reached again by following \`next\` pointers. Use O(1) memory.
+
+**Input**
+- Line 1: the list values in order
+- Line 2: integer \`pos\` \u2014 the tail connects to the node at this 0-based index (\`-1\` means no cycle). Your function receives only the head; the cycle is already wired.
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 0 \u2264 list length \u2264 10^4
+- pos is -1 or a valid index.`,
+    examples: [
+      { input: "3 2 0 -4\n1", output: "true", explanation: "Tail connects back to value 2." },
+      { input: "1 2\n0", output: "true" },
+      { input: "1\n-1", output: "false" }
+    ],
+    hints: [
+      "A visited-set works but uses O(n) memory.",
+      "Floyd's algorithm: if fast (2 steps) ever equals slow (1 step), there's a cycle."
+    ],
+    editorial: `**Floyd's cycle detection**: move \`slow\` one step and \`fast\` two. In a cycle, \`fast\` gains one position on \`slow\` per iteration, so they must meet; without a cycle, \`fast\` hits the end. O(n) time, O(1) space \u2014 the interview follow-up everyone should know.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode linked list cycle floyd"),
+    tags: ["linked-list", "two-pointers"],
+    starterCode: buildStarter("listCycle", "bool", "hasCycle"),
+    reference: (input) => {
+      const pos = int(lines(input)[1]);
+      return boolOut(pos >= 0);
+    },
+    tests: [
+      { input: "3 2 0 -4\n1", sample: true },
+      { input: "1 2\n0", sample: true },
+      { input: "1\n-1", sample: true },
+      { input: "\n-1" },
+      { input: "1 2 3 4 5\n4" },
+      { input: "1 2 3 4 5\n-1" }
+    ]
+  },
+  {
+    slug: "remove-nth-node-from-end-of-list",
+    title: "Remove Nth Node From End of List",
+    difficulty: "MEDIUM",
+    statement: `Remove the \`k\`-th node from the **end** of a linked list and return the head. Try to do it in one pass.
+
+**Input**
+- Line 1: the list values
+- Line 2: integer \`k\` (1 \u2264 k \u2264 length)
+
+**Output**: the resulting list's values, space-separated.`,
+    constraints: `- 1 \u2264 list length \u2264 30
+- 1 \u2264 k \u2264 length`,
+    examples: [
+      { input: "1 2 3 4 5\n2", output: "1 2 3 5" },
+      { input: "1\n1", output: "" },
+      { input: "1 2\n1", output: "1" }
+    ],
+    hints: [
+      "Two passes is easy: count, then delete node (length \u2212 k).",
+      "One pass: lead a right pointer k steps ahead, then move both until it hits the end.",
+      "A dummy node before the head handles deleting the first node cleanly."
+    ],
+    editorial: `Advance a \`fast\` pointer \`k\` steps from a dummy pre-head, then walk \`fast\` and \`slow\` together until \`fast\` reaches the last node. \`slow\` now precedes the victim: splice it out with \`slow.next = slow.next.next\`. The dummy makes "remove the head" a non-special case. One pass, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode remove nth node from end"),
+    tags: ["linked-list", "two-pointers"],
+    starterCode: buildStarter("listK", "list", "removeNthFromEnd"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const vals = ints(l0);
+      const k = int(l1);
+      vals.splice(vals.length - k, 1);
+      return arrOut(vals);
+    },
+    tests: [
+      { input: "1 2 3 4 5\n2", sample: true },
+      { input: "1\n1", sample: true },
+      { input: "1 2\n1", sample: true },
+      { input: "1 2\n2" },
+      { input: "10 20 30 40\n4" }
+    ]
+  },
+  {
+    slug: "remove-duplicates-from-sorted-list",
+    title: "Remove Duplicates from Sorted List",
+    difficulty: "EASY",
+    statement: `Given the head of a **sorted** linked list, delete duplicates so each value appears once, and return the (still sorted) list.
+
+**Input**: one line of space-separated integers (sorted).
+**Output**: the deduplicated list's values.`,
+    constraints: `- 0 \u2264 list length \u2264 300
+- Sorted non-decreasing.`,
+    examples: [
+      { input: "1 1 2", output: "1 2" },
+      { input: "1 1 2 3 3", output: "1 2 3" }
+    ],
+    hints: [
+      "Duplicates are adjacent in a sorted list.",
+      "If curr.val equals curr.next.val, splice out curr.next; otherwise advance."
+    ],
+    editorial: `Walk the list once: when the current node's value equals its successor's, bypass the successor (\`curr.next = curr.next.next\`) without advancing; otherwise step forward. Sortedness guarantees all equal values are consecutive. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("remove duplicates from sorted list leetcode"),
+    tags: ["linked-list"],
+    starterCode: buildStarter("list", "list", "deleteDuplicates"),
+    reference: (input) => {
+      const vals = first6(input);
+      return arrOut(vals.filter((x, i) => i === 0 || x !== vals[i - 1]));
+    },
+    tests: [
+      { input: "1 1 2", sample: true },
+      { input: "1 1 2 3 3", sample: true },
+      { input: "" },
+      { input: "5 5 5 5" },
+      { input: "-2 -1 0" }
+    ]
+  },
+  {
+    slug: "palindrome-linked-list",
+    title: "Palindrome Linked List",
+    difficulty: "EASY",
+    statement: `Return \`true\` if a singly linked list reads the same forwards and backwards. The follow-up asks for O(n) time and O(1) space.
+
+**Input**: one line of space-separated integers.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 list length \u2264 10^5
+- 0 \u2264 node values \u2264 9`,
+    examples: [
+      { input: "1 2 2 1", output: "true" },
+      { input: "1 2", output: "false" }
+    ],
+    hints: [
+      "Copying values to an array makes it trivial \u2014 but costs O(n) space.",
+      "Find the middle (fast/slow), reverse the second half in place, then compare halves."
+    ],
+    editorial: `For O(1) space: locate the middle with fast/slow pointers, **reverse the second half** in place, then walk both halves comparing values. (Optionally restore the list afterwards.) Any mismatch \u2192 not a palindrome. O(n) time, O(1) space.`,
+    approaches: [
+      {
+        name: "Copy to array",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "Dump values and two-pointer the array."
+      },
+      {
+        name: "Reverse second half",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "Fast/slow to the middle, reverse, compare, optionally restore."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("palindrome linked list neetcode"),
+    tags: ["linked-list", "two-pointers"],
+    starterCode: buildStarter("list", "bool", "isPalindrome"),
+    reference: (input) => {
+      const vals = first6(input);
+      const rev = [...vals].reverse();
+      return boolOut(vals.every((v, i) => v === rev[i]));
+    },
+    tests: [
+      { input: "1 2 2 1", sample: true },
+      { input: "1 2", sample: true },
+      { input: "1" },
+      { input: "1 0 1" },
+      { input: "1 2 3 2 2" }
+    ]
+  },
+  {
+    slug: "reorder-list",
+    title: "Reorder List",
+    difficulty: "MEDIUM",
+    statement: `Given a list L\u2080 \u2192 L\u2081 \u2192 \u2026 \u2192 L\u2099, reorder it in place to L\u2080 \u2192 L\u2099 \u2192 L\u2081 \u2192 L\u2099\u208B\u2081 \u2192 L\u2082 \u2192 \u2026 and return the head. Only nodes may be rearranged, not values (though the judge only checks the resulting order).
+
+**Input**: one line of space-separated integers.
+**Output**: the reordered list's values.`,
+    constraints: `- 1 \u2264 list length \u2264 5\xB710^4`,
+    examples: [
+      { input: "1 2 3 4", output: "1 4 2 3" },
+      { input: "1 2 3 4 5", output: "1 5 2 4 3" }
+    ],
+    hints: [
+      "Three classic subroutines chained: find middle, reverse, merge.",
+      "Split at the middle, reverse the second half, then interleave the two halves."
+    ],
+    editorial: `Three steps, each a standard pattern: (1) fast/slow pointers find the middle; (2) reverse the second half in place; (3) interleave the two halves node by node. Chaining known subroutines is exactly what interviewers want to see here. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode reorder list"),
+    tags: ["linked-list", "two-pointers"],
+    starterCode: buildStarter("list", "list", "reorderList"),
+    reference: (input) => {
+      const vals = first6(input);
+      const res = [];
+      let i = 0;
+      let j = vals.length - 1;
+      while (i <= j) {
+        res.push(vals[i]);
+        if (i !== j) res.push(vals[j]);
+        i++;
+        j--;
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "1 2 3 4", sample: true },
+      { input: "1 2 3 4 5", sample: true },
+      { input: "1" },
+      { input: "1 2" },
+      { input: "10 20 30 40 50 60" }
+    ]
+  },
+  {
+    slug: "add-two-numbers",
+    title: "Add Two Numbers",
+    difficulty: "MEDIUM",
+    statement: `Two non-empty linked lists represent non-negative integers with digits stored in **reverse order** (ones digit first). Add them and return the sum as a linked list in the same format.
+
+**Input**
+- Line 1: digits of the first number (reverse order)
+- Line 2: digits of the second number (reverse order)
+
+**Output**: digits of the sum, reverse order, space-separated.`,
+    constraints: `- 1 \u2264 each list's length \u2264 100
+- 0 \u2264 digit \u2264 9; no leading zeros except the number 0.`,
+    examples: [
+      { input: "2 4 3\n5 6 4", output: "7 0 8", explanation: "342 + 465 = 807." },
+      { input: "0\n0", output: "0" },
+      { input: "9 9 9 9 9 9 9\n9 9 9 9", output: "8 9 9 9 0 0 0 1" }
+    ],
+    hints: [
+      "Reverse order means you add ones-first \u2014 exactly like grade-school addition.",
+      "Track a carry; keep going while either list or the carry is non-zero."
+    ],
+    editorial: `Walk both lists in lockstep summing \`digit + digit + carry\`, emitting \`sum % 10\` and carrying \`sum / 10\`. Continue while either list has nodes **or a carry remains** (the classic missed edge case: 999 + 1). A dummy head keeps the code clean. O(max(m, n)).`,
+    complexityTime: "O(max(m, n))",
+    complexitySpace: "O(max(m, n))",
+    youtubeUrl: yt("neetcode add two numbers"),
+    tags: ["linked-list", "math", "recursion"],
+    starterCode: buildStarter("twoLists", "list", "addTwoNumbers"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const a = ints(l0);
+      const b = ints(l1);
+      const res = [];
+      let carry = 0;
+      for (let i = 0; i < Math.max(a.length, b.length) || carry; i++) {
+        const s = (a[i] ?? 0) + (b[i] ?? 0) + carry;
+        res.push(s % 10);
+        carry = Math.floor(s / 10);
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "2 4 3\n5 6 4", sample: true },
+      { input: "0\n0", sample: true },
+      { input: "9 9 9 9 9 9 9\n9 9 9 9", sample: true },
+      { input: "5\n5" },
+      { input: "1 8\n0" }
+    ]
+  },
+  {
+    slug: "odd-even-linked-list",
+    title: "Odd Even Linked List",
+    difficulty: "MEDIUM",
+    statement: `Group all nodes at **odd positions** (1st, 3rd, \u2026) followed by nodes at even positions, preserving relative order within each group. Solve in O(1) space and O(n) time.
+
+**Input**: one line of space-separated integers.
+**Output**: the regrouped list's values.`,
+    constraints: `- 0 \u2264 list length \u2264 10^4`,
+    examples: [
+      { input: "1 2 3 4 5", output: "1 3 5 2 4" },
+      { input: "2 1 3 5 6 4 7", output: "2 3 6 7 1 5 4" }
+    ],
+    hints: [
+      "Positions, not values: it's about 1st/2nd/3rd nodes.",
+      "Weave two chains (odd and even) in one pass, then append the even chain to the odd tail."
+    ],
+    editorial: `Maintain two running chains: \`odd\` links every other node starting at position 1, \`even\` the rest. In one pass, \`odd.next = even.next; even.next = odd.next.next\`-style rewiring separates the chains; finally attach the even head after the odd tail. O(n) time, O(1) space, order preserved within groups.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("odd even linked list leetcode"),
+    tags: ["linked-list"],
+    starterCode: buildStarter("list", "list", "oddEvenList"),
+    reference: (input) => {
+      const vals = first6(input);
+      const odd = vals.filter((_, i) => i % 2 === 0);
+      const even = vals.filter((_, i) => i % 2 === 1);
+      return arrOut([...odd, ...even]);
+    },
+    tests: [
+      { input: "1 2 3 4 5", sample: true },
+      { input: "2 1 3 5 6 4 7", sample: true },
+      { input: "" },
+      { input: "1" },
+      { input: "1 2" }
+    ]
+  },
+  {
+    slug: "swap-nodes-in-pairs",
+    title: "Swap Nodes in Pairs",
+    difficulty: "EASY",
+    statement: `Swap every two adjacent nodes of the list and return the new head. Swap the **nodes themselves**, not just their values.
+
+**Input**: one line of space-separated integers \u2014 the list values (may be empty).
+**Output**: the resulting list's values, space-separated.`,
+    constraints: `- 0 \u2264 list length \u2264 100`,
+    examples: [
+      { input: "1 2 3 4", output: "2 1 4 3" },
+      { input: "1", output: "1" },
+      { input: "1 2 3", output: "2 1 3" }
+    ],
+    hints: [
+      "A dummy node before the head removes the 'new head' special case.",
+      "To swap (a, b) you must also rewire the node *before* a \u2014 track prev.",
+      "Draw the four pointer updates before coding; order matters."
+    ],
+    editorial: `Use a dummy pre-head and a \`prev\` pointer. For each pair (a = prev.next, b = a.next): point prev at b, a at b's successor, b at a \u2014 then advance prev to a. The dummy makes the head swap identical to every other swap, which is the whole lesson of this problem: sentinel nodes delete edge cases. O(n) time, O(1) space. The recursive version (swap first pair, recurse on the rest) reads beautifully but spends O(n) stack.`,
+    approaches: [
+      {
+        name: "Iterative with dummy",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "Three-pointer rewire per pair behind a sentinel node."
+      },
+      {
+        name: "Recursive",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "head.next = swapPairs(head.next.next); return the old second node."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("swap nodes in pairs leetcode"),
+    tags: ["linked-list", "recursion"],
+    starterCode: buildStarter("list", "list", "swapPairs"),
+    reference: (input) => {
+      const a = first6(input);
+      for (let i = 0; i + 1 < a.length; i += 2) {
+        const t = a[i];
+        a[i] = a[i + 1];
+        a[i + 1] = t;
+      }
+      return arrOut(a);
+    },
+    tests: [
+      { input: "1 2 3 4", sample: true },
+      { input: "1", sample: true },
+      { input: "1 2 3", sample: true },
+      { input: "" },
+      { input: "5 4 3 2 1 0" }
+    ]
+  },
+  {
+    slug: "rotate-list",
+    title: "Rotate List",
+    difficulty: "MEDIUM",
+    statement: `Rotate the list to the right by \`k\` places: the last \`k\` nodes move to the front (in order).
+
+**Input**
+- Line 1: space-separated integers \u2014 the list values (may be empty)
+- Line 2: the integer \`k\`
+
+**Output**: the rotated list's values, space-separated.`,
+    constraints: `- 0 \u2264 list length \u2264 500
+- 0 \u2264 k \u2264 2\xB710^9`,
+    examples: [
+      { input: "1 2 3 4 5\n2", output: "4 5 1 2 3" },
+      { input: "0 1 2\n4", output: "2 0 1", explanation: "k=4 on length 3 is k=1." }
+    ],
+    hints: [
+      "k can exceed the length \u2014 rotating by n is a no-op, so reduce k mod n first.",
+      "Find the length, connect tail to head to form a ring, then cut it at the right place.",
+      "The new tail is at position n \u2212 k \u2212 1 (0-indexed) from the old head."
+    ],
+    editorial: `Walk once to find the length n and the tail; take k mod n (if n is 0 or k reduces to 0, return the list unchanged). Join tail \u2192 head to close the ring, walk n \u2212 k \u2212 1 steps from the old head to the new tail, set the new head to its successor, and cut. Two passes, O(n) time, O(1) space. The mod is where naive solutions die \u2014 k up to 2\xB710\u2079 makes step-by-step rotation a timeout, and forgetting the empty-list guard makes it a crash.`,
+    approaches: [
+      {
+        name: "Close the ring and cut",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "Length + tail in one pass; link tail to head; sever at n \u2212 k mod n."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("rotate list leetcode"),
+    tags: ["linked-list", "two-pointers"],
+    starterCode: buildStarter("listK", "list", "rotateRight"),
+    reference: (input) => {
+      const a = ints(lines(input)[0]);
+      const kRaw = int(lines(input)[1]);
+      const n = a.length;
+      if (n === 0) return "";
+      const k = kRaw % n;
+      return arrOut(a.slice(n - k).concat(a.slice(0, n - k)));
+    },
+    tests: [
+      { input: "1 2 3 4 5\n2", sample: true },
+      { input: "0 1 2\n4", sample: true },
+      { input: "\n3" },
+      { input: "1\n99" },
+      { input: "1 2\n2" },
+      { input: "7 8 9\n0" }
+    ]
+  }
+];
+
+// src/data/problems/trees.ts
+var trees = [
+  {
+    slug: "invert-binary-tree",
+    title: "Invert Binary Tree",
+    difficulty: "EASY",
+    statement: `Invert a binary tree (mirror it left-to-right) and return its root.
+
+**Input**: one line \u2014 the tree in level order, \`null\` for missing children.
+**Output**: the inverted tree in level order (trailing nulls trimmed; \`null\` for an empty tree).`,
+    constraints: `- 0 \u2264 number of nodes \u2264 100`,
+    examples: [
+      { input: "4 2 7 1 3 6 9", output: "4 7 2 9 6 3 1" },
+      { input: "2 1 3", output: "2 3 1" },
+      { input: "null", output: "null" }
+    ],
+    hints: [
+      "Swap the children of every node.",
+      "Recursion: invert left, invert right, swap \u2014 or BFS with a queue."
+    ],
+    editorial: `Recursively swap each node's children: \`root.left, root.right = invert(root.right), invert(root.left)\`. Every node is touched once \u2192 O(n) time, O(h) stack. (Famously, the problem Homebrew's author couldn't whiteboard \u2014 so know it cold.)`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("neetcode invert binary tree"),
+    tags: ["tree", "binary-tree", "dfs", "bfs"],
+    starterCode: buildStarter("tree", "tree", "invertTree"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      const invert = (n) => {
+        if (!n) return null;
+        const l = invert(n.left);
+        n.left = invert(n.right);
+        n.right = l;
+        return n;
+      };
+      return treeOut(invert(root));
+    },
+    tests: [
+      { input: "4 2 7 1 3 6 9", sample: true },
+      { input: "2 1 3", sample: true },
+      { input: "null", sample: true },
+      { input: "1" },
+      { input: "1 2 null 3" }
+    ]
+  },
+  {
+    slug: "maximum-depth-of-binary-tree",
+    title: "Maximum Depth of Binary Tree",
+    difficulty: "EASY",
+    statement: `Return the maximum depth of a binary tree \u2014 the number of nodes on the longest root-to-leaf path.
+
+**Input**: one line \u2014 the tree in level order, \`null\` for missing children.
+**Output**: the depth (0 for an empty tree).`,
+    constraints: `- 0 \u2264 number of nodes \u2264 10^4`,
+    examples: [
+      { input: "3 9 20 null null 15 7", output: "3" },
+      { input: "1 null 2", output: "2" }
+    ],
+    hints: [
+      "depth(node) = 1 + max(depth(left), depth(right)).",
+      "The empty tree has depth 0 \u2014 that's your base case."
+    ],
+    editorial: `Pure structural recursion: an empty tree has depth 0; otherwise the depth is one more than the deeper subtree. This one-liner is the template for dozens of tree problems \u2014 compute something for each child, combine, add the current node's contribution. O(n) time, O(h) stack.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("neetcode maximum depth of binary tree"),
+    tags: ["tree", "binary-tree", "dfs", "recursion"],
+    starterCode: buildStarter("tree", "int", "maxDepth"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      const depth = (n) => n ? 1 + Math.max(depth(n.left), depth(n.right)) : 0;
+      return String(depth(root));
+    },
+    tests: [
+      { input: "3 9 20 null null 15 7", sample: true },
+      { input: "1 null 2", sample: true },
+      { input: "null" },
+      { input: "0" },
+      { input: "1 2 3 4 5 6 7 8" }
+    ]
+  },
+  {
+    slug: "same-tree",
+    title: "Same Tree",
+    difficulty: "EASY",
+    statement: `Given two binary trees \`p\` and \`q\`, return \`true\` if they are structurally identical with equal values.
+
+**Input**
+- Line 1: tree \`p\` in level order
+- Line 2: tree \`q\` in level order
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 0 \u2264 nodes \u2264 100 per tree`,
+    examples: [
+      { input: "1 2 3\n1 2 3", output: "true" },
+      { input: "1 2\n1 null 2", output: "false" },
+      { input: "1 2 1\n1 1 2", output: "false" }
+    ],
+    hints: [
+      "Two empties are the same; empty vs non-empty is not.",
+      "Recurse: values equal AND left subtrees same AND right subtrees same."
+    ],
+    editorial: `Structural recursion over both trees simultaneously: both null \u2192 true; exactly one null or values differ \u2192 false; otherwise recurse on both child pairs. O(min(m, n)) time, O(h) stack.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("same tree leetcode"),
+    tags: ["tree", "binary-tree", "dfs"],
+    starterCode: buildStarter("twoTrees", "bool", "isSameTree"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const same = (a, b) => {
+        if (!a && !b) return true;
+        if (!a || !b || a.val !== b.val) return false;
+        return same(a.left, b.left) && same(a.right, b.right);
+      };
+      return boolOut(same(parseTree(l0), parseTree(l1)));
+    },
+    tests: [
+      { input: "1 2 3\n1 2 3", sample: true },
+      { input: "1 2\n1 null 2", sample: true },
+      { input: "1 2 1\n1 1 2", sample: true },
+      { input: "null\nnull" },
+      { input: "null\n0" }
+    ]
+  },
+  {
+    slug: "symmetric-tree",
+    title: "Symmetric Tree",
+    difficulty: "EASY",
+    statement: `Return \`true\` if a binary tree is a mirror of itself around its center.
+
+**Input**: one line \u2014 the tree in level order.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 nodes \u2264 1000`,
+    examples: [
+      { input: "1 2 2 3 4 4 3", output: "true" },
+      { input: "1 2 2 null 3 null 3", output: "false" }
+    ],
+    hints: [
+      "Symmetry is a property of two subtrees: left mirrors right.",
+      "mirror(a, b) = values equal AND mirror(a.left, b.right) AND mirror(a.right, b.left)."
+    ],
+    editorial: `Define \`mirror(a, b)\`: both empty \u2192 true; one empty or values unequal \u2192 false; otherwise \`a.left\` must mirror \`b.right\` and \`a.right\` must mirror \`b.left\` (note the cross). The tree is symmetric iff \`mirror(root.left, root.right)\`. O(n) time, O(h) stack.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("symmetric tree leetcode"),
+    tags: ["tree", "binary-tree", "dfs", "bfs"],
+    starterCode: buildStarter("tree", "bool", "isSymmetric"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      const mirror = (a, b) => {
+        if (!a && !b) return true;
+        if (!a || !b || a.val !== b.val) return false;
+        return mirror(a.left, b.right) && mirror(a.right, b.left);
+      };
+      return boolOut(!root || mirror(root.left, root.right));
+    },
+    tests: [
+      { input: "1 2 2 3 4 4 3", sample: true },
+      { input: "1 2 2 null 3 null 3", sample: true },
+      { input: "1" },
+      { input: "1 2 2 2 null 2" }
+    ]
+  },
+  {
+    slug: "diameter-of-binary-tree",
+    title: "Diameter of Binary Tree",
+    difficulty: "EASY",
+    statement: `Return the **diameter** of a binary tree: the number of edges on the longest path between any two nodes (the path need not pass through the root).
+
+**Input**: one line \u2014 the tree in level order.
+**Output**: the diameter.`,
+    constraints: `- 1 \u2264 nodes \u2264 10^4`,
+    examples: [
+      { input: "1 2 3 4 5", output: "3", explanation: "Path 4 \u2192 2 \u2192 1 \u2192 3 (3 edges)." },
+      { input: "1 2", output: "1" }
+    ],
+    hints: [
+      "The longest path through a node = height(left) + height(right).",
+      "Compute heights recursively and update a global best at every node."
+    ],
+    editorial: `While computing each node's height, the candidate diameter **through** that node is \`height(left) + height(right)\`. Track the maximum across all nodes during one post-order traversal. This "carry an answer alongside the recursion" trick generalizes to many tree problems. O(n) time, O(h) stack.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("neetcode diameter of binary tree"),
+    tags: ["tree", "binary-tree", "dfs"],
+    starterCode: buildStarter("tree", "int", "diameterOfBinaryTree"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      let best = 0;
+      const height = (n) => {
+        if (!n) return 0;
+        const l = height(n.left);
+        const r = height(n.right);
+        best = Math.max(best, l + r);
+        return 1 + Math.max(l, r);
+      };
+      height(root);
+      return String(best);
+    },
+    tests: [
+      { input: "1 2 3 4 5", sample: true },
+      { input: "1 2", sample: true },
+      { input: "1" },
+      { input: "1 2 null 3 null 4 null" }
+    ]
+  },
+  {
+    slug: "path-sum",
+    title: "Path Sum",
+    difficulty: "EASY",
+    statement: `Given a binary tree and an integer \`targetSum\`, return \`true\` if some **root-to-leaf** path sums to \`targetSum\`.
+
+**Input**
+- Line 1: the tree in level order
+- Line 2: integer \`targetSum\`
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 0 \u2264 nodes \u2264 5000
+- -1000 \u2264 values, targetSum \u2264 1000`,
+    examples: [
+      { input: "5 4 8 11 null 13 4 7 2 null null null 1\n22", output: "true", explanation: "5+4+11+2 = 22." },
+      { input: "1 2 3\n5", output: "false" },
+      { input: "null\n0", output: "false" }
+    ],
+    hints: [
+      "Subtract the node's value as you descend.",
+      "At a leaf, check whether the remaining target equals the leaf's value."
+    ],
+    editorial: `Recurse with the remaining target: at each node subtract its value; at a **leaf**, the path works iff the remainder equals the leaf's value. Careful: a node with one child is not a leaf \u2014 don't accept early. O(n) time, O(h) stack.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("path sum leetcode dfs"),
+    tags: ["tree", "binary-tree", "dfs"],
+    starterCode: buildStarter("treeK", "bool", "hasPathSum"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const root = parseTree(l0);
+      const target = int(l1);
+      const dfs = (n, rem) => {
+        if (!n) return false;
+        rem -= n.val;
+        if (!n.left && !n.right) return rem === 0;
+        return dfs(n.left, rem) || dfs(n.right, rem);
+      };
+      return boolOut(dfs(root, target));
+    },
+    tests: [
+      { input: "5 4 8 11 null 13 4 7 2 null null null 1\n22", sample: true },
+      { input: "1 2 3\n5", sample: true },
+      { input: "null\n0", sample: true },
+      { input: "1 2\n1" },
+      { input: "-2 null -3\n-5" }
+    ]
+  },
+  {
+    slug: "binary-tree-level-order-traversal",
+    title: "Binary Tree Level Order Traversal",
+    difficulty: "MEDIUM",
+    statement: `Return the level order traversal of a binary tree \u2014 node values level by level, left to right.
+
+**Input**: one line \u2014 the tree in level order (with nulls).
+**Output**: one line per level, values space-separated (nothing for an empty tree).`,
+    constraints: `- 0 \u2264 nodes \u2264 2000`,
+    examples: [
+      { input: "3 9 20 null null 15 7", output: "3\n9 20\n15 7" },
+      { input: "1", output: "1" }
+    ],
+    hints: [
+      "BFS with a queue; process one full level per outer loop iteration.",
+      "Snapshot the queue length before the inner loop \u2014 that's the level size."
+    ],
+    editorial: `Breadth-first search where each outer iteration drains exactly the nodes that were in the queue at its start (one level), collecting their values and enqueueing children. The level-size snapshot is the key detail separating this from plain BFS. O(n) time and space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode binary tree level order traversal"),
+    tags: ["tree", "binary-tree", "bfs"],
+    starterCode: buildStarter("tree", "intMatrix", "levelOrder"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      if (!root) return "";
+      const rows = [];
+      let q = [root];
+      while (q.length) {
+        rows.push(q.map((n) => n.val));
+        const next = [];
+        for (const n of q) {
+          if (n.left) next.push(n.left);
+          if (n.right) next.push(n.right);
+        }
+        q = next;
+      }
+      return matOut(rows);
+    },
+    tests: [
+      { input: "3 9 20 null null 15 7", sample: true },
+      { input: "1", sample: true },
+      { input: "null" },
+      { input: "1 2 3 4 5 6 7" },
+      { input: "1 null 2 null 3" }
+    ]
+  },
+  {
+    slug: "validate-binary-search-tree",
+    title: "Validate Binary Search Tree",
+    difficulty: "MEDIUM",
+    statement: `Determine whether a binary tree is a valid **binary search tree**: every node's left subtree contains only smaller values, its right subtree only larger values, and both subtrees are BSTs.
+
+**Input**: one line \u2014 the tree in level order.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 nodes \u2264 10^4
+- -2^31 \u2264 values \u2264 2^31 \u2212 1`,
+    examples: [
+      { input: "2 1 3", output: "true" },
+      { input: "5 1 4 null null 3 6", output: "false", explanation: "3 sits in the right subtree of 5." }
+    ],
+    hints: [
+      "Checking only parent vs children is not enough \u2014 the constraint is over whole subtrees.",
+      "Pass down (min, max) bounds; each node must lie strictly inside them.",
+      "Alternative: an in-order traversal of a BST is strictly increasing."
+    ],
+    editorial: `Recurse with an allowed **open interval** \`(lo, hi)\` for each node: the root gets \`(\u2212\u221E, +\u221E)\`; going left tightens \`hi\` to the node's value, going right tightens \`lo\`. A node violating its interval anywhere fails the whole tree. Equivalent alternative: verify the in-order sequence is strictly increasing. O(n) time, O(h) stack.`,
+    approaches: [
+      {
+        name: "In-order traversal",
+        complexityTime: "O(n)",
+        complexitySpace: "O(h)",
+        body: "A valid BST yields a strictly increasing in-order sequence; compare neighbors."
+      },
+      {
+        name: "Bounds propagation",
+        complexityTime: "O(n)",
+        complexitySpace: "O(h)",
+        body: "Each child inherits a narrowed (min, max) window from its parent."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("neetcode validate binary search tree"),
+    tags: ["tree", "binary-search-tree", "dfs"],
+    starterCode: buildStarter("tree", "bool", "isValidBST"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      const ok = (n, lo, hi) => {
+        if (!n) return true;
+        if (n.val <= lo || n.val >= hi) return false;
+        return ok(n.left, lo, n.val) && ok(n.right, n.val, hi);
+      };
+      return boolOut(ok(root, -Infinity, Infinity));
+    },
+    tests: [
+      { input: "2 1 3", sample: true },
+      { input: "5 1 4 null null 3 6", sample: true },
+      { input: "1" },
+      { input: "2 2 2" },
+      { input: "10 5 15 null null 6 20" }
+    ]
+  },
+  {
+    slug: "lowest-common-ancestor-of-a-binary-search-tree",
+    title: "Lowest Common Ancestor of a BST",
+    difficulty: "MEDIUM",
+    statement: `Given a **BST** and two values \`p\` and \`q\` that exist in it, return the value of their lowest common ancestor \u2014 the deepest node that has both among its descendants (a node may be its own descendant).
+
+**Input**
+- Line 1: the BST in level order
+- Line 2: two integers \`p q\`
+
+**Output**: the LCA node's value.`,
+    constraints: `- 2 \u2264 nodes \u2264 10^5
+- All values distinct; p \u2260 q; both present.`,
+    examples: [
+      { input: "6 2 8 0 4 7 9 null null 3 5\n2 8", output: "6" },
+      { input: "6 2 8 0 4 7 9 null null 3 5\n2 4", output: "2", explanation: "An ancestor can be the node itself." }
+    ],
+    hints: [
+      "Use the BST ordering \u2014 no generic LCA machinery needed.",
+      "If both values are smaller than the current node, go left; both larger, go right; otherwise you've found it."
+    ],
+    editorial: `Walk down from the root: if both targets are less than the current value, the LCA lies left; if both are greater, right; otherwise the paths to \`p\` and \`q\` **split here** (or one equals the current node) \u2014 this is the LCA. Iterative, O(h) time, O(1) space.`,
+    complexityTime: "O(h)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode lowest common ancestor bst"),
+    tags: ["tree", "binary-search-tree"],
+    starterCode: buildStarter("treePQ", "int", "lowestCommonAncestor"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      let node = parseTree(l0);
+      const [p, q] = ints(l1);
+      while (node) {
+        if (p < node.val && q < node.val) node = node.left;
+        else if (p > node.val && q > node.val) node = node.right;
+        else break;
+      }
+      return String(node.val);
+    },
+    tests: [
+      { input: "6 2 8 0 4 7 9 null null 3 5\n2 8", sample: true },
+      { input: "6 2 8 0 4 7 9 null null 3 5\n2 4", sample: true },
+      { input: "2 1\n2 1" },
+      { input: "6 2 8 0 4 7 9 null null 3 5\n3 5" }
+    ]
+  },
+  {
+    slug: "binary-tree-right-side-view",
+    title: "Binary Tree Right Side View",
+    difficulty: "MEDIUM",
+    statement: `Standing to the right of a binary tree, return the values you can see from top to bottom (the rightmost node of each level).
+
+**Input**: one line \u2014 the tree in level order.
+**Output**: the visible values, space-separated (nothing for an empty tree).`,
+    constraints: `- 0 \u2264 nodes \u2264 100`,
+    examples: [
+      { input: "1 2 3 null 5 null 4", output: "1 3 4" },
+      { input: "1 null 3", output: "1 3" }
+    ],
+    hints: [
+      "Level order traversal \u2014 keep the last node of each level.",
+      "DFS alternative: visit right first and record the first node seen at each depth."
+    ],
+    editorial: `BFS level by level and record each level's **last** value. Or DFS right-child-first, recording a value the first time each depth is reached. Both are O(n); BFS is the more direct fit for "per-level" questions.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode binary tree right side view"),
+    tags: ["tree", "binary-tree", "bfs", "dfs"],
+    starterCode: buildStarter("tree", "intArray", "rightSideView"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      if (!root) return "";
+      const res = [];
+      let q = [root];
+      while (q.length) {
+        res.push(q[q.length - 1].val);
+        const next = [];
+        for (const n of q) {
+          if (n.left) next.push(n.left);
+          if (n.right) next.push(n.right);
+        }
+        q = next;
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "1 2 3 null 5 null 4", sample: true },
+      { input: "1 null 3", sample: true },
+      { input: "null" },
+      { input: "1 2 3 4" }
+    ]
+  },
+  {
+    slug: "kth-smallest-element-in-a-bst",
+    title: "Kth Smallest Element in a BST",
+    difficulty: "MEDIUM",
+    statement: `Given a BST and an integer \`k\`, return the k-th smallest value (1-indexed).
+
+**Input**
+- Line 1: the BST in level order
+- Line 2: integer \`k\`
+
+**Output**: the k-th smallest value.`,
+    constraints: `- 1 \u2264 k \u2264 nodes \u2264 10^4`,
+    examples: [
+      { input: "3 1 4 null 2\n1", output: "1" },
+      { input: "5 3 6 2 4 null null 1\n3", output: "3" }
+    ],
+    hints: [
+      "In-order traversal of a BST visits values in sorted order.",
+      "Stop the traversal as soon as you've visited k nodes."
+    ],
+    editorial: `An **in-order traversal** (left, node, right) of a BST emits values in ascending order, so the k-th visited node is the answer. An explicit stack lets you stop early after k pops instead of materializing the whole sequence. O(h + k) time, O(h) space.`,
+    complexityTime: "O(h + k)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("neetcode kth smallest element in a bst"),
+    tags: ["tree", "binary-search-tree", "dfs"],
+    starterCode: buildStarter("treeK", "int", "kthSmallest"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const root = parseTree(l0);
+      const k = int(l1);
+      const vals = [];
+      const inorder = (n) => {
+        if (!n) return;
+        inorder(n.left);
+        vals.push(n.val);
+        inorder(n.right);
+      };
+      inorder(root);
+      return String(vals[k - 1]);
+    },
+    tests: [
+      { input: "3 1 4 null 2\n1", sample: true },
+      { input: "5 3 6 2 4 null null 1\n3", sample: true },
+      { input: "1\n1" },
+      { input: "41 37 44 24 39 42 48 1 35 38 40 null 43 46 49\n10" }
+    ]
+  },
+  {
+    slug: "binary-tree-maximum-path-sum",
+    title: "Binary Tree Maximum Path Sum",
+    difficulty: "HARD",
+    statement: `A **path** is any sequence of adjacent nodes (each node used at most once) \u2014 it need not pass through the root or reach a leaf. Return the maximum possible sum of values along any non-empty path.
+
+**Input**: one line \u2014 the tree in level order.
+**Output**: the maximum path sum.`,
+    constraints: `- 1 \u2264 nodes \u2264 3\xB710^4
+- -1000 \u2264 values \u2264 1000`,
+    examples: [
+      { input: "1 2 3", output: "6", explanation: "2 \u2192 1 \u2192 3." },
+      { input: "-10 9 20 null null 15 7", output: "42", explanation: "15 \u2192 20 \u2192 7." }
+    ],
+    hints: [
+      "Distinguish two quantities per node: the best downward 'arm' vs the best path through the node.",
+      "A path through a node = node + best left arm + best right arm (arms clamped at 0).",
+      "Return only the single best arm upward \u2014 a parent can't use both."
+    ],
+    editorial: `Post-order DFS computing each node's best **arm** \u2014 the max sum extending downward through one child, clamped at 0 (a negative arm is better dropped). The best path *through* a node is \`val + leftArm + rightArm\`; track the global maximum of that. Upward, return \`val + max(arms)\` because a parent's path can only continue through one side. O(n) time, O(h) stack.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("neetcode binary tree maximum path sum"),
+    tags: ["tree", "binary-tree", "dfs", "dynamic-programming"],
+    starterCode: buildStarter("tree", "int", "maxPathSum"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      let best = -Infinity;
+      const arm = (n) => {
+        if (!n) return 0;
+        const l = Math.max(0, arm(n.left));
+        const r = Math.max(0, arm(n.right));
+        best = Math.max(best, n.val + l + r);
+        return n.val + Math.max(l, r);
+      };
+      arm(root);
+      return String(best);
+    },
+    tests: [
+      { input: "1 2 3", sample: true },
+      { input: "-10 9 20 null null 15 7", sample: true },
+      { input: "-3" },
+      { input: "2 -1" },
+      { input: "5 4 8 11 null 13 4 7 2 null null null 1" }
+    ]
+  },
+  {
+    slug: "subtree-of-another-tree",
+    title: "Subtree of Another Tree",
+    difficulty: "EASY",
+    statement: `Given the roots of trees \`root\` and \`subRoot\`, return \`true\` if some node of \`root\` (together with all its descendants) is structurally identical to \`subRoot\`, with equal values.
+
+**Input**
+- Line 1: level-order tokens for \`root\` (\`null\` = missing child)
+- Line 2: level-order tokens for \`subRoot\`
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 root nodes \u2264 2000, 1 \u2264 subRoot nodes \u2264 1000
+- -10^4 \u2264 values \u2264 10^4`,
+    examples: [
+      { input: "3 4 5 1 2\n4 1 2", output: "true" },
+      {
+        input: "3 4 5 1 2 null null null null 0\n4 1 2",
+        output: "false",
+        explanation: "The candidate subtree at 4 has an extra node 0 under 2."
+      }
+    ],
+    hints: [
+      "Two-layer recursion: 'is same tree' as a helper, tried at every node.",
+      "sameTree(a, b): both null \u2192 true; one null or values differ \u2192 false; recurse both sides.",
+      "A subtree match must include ALL descendants \u2014 matching a prefix isn't enough."
+    ],
+    editorial: `Compose two classic recursions: \`sameTree(a, b)\` checks structural equality, and the outer walk tries it at every node of root, recursing into children on failure. Worst case O(m\xB7n) (every node starts a comparison that runs deep), but real inputs exit comparisons at the first mismatch. The 'all descendants' requirement is what the second example tests \u2014 node 4's subtree contains an extra leaf, so a shape-prefix match must be rejected; that's precisely why sameTree demands both children null-match. The O(m+n) upgrade \u2014 serialize both trees with null markers and run a substring search \u2014 is a great follow-up to mention.`,
+    approaches: [
+      {
+        name: "Nested recursion",
+        complexityTime: "O(m\xB7n) worst",
+        complexitySpace: "O(h)",
+        body: "Try sameTree at every node of the host tree."
+      },
+      {
+        name: "Serialize + substring",
+        complexityTime: "O(m + n)",
+        complexitySpace: "O(m + n)",
+        body: "Preorder-serialize with null sentinels; check containment (KMP)."
+      }
+    ],
+    complexityTime: "O(m\xB7n)",
+    complexitySpace: "O(h)",
+    youtubeUrl: yt("neetcode subtree of another tree"),
+    tags: ["tree", "recursion", "dfs"],
+    starterCode: buildStarter("twoTrees", "bool", "isSubtree"),
+    reference: (input) => {
+      const root = parseTree(lines(input)[0]);
+      const sub = parseTree(lines(input)[1]);
+      const same = (a, b) => {
+        if (!a && !b) return true;
+        if (!a || !b || a.val !== b.val) return false;
+        return same(a.left, b.left) && same(a.right, b.right);
+      };
+      const dfs = (node) => {
+        if (!node) return false;
+        return same(node, sub) || dfs(node.left) || dfs(node.right);
+      };
+      return boolOut(dfs(root));
+    },
+    tests: [
+      { input: "3 4 5 1 2\n4 1 2", sample: true },
+      { input: "3 4 5 1 2 null null null null 0\n4 1 2", sample: true },
+      { input: "1\n1" },
+      { input: "1 2\n2" },
+      { input: "1 2 3\n1 2" },
+      { input: "-5 null -5\n-5" }
+    ]
+  }
+];
+
+// src/data/problems/tries.ts
+var tries = [
+  {
+    slug: "implement-trie-prefix-tree",
+    title: "Implement Trie (Prefix Tree)",
+    difficulty: "MEDIUM",
+    statement: `Implement a trie supporting insertion, exact word search, and prefix search.
+
+**Input**: one operation per line \u2014
+- \`insert w\` \u2014 insert word w
+- \`search w\` \u2014 print \`true\` if w was inserted
+- \`startsWith p\` \u2014 print \`true\` if any inserted word starts with p
+
+**Output**: one line per operation \u2014 \`insert\` prints \`null\`; the others print \`true\`/\`false\`.`,
+    constraints: `- 1 \u2264 word length \u2264 2000
+- Up to 3\xB710^4 operations; lowercase letters.`,
+    examples: [
+      {
+        input: "insert apple\nsearch apple\nsearch app\nstartsWith app\ninsert app\nsearch app",
+        output: "null\ntrue\nfalse\ntrue\nnull\ntrue"
+      }
+    ],
+    hints: [
+      "Each node holds up to 26 children and an end-of-word flag.",
+      "search and startsWith walk the same path; only the final check differs."
+    ],
+    editorial: `A trie node maps characters to children plus an \`isEnd\` flag. **insert** walks the word creating missing nodes and marks the last one; **search** walks and requires \`isEnd\`; **startsWith** walks and requires only that the path exists. All operations are O(L) in the word length \u2014 independent of how many words are stored, which is the whole point of tries.`,
+    complexityTime: "O(L) per operation",
+    complexitySpace: "O(total characters)",
+    youtubeUrl: yt("neetcode implement trie prefix tree"),
+    tags: ["trie", "design", "string"],
+    starterCode: buildStarter("ops", "lines", "processOps"),
+    reference: (input) => {
+      const ops = lines(input).filter((l) => l.trim().length > 0);
+      const mk = () => ({ children: /* @__PURE__ */ new Map(), end: false });
+      const root = mk();
+      const out = [];
+      const walk = (w) => {
+        let n = root;
+        for (const c of w) {
+          const next = n.children.get(c);
+          if (!next) return null;
+          n = next;
+        }
+        return n;
+      };
+      for (const op of ops) {
+        const [cmd, arg] = op.trim().split(/\s+/);
+        if (cmd === "insert") {
+          let n = root;
+          for (const c of arg) {
+            if (!n.children.has(c)) n.children.set(c, mk());
+            n = n.children.get(c);
+          }
+          n.end = true;
+          out.push("null");
+        } else if (cmd === "search") {
+          const n = walk(arg);
+          out.push(boolOut(!!n && n.end));
+        } else {
+          out.push(boolOut(!!walk(arg)));
+        }
+      }
+      return linesOut(out);
+    },
+    tests: [
+      {
+        input: "insert apple\nsearch apple\nsearch app\nstartsWith app\ninsert app\nsearch app",
+        sample: true
+      },
+      { input: "search a\nstartsWith a\ninsert a\nsearch a" },
+      { input: "insert ab\ninsert abc\nsearch ab\nstartsWith abc\nstartsWith abcd" }
+    ]
+  },
+  {
+    slug: "design-add-and-search-words-data-structure",
+    title: "Design Add and Search Words Data Structure",
+    difficulty: "MEDIUM",
+    statement: `Design a data structure that stores words and supports searching with the wildcard \`.\` (matches any single letter).
+
+**Input**: one operation per line \u2014
+- \`addWord w\` \u2014 add word w
+- \`search p\` \u2014 print \`true\` if any stored word matches pattern p (letters and dots)
+
+**Output**: one line per operation \u2014 \`addWord\` prints \`null\`; \`search\` prints \`true\`/\`false\`.`,
+    constraints: `- 1 \u2264 word length \u2264 25
+- At most 2 dots per search; up to 10^4 operations.`,
+    examples: [
+      {
+        input: "addWord bad\naddWord dad\naddWord mad\nsearch pad\nsearch bad\nsearch .ad\nsearch b..",
+        output: "null\nnull\nnull\nfalse\ntrue\ntrue\ntrue"
+      }
+    ],
+    hints: [
+      "A trie handles literal letters; the wildcard needs branching.",
+      "On '.', recurse into every child; on a letter, follow just that edge."
+    ],
+    editorial: `Store words in a trie. Search runs a DFS over the trie following literal characters directly; a \`.\` fans out into **all** children at that depth. With at most a couple of dots the branching stays cheap; worst case is O(26^d \xB7 L) for d dots. Adding is a plain trie insert, O(L).`,
+    complexityTime: "O(L) add, O(26^d \xB7 L) search",
+    complexitySpace: "O(total characters)",
+    youtubeUrl: yt("neetcode design add and search words"),
+    tags: ["trie", "design", "dfs", "string"],
+    starterCode: buildStarter("ops", "lines", "processOps"),
+    reference: (input) => {
+      const ops = lines(input).filter((l) => l.trim().length > 0);
+      const mk = () => ({ children: /* @__PURE__ */ new Map(), end: false });
+      const root = mk();
+      const out = [];
+      const match = (n, p, i) => {
+        if (i === p.length) return n.end;
+        const c = p[i];
+        if (c === ".") {
+          for (const child of n.children.values()) {
+            if (match(child, p, i + 1)) return true;
+          }
+          return false;
+        }
+        const next = n.children.get(c);
+        return !!next && match(next, p, i + 1);
+      };
+      for (const op of ops) {
+        const [cmd, arg] = op.trim().split(/\s+/);
+        if (cmd === "addWord") {
+          let n = root;
+          for (const c of arg) {
+            if (!n.children.has(c)) n.children.set(c, mk());
+            n = n.children.get(c);
+          }
+          n.end = true;
+          out.push("null");
+        } else {
+          out.push(boolOut(match(root, arg, 0)));
+        }
+      }
+      return linesOut(out);
+    },
+    tests: [
+      {
+        input: "addWord bad\naddWord dad\naddWord mad\nsearch pad\nsearch bad\nsearch .ad\nsearch b..",
+        sample: true
+      },
+      { input: "addWord a\nsearch .\nsearch a\nsearch aa" },
+      { input: "addWord at\naddWord and\nsearch an.\nsearch .t\nsearch a.d." }
+    ]
+  },
+  {
+    slug: "longest-word-in-dictionary",
+    title: "Longest Word in Dictionary",
+    difficulty: "MEDIUM",
+    statement: `Given a list of words, return the longest word that can be **built one character at a time**, where every prefix of it (of every length) is also a word in the list. On ties, return the lexicographically smallest. Return an empty line if no word qualifies.
+
+**Input**: one line of space-separated words.
+**Output**: the answer word (or empty).`,
+    constraints: `- 1 \u2264 words.length \u2264 1000
+- 1 \u2264 word length \u2264 30; lowercase letters.`,
+    examples: [
+      { input: "w wo wor worl world", output: "world" },
+      { input: "a banana app appl ap apply apple", output: "apple", explanation: "apple and apply tie at length 5; apple is smaller." },
+      { input: "abc bd", output: "", explanation: "No single-letter starting point." }
+    ],
+    hints: [
+      "Sort the words; then every buildable word's prefix appears before it.",
+      "Keep a set of buildable words: w is buildable if w minus its last char is in the set (or has length 1)."
+    ],
+    editorial: `Sort the words (shorter/lexicographically-smaller first), then greedily grow a set of buildable words: a word qualifies if its length is 1 or its prefix-minus-one is already buildable. Track the best answer preferring longer, then lexicographically smaller \u2014 the sort order makes ties resolve automatically if you only replace on strictly longer. A trie with end-flags gives the same result and is the intended interview framing. O(\u03A3 L log n).`,
+    complexityTime: "O(\u03A3 L \xB7 log n)",
+    complexitySpace: "O(\u03A3 L)",
+    youtubeUrl: yt("longest word in dictionary trie"),
+    tags: ["trie", "string", "sorting", "hash-table"],
+    starterCode: buildStarter("stringArray", "string", "longestWord"),
+    reference: (input) => {
+      const ws = words(lines(input)[0]).sort();
+      const buildable = /* @__PURE__ */ new Set();
+      let best = "";
+      for (const w of ws) {
+        if (w.length === 1 || buildable.has(w.slice(0, -1))) {
+          buildable.add(w);
+          if (w.length > best.length) best = w;
+        }
+      }
+      return best;
+    },
+    tests: [
+      { input: "w wo wor worl world", sample: true },
+      { input: "a banana app appl ap apply apple", sample: true },
+      { input: "abc bd", sample: true },
+      { input: "m mo moc mocha" },
+      { input: "yo ew fc zrc yodn fcm qm qmo fcmz z ewq yod ewqz y" }
+    ]
+  },
+  {
+    slug: "replace-words",
+    title: "Replace Words",
+    difficulty: "MEDIUM",
+    statement: `Given a sentence and a dictionary of **roots**, replace every word in the sentence that has a root as a prefix with its **shortest** such root. Words without a matching root stay unchanged.
+
+**Input**
+- Line 1: the sentence (words separated by single spaces)
+- Line 2: space-separated dictionary roots
+
+**Output**: the transformed sentence.`,
+    constraints: `- 1 \u2264 sentence words \u2264 1000
+- 1 \u2264 roots \u2264 1000; lowercase letters.`,
+    examples: [
+      { input: "the cattle was rattled by the battery\ncat bat rat", output: "the cat was rat by the bat" },
+      { input: "a aadsfasf absbs bbab cadsfafs\na b c", output: "a a a b c" }
+    ],
+    hints: [
+      "Checking every root against every word is O(words \xD7 roots \xD7 L).",
+      "Put the roots in a trie; for each word walk until you hit an end-flag (shortest root wins)."
+    ],
+    editorial: `Insert all roots into a trie with end-of-word flags. For each sentence word, walk the trie character by character; the first end-flag you meet is the **shortest** matching root \u2014 replace and stop. If the walk dies without a flag, keep the original word. Total O(dictionary + sentence) characters.`,
+    complexityTime: "O(\u03A3 characters)",
+    complexitySpace: "O(dictionary characters)",
+    youtubeUrl: yt("replace words trie leetcode"),
+    tags: ["trie", "string", "hash-table"],
+    starterCode: buildStarter("stringWords", "string", "replaceWords"),
+    reference: (input) => {
+      const [sentence = "", rootLine = ""] = lines(input);
+      const roots = words(rootLine);
+      const mk = () => ({ children: /* @__PURE__ */ new Map(), end: false });
+      const root = mk();
+      for (const r of roots) {
+        let n = root;
+        for (const c of r) {
+          if (!n.children.has(c)) n.children.set(c, mk());
+          n = n.children.get(c);
+        }
+        n.end = true;
+      }
+      const replace = (w) => {
+        let n = root;
+        for (let i = 0; i < w.length; i++) {
+          const next = n.children.get(w[i]);
+          if (!next) return w;
+          n = next;
+          if (n.end) return w.slice(0, i + 1);
+        }
+        return w;
+      };
+      return words(sentence).map(replace).join(" ");
+    },
+    tests: [
+      { input: "the cattle was rattled by the battery\ncat bat rat", sample: true },
+      { input: "a aadsfasf absbs bbab cadsfafs\na b c", sample: true },
+      { input: "hello world\nxyz" },
+      { input: "aa aaa aaaa\na" }
+    ]
+  },
+  {
+    slug: "word-break",
+    title: "Word Break",
+    difficulty: "MEDIUM",
+    statement: `Given a string \`s\` and a dictionary of words, return \`true\` if \`s\` can be segmented into a space-separated sequence of one or more dictionary words (words may be reused).
+
+**Input**
+- Line 1: the string \`s\`
+- Line 2: space-separated dictionary words
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 s.length \u2264 300
+- 1 \u2264 dictionary size \u2264 1000; lowercase letters.`,
+    examples: [
+      { input: "leetcode\nleet code", output: "true" },
+      { input: "applepenapple\napple pen", output: "true" },
+      { input: "catsandog\ncats dog sand and cat", output: "false" }
+    ],
+    hints: [
+      "Greedy fails: taking the longest matching word first can strand the remainder.",
+      "dp[i] = can s[0..i) be segmented? Try every dictionary word as the final piece.",
+      "A trie (or a set with bounded word lengths) speeds up the inner matching."
+    ],
+    editorial: `Dynamic programming over prefixes: \`dp[i]\` is true when some \`j < i\` has \`dp[j]\` true and \`s[j..i)\` in the dictionary. \`dp[0]\` (empty prefix) seeds it; \`dp[n]\` answers it. With a hash set the check is O(1) per substring \u2192 O(n\xB2 \xB7 L) worst case; a trie walked from each \`j\` avoids re-hashing overlapping substrings.`,
+    approaches: [
+      {
+        name: "DFS + memo on start index",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(n)",
+        body: "Recurse on the remaining suffix; memoize failed start positions."
+      },
+      {
+        name: "Bottom-up DP",
+        complexityTime: "O(n\xB2 \xB7 L)",
+        complexitySpace: "O(n)",
+        body: "dp[i] over prefix lengths, checking dictionary membership of each candidate suffix."
+      }
+    ],
+    complexityTime: "O(n\xB2)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode word break"),
+    tags: ["trie", "dynamic-programming", "string", "hash-table"],
+    starterCode: buildStarter("stringWords", "bool", "wordBreak"),
+    reference: (input) => {
+      const [s = "", dictLine = ""] = lines(input);
+      const dict = new Set(words(dictLine));
+      const n = s.length;
+      const dp = new Array(n + 1).fill(false);
+      dp[0] = true;
+      for (let i = 1; i <= n; i++) {
+        for (let j = 0; j < i; j++) {
+          if (dp[j] && dict.has(s.slice(j, i))) {
+            dp[i] = true;
+            break;
+          }
+        }
+      }
+      return boolOut(dp[n]);
+    },
+    tests: [
+      { input: "leetcode\nleet code", sample: true },
+      { input: "applepenapple\napple pen", sample: true },
+      { input: "catsandog\ncats dog sand and cat", sample: true },
+      { input: "a\nb" },
+      { input: "aaaaaaa\naaaa aaa" }
+    ]
+  },
+  {
+    slug: "counting-words-with-a-given-prefix",
+    title: "Counting Words With a Given Prefix",
+    difficulty: "EASY",
+    statement: `Given a prefix string \`s\` and a list of words, return how many words have \`s\` as a prefix.
+
+**Input**
+- Line 1: the prefix \`s\`
+- Line 2: space-separated words
+
+**Output**: the count.`,
+    constraints: `- 1 \u2264 words.length \u2264 100
+- 1 \u2264 word and prefix lengths \u2264 100
+- Lowercase English letters.`,
+    examples: [
+      {
+        input: "at\npay attention practice attend",
+        output: "2",
+        explanation: '"attention" and "attend" start with "at".'
+      },
+      { input: "code\nleetcode win loops success", output: "0" }
+    ],
+    hints: [
+      "A direct scan with startsWith solves one query in O(total characters).",
+      "The trie view: insert every word, walk the prefix, read the pass-through count at the final node.",
+      "Store a counter on each trie node incremented at insert time \u2014 prefix queries become O(|prefix|)."
+    ],
+    editorial: `For a single query, scanning every word with \`startsWith\` is optimal and honest \u2014 O(total characters). The reason this problem lives in the trie topic: the moment you have *many* prefix queries over one dictionary, the trie with a per-node \`count\` (how many inserted words pass through this node) answers each query in O(|prefix|), independent of dictionary size. Insert all words once \u2014 each node on a word's path increments its counter \u2014 then a query just walks the prefix and returns the count at the last node (0 if the walk falls off). That per-node aggregate is the same trick behind autocomplete popularity counts and 'sum of prefix scores' problems.`,
+    approaches: [
+      {
+        name: "Linear scan",
+        complexityTime: "O(\u03A3|word|)",
+        complexitySpace: "O(1)",
+        body: "startsWith over the list \u2014 right for one query."
+      },
+      {
+        name: "Trie with pass-through counts",
+        complexityTime: "O(\u03A3|word|) build, O(|prefix|) per query",
+        complexitySpace: "O(\u03A3|word|)",
+        body: "Counter on every node; queries read one node's counter."
+      }
+    ],
+    complexityTime: "O(\u03A3|word|)",
+    complexitySpace: "O(\u03A3|word|)",
+    youtubeUrl: yt("counting words with a given prefix trie"),
+    tags: ["trie", "string"],
+    starterCode: buildStarter("stringWords", "int", "prefixCount"),
+    reference: (input) => {
+      const pref = (lines(input)[0] ?? "").trim();
+      const ws = words(lines(input)[1]);
+      return String(ws.filter((w) => w.startsWith(pref)).length);
+    },
+    tests: [
+      { input: "at\npay attention practice attend", sample: true },
+      { input: "code\nleetcode win loops success", sample: true },
+      { input: "a\na" },
+      { input: "ab\nab abc abd ba aab" },
+      { input: "zzz\nzz zzz zzzz z" }
+    ]
+  }
+];
+
+// src/data/problems/heaps.ts
+var first7 = (s) => ints(s.split("\n")[0]);
+var heaps = [
+  {
+    slug: "kth-largest-element-in-an-array",
+    title: "Kth Largest Element in an Array",
+    difficulty: "MEDIUM",
+    statement: `Given an integer array \`nums\` and an integer \`k\`, return the k-th **largest** element (in sorted order, not the k-th distinct value).
+
+**Input**
+- Line 1: space-separated integers \`nums\`
+- Line 2: integer \`k\`
+
+**Output**: the k-th largest value.`,
+    constraints: `- 1 \u2264 k \u2264 nums.length \u2264 10^5
+- -10^4 \u2264 nums[i] \u2264 10^4`,
+    examples: [
+      { input: "3 2 1 5 6 4\n2", output: "5" },
+      { input: "3 2 3 1 2 4 5 5 6\n4", output: "4" }
+    ],
+    hints: [
+      "Sorting is O(n log n) \u2014 fine, but interviewers want better.",
+      "A min-heap of size k keeps exactly the k largest seen so far.",
+      "Quickselect reaches average O(n) by partitioning like quicksort but recursing one side."
+    ],
+    editorial: `Keep a **min-heap of size k**: push each element, popping the minimum whenever the heap exceeds k. Whatever survives is the k largest, and the heap's root is the answer \u2014 O(n log k). **Quickselect** (partition around a pivot, recurse only into the side containing index n\u2212k) achieves average O(n) with O(1) space and is the expected follow-up.`,
+    approaches: [
+      {
+        name: "Min-heap of size k",
+        complexityTime: "O(n log k)",
+        complexitySpace: "O(k)",
+        body: "Maintain the k largest; the heap root is the k-th largest."
+      },
+      {
+        name: "Quickselect",
+        complexityTime: "O(n) average",
+        complexitySpace: "O(1)",
+        body: "Partition and recurse into the half containing the target index."
+      }
+    ],
+    complexityTime: "O(n log k)",
+    complexitySpace: "O(k)",
+    youtubeUrl: yt("neetcode kth largest element in an array"),
+    tags: ["heap", "quickselect", "sorting"],
+    starterCode: buildStarter("intArrayK", "int", "findKthLargest"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0).sort((a, b) => b - a);
+      return String(nums[int(l1) - 1]);
+    },
+    tests: [
+      { input: "3 2 1 5 6 4\n2", sample: true },
+      { input: "3 2 3 1 2 4 5 5 6\n4", sample: true },
+      { input: "1\n1" },
+      { input: "-1 -2 -3\n3" },
+      { input: "7 7 7 7\n2" }
+    ]
+  },
+  {
+    slug: "last-stone-weight",
+    title: "Last Stone Weight",
+    difficulty: "EASY",
+    statement: `You have stones with positive integer weights. Each turn, smash the two **heaviest** together: equal weights \u2192 both destroyed; otherwise the heavier survives with the difference. Return the weight of the last stone, or \`0\` if none remain.
+
+**Input**: one line of space-separated integers.
+**Output**: the final weight (or 0).`,
+    constraints: `- 1 \u2264 stones.length \u2264 30
+- 1 \u2264 stones[i] \u2264 1000`,
+    examples: [
+      { input: "2 7 4 1 8 1", output: "1", explanation: "8&7\u21921, 4&2\u21922, 2&1\u21921, 1&1\u21920 leaves 1." },
+      { input: "1", output: "1" }
+    ],
+    hints: [
+      "You repeatedly need the two largest \u2014 that's a max-heap's specialty.",
+      "Pop two, push back the difference if non-zero, repeat until \u2264 1 stone."
+    ],
+    editorial: `Push everything into a **max-heap**. While at least two stones remain: pop the two heaviest, and if they differ push back the difference. Each smash is O(log n) and removes at least one stone \u2192 O(n log n) overall. (Languages with only min-heaps: negate the values.)`,
+    complexityTime: "O(n log n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("last stone weight heap leetcode"),
+    tags: ["heap", "simulation"],
+    starterCode: buildStarter("intArray", "int", "lastStoneWeight"),
+    reference: (input) => {
+      const stones = first7(input);
+      while (stones.length > 1) {
+        stones.sort((a, b) => a - b);
+        const y = stones.pop();
+        const x = stones.pop();
+        if (y !== x) stones.push(y - x);
+      }
+      return String(stones[0] ?? 0);
+    },
+    tests: [
+      { input: "2 7 4 1 8 1", sample: true },
+      { input: "1", sample: true },
+      { input: "3 3" },
+      { input: "9 3 2 10" },
+      { input: "1 1 1" }
+    ]
+  },
+  {
+    slug: "top-k-frequent-elements",
+    title: "Top K Frequent Elements",
+    difficulty: "MEDIUM",
+    statement: `Given an integer array \`nums\` and an integer \`k\`, return the \`k\` most frequent values, ordered by frequency (highest first); break frequency ties by smaller value first.
+
+**Input**
+- Line 1: space-separated integers \`nums\`
+- Line 2: integer \`k\`
+
+**Output**: the k values, space-separated.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^5
+- k is between 1 and the number of distinct values.`,
+    examples: [
+      { input: "1 1 1 2 2 3\n2", output: "1 2" },
+      { input: "4 4 7 7\n2", output: "4 7", explanation: "Tie on frequency \u2014 smaller value first." }
+    ],
+    hints: [
+      "Count frequencies with a hash map first.",
+      "A heap of (frequency, value) gets O(n log k). Bucket sort by frequency gets O(n)."
+    ],
+    editorial: `Count with a hash map, then select the top k. A heap keyed on (frequency, value) does it in O(n log k). **Bucket sort** does better: index an array by frequency (max possible is n), drop each value into its bucket, then read buckets from high to low \u2014 O(n) total, no comparisons needed.`,
+    approaches: [
+      {
+        name: "Heap of size k",
+        complexityTime: "O(n log k)",
+        complexitySpace: "O(n)",
+        body: "Min-heap on frequency; pop when size exceeds k."
+      },
+      {
+        name: "Bucket sort by frequency",
+        complexityTime: "O(n)",
+        complexitySpace: "O(n)",
+        body: "bucket[f] = values occurring f times; sweep from n down."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode top k frequent elements"),
+    tags: ["heap", "hash-table", "bucket-sort"],
+    starterCode: buildStarter("intArrayK", "intArray", "topKFrequent"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const k = int(l1);
+      const freq = /* @__PURE__ */ new Map();
+      for (const x of nums) freq.set(x, (freq.get(x) ?? 0) + 1);
+      const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+      return arrOut(sorted.slice(0, k).map(([v]) => v));
+    },
+    tests: [
+      { input: "1 1 1 2 2 3\n2", sample: true },
+      { input: "4 4 7 7\n2", sample: true },
+      { input: "1\n1" },
+      { input: "5 5 5 -1 -1 -1 2\n2" },
+      { input: "3 0 1 0\n1" }
+    ]
+  },
+  {
+    slug: "k-closest-points-to-origin",
+    title: "K Closest Points to Origin",
+    difficulty: "MEDIUM",
+    statement: `Given points on a plane, return the \`k\` points closest to the origin by Euclidean distance, ordered by distance (ties: smaller x first, then smaller y).
+
+**Input**
+- Line 1: two integers \`n 2\` (n points, 2 coordinates each)
+- Next n lines: \`x y\` of each point
+- Last line: integer \`k\`
+
+**Output**: k lines, each \`x y\`.`,
+    constraints: `- 1 \u2264 k \u2264 n \u2264 10^4
+- -10^4 \u2264 coordinates \u2264 10^4`,
+    examples: [
+      { input: "2 2\n1 3\n-2 2\n1", output: "-2 2", explanation: "\u221A8 < \u221A10." },
+      { input: "3 2\n3 3\n5 -1\n-2 4\n2", output: "3 3\n-2 4" }
+    ],
+    hints: [
+      "Compare squared distances \u2014 no sqrt needed.",
+      "A max-heap of size k keeps the k closest; or quickselect on squared distance."
+    ],
+    editorial: `Distance comparisons don't need square roots \u2014 compare \`x\xB2 + y\xB2\` directly. A **max-heap of size k** (evict the farthest) processes the stream in O(n log k); quickselect on squared distance achieves average O(n). Sorting the k survivors for stable output costs O(k log k).`,
+    complexityTime: "O(n log k)",
+    complexitySpace: "O(k)",
+    youtubeUrl: yt("k closest points to origin heap"),
+    tags: ["heap", "quickselect", "geometry"],
+    starterCode: buildStarter("matrixK", "intMatrix", "kClosest"),
+    reference: (input) => {
+      const ls = lines(input);
+      const [n] = ints(ls[0]);
+      const pts = [];
+      for (let i = 0; i < n; i++) pts.push(ints(ls[1 + i]));
+      const k = int(ls[1 + n]);
+      const d = (p) => p[0] * p[0] + p[1] * p[1];
+      pts.sort((a, b) => d(a) - d(b) || a[0] - b[0] || a[1] - b[1]);
+      return matOut(pts.slice(0, k));
+    },
+    tests: [
+      { input: "2 2\n1 3\n-2 2\n1", sample: true },
+      { input: "3 2\n3 3\n5 -1\n-2 4\n2", sample: true },
+      { input: "1 2\n0 0\n1" },
+      { input: "4 2\n1 0\n0 1\n-1 0\n0 -1\n4" }
+    ]
+  },
+  {
+    slug: "kth-largest-element-in-a-stream",
+    title: "Kth Largest Element in a Stream",
+    difficulty: "EASY",
+    statement: `Design a class that tracks the k-th largest element in a stream of test scores.
+
+**Input**: one operation per line \u2014
+- \`init k v1 v2 \u2026\` \u2014 first line: initialize with k and the initial values (possibly none)
+- \`add x\` \u2014 add a score and print the current k-th largest
+
+**Output**: \`init\` prints \`null\`; each \`add\` prints the k-th largest after insertion. There are always at least k values when \`add\` is called.`,
+    constraints: `- 1 \u2264 k \u2264 10^4
+- Up to 10^4 add calls.`,
+    examples: [
+      {
+        input: "init 3 4 5 8 2\nadd 3\nadd 5\nadd 10\nadd 9\nadd 4",
+        output: "null\n4\n5\n5\n8\n8"
+      }
+    ],
+    hints: [
+      "You only ever need the k largest values \u2014 nothing below matters.",
+      "A min-heap capped at size k has the answer at its root, always."
+    ],
+    editorial: `Maintain a **min-heap of exactly k elements** \u2014 the k largest seen. On \`add\`, push and pop the minimum if size exceeds k; the root is then the k-th largest. Each add is O(log k), and the state stays tiny regardless of stream length \u2014 the same pattern behind leaderboards.`,
+    complexityTime: "O(log k) per add",
+    complexitySpace: "O(k)",
+    youtubeUrl: yt("kth largest element in a stream heap"),
+    tags: ["heap", "design", "stream"],
+    starterCode: buildStarter("ops", "lines", "processOps"),
+    reference: (input) => {
+      const ops = lines(input).filter((l) => l.trim().length > 0);
+      const out = [];
+      let k = 0;
+      let vals = [];
+      for (const op of ops) {
+        const parts = op.trim().split(/\s+/);
+        if (parts[0] === "init") {
+          k = parseInt(parts[1], 10);
+          vals = parts.slice(2).map((x) => parseInt(x, 10));
+          out.push("null");
+        } else {
+          vals.push(parseInt(parts[1], 10));
+          const sorted = [...vals].sort((a, b) => b - a);
+          out.push(String(sorted[k - 1]));
+        }
+      }
+      return linesOut(out);
+    },
+    tests: [
+      { input: "init 3 4 5 8 2\nadd 3\nadd 5\nadd 10\nadd 9\nadd 4", sample: true },
+      { input: "init 1\nadd -3\nadd -2\nadd -4\nadd 0\nadd 4" },
+      { input: "init 2 0\nadd -1\nadd 1\nadd -2\nadd -4\nadd 3" }
+    ]
+  },
+  {
+    slug: "task-scheduler",
+    title: "Task Scheduler",
+    difficulty: "MEDIUM",
+    statement: `A CPU runs tasks labeled A\u2013Z, one per time unit, and identical tasks must be at least \`n\` units apart (idle slots allowed). Return the minimum total units to finish all tasks.
+
+**Input**
+- Line 1: the task letters as one string (e.g. \`AAB\`)
+- Line 2: integer \`n\` (the cooldown)
+
+**Output**: the minimum number of time units.`,
+    constraints: `- 1 \u2264 tasks \u2264 10^4
+- 0 \u2264 n \u2264 100`,
+    examples: [
+      { input: "AAABBB\n2", output: "8", explanation: "A B idle A B idle A B." },
+      { input: "AAABBB\n0", output: "6" },
+      { input: "AAAABBBBCCD\n2", output: "11", explanation: "A B C A B C A B D A B \u2014 no idles needed." }
+    ],
+    hints: [
+      "The most frequent task dictates the skeleton: (maxFreq \u2212 1) gaps of size n + 1.",
+      "Other tasks fill the gaps; if they overflow, no idling is needed at all.",
+      "Answer = max(total tasks, (maxFreq \u2212 1) \xD7 (n + 1) + count of tasks with maxFreq)."
+    ],
+    editorial: `Schedule the most frequent task first: it forces \`(maxFreq \u2212 1)\` blocks of length \`n + 1\`, plus a final row holding every task that shares the top frequency. All other tasks slot into the gaps. If tasks outnumber that frame, the CPU never idles and the answer is simply the task count: \`max(len, (maxFreq \u2212 1)(n + 1) + #maxFreq)\`. O(n) counting, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode task scheduler"),
+    tags: ["heap", "greedy", "counting"],
+    starterCode: buildStarter("stringInt", "int", "leastInterval"),
+    reference: (input) => {
+      const [tasks = "", nline] = lines(input);
+      const n = int(nline);
+      const freq = /* @__PURE__ */ new Map();
+      for (const c of tasks) freq.set(c, (freq.get(c) ?? 0) + 1);
+      const maxFreq = Math.max(...freq.values());
+      const maxCount = [...freq.values()].filter((f) => f === maxFreq).length;
+      return String(Math.max(tasks.length, (maxFreq - 1) * (n + 1) + maxCount));
+    },
+    tests: [
+      { input: "AAABBB\n2", sample: true },
+      { input: "AAABBB\n0", sample: true },
+      { input: "AAAABBBBCCD\n2", sample: true },
+      { input: "A\n100" },
+      { input: "ABCDEFG\n2" }
+    ]
+  },
+  {
+    slug: "sort-characters-by-frequency",
+    title: "Sort Characters By Frequency",
+    difficulty: "MEDIUM",
+    statement: `Given a string \`s\`, sort its characters by **decreasing frequency** and return the result. Characters with equal frequency appear in ascending character order (so the output is deterministic).
+
+**Input**: one line, the string \`s\`.
+**Output**: the frequency-sorted string.`,
+    constraints: `- 1 \u2264 s.length \u2264 5\xB710^5
+- Letters and digits.`,
+    examples: [
+      { input: "tree", output: "eert", explanation: "'e' twice, then 'r' and 't' (tie \u2192 ascending)." },
+      { input: "cccaaa", output: "aaaccc", explanation: "Tie at 3 \u2014 'a' before 'c'." }
+    ],
+    hints: [
+      "Count characters, then order groups by count.",
+      "A heap or a simple sort of (count, char) pairs both work; bucket sort gives O(n)."
+    ],
+    editorial: `Count each character, sort the distinct characters by (frequency descending, character ascending), and emit each character repeated by its count. The comparator-based version is O(u log u) over u distinct characters; a frequency-bucket version reaches O(n). The tie-break rule just makes the answer unique.`,
+    complexityTime: "O(n + u log u)",
+    complexitySpace: "O(u)",
+    youtubeUrl: yt("sort characters by frequency heap"),
+    tags: ["heap", "hash-table", "sorting", "string"],
+    starterCode: buildStarter("string", "string", "frequencySort"),
+    reference: (input) => {
+      const s = lines(input)[0] ?? "";
+      const freq = /* @__PURE__ */ new Map();
+      for (const c of s) freq.set(c, (freq.get(c) ?? 0) + 1);
+      const groups = [...freq.entries()].sort(
+        (a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)
+      );
+      return groups.map(([c, f]) => c.repeat(f)).join("");
+    },
+    tests: [
+      { input: "tree", sample: true },
+      { input: "cccaaa", sample: true },
+      { input: "Aabb" },
+      { input: "2a554442f544asfasssffffasss" },
+      { input: "x" }
+    ]
+  },
+  {
+    slug: "find-median-from-data-stream",
+    title: "Find Median from Data Stream",
+    difficulty: "HARD",
+    statement: `Design a structure that ingests integers and can return the median of everything seen so far at any time.
+
+**Input**: one operation per line \u2014
+- \`addNum x\` \u2014 add integer x
+- \`findMedian\` \u2014 print the median formatted with **one decimal place** (e.g. \`2.0\`, \`1.5\`)
+
+**Output**: \`addNum\` prints \`null\`; \`findMedian\` prints the median.`,
+    constraints: `- -10^5 \u2264 x \u2264 10^5
+- Up to 5\xB710^4 operations; findMedian is only called after at least one add.`,
+    examples: [
+      {
+        input: "addNum 1\naddNum 2\nfindMedian\naddNum 3\nfindMedian",
+        output: "null\nnull\n1.5\nnull\n2.0"
+      }
+    ],
+    hints: [
+      "Keep the lower half and upper half of the data separated.",
+      "A max-heap for the low half + a min-heap for the high half, kept balanced within 1.",
+      "The median is a heap root (odd count) or the average of both roots (even)."
+    ],
+    editorial: `Maintain two heaps: a **max-heap** holding the smaller half and a **min-heap** holding the larger half, rebalanced so their sizes differ by at most one. Insertion routes through one root and possibly migrates an element \u2014 O(log n). The median reads off the roots in O(1). This two-heap pattern is the canonical streaming-median answer.`,
+    complexityTime: "O(log n) add, O(1) median",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode find median from data stream"),
+    tags: ["heap", "design", "stream"],
+    starterCode: buildStarter("ops", "lines", "processOps"),
+    reference: (input) => {
+      const ops = lines(input).filter((l) => l.trim().length > 0);
+      const vals = [];
+      const out = [];
+      for (const op of ops) {
+        const parts = op.trim().split(/\s+/);
+        if (parts[0] === "addNum") {
+          const x = parseInt(parts[1], 10);
+          let lo = 0;
+          let hi = vals.length;
+          while (lo < hi) {
+            const mid = lo + hi >> 1;
+            if (vals[mid] < x) lo = mid + 1;
+            else hi = mid;
+          }
+          vals.splice(lo, 0, x);
+          out.push("null");
+        } else {
+          const n = vals.length;
+          const median = n % 2 === 1 ? vals[(n - 1) / 2] : (vals[n / 2 - 1] + vals[n / 2]) / 2;
+          out.push(median.toFixed(1));
+        }
+      }
+      return linesOut(out);
+    },
+    tests: [
+      { input: "addNum 1\naddNum 2\nfindMedian\naddNum 3\nfindMedian", sample: true },
+      { input: "addNum -1\nfindMedian\naddNum -2\nfindMedian\naddNum -3\nfindMedian" },
+      { input: "addNum 6\nfindMedian\naddNum 10\nfindMedian\naddNum 2\nfindMedian\naddNum 6\nfindMedian\naddNum 5\nfindMedian" }
+    ]
+  },
+  {
+    slug: "merge-k-sorted-lists",
+    title: "Merge k Sorted Lists",
+    difficulty: "HARD",
+    statement: `Merge \`k\` sorted linked lists into one sorted linked list and return it.
+
+**Input**
+- Line 1: integer \`k\`
+- Next k lines: each list's values in order (a line may be empty)
+
+**Output**: the merged list's values, space-separated.`,
+    constraints: `- 0 \u2264 k \u2264 10^4
+- Total nodes \u2264 10^4; each list sorted ascending.`,
+    examples: [
+      { input: "3\n1 4 5\n1 3 4\n2 6", output: "1 1 2 3 4 4 5 6" },
+      { input: "1\n", output: "" }
+    ],
+    hints: [
+      "Merging lists one by one into an accumulator is O(k\xB7N).",
+      "A min-heap over the k current heads gives O(N log k).",
+      "Divide and conquer \u2014 merge pairs, then pairs of pairs \u2014 also gives O(N log k)."
+    ],
+    editorial: `Put each list's head in a **min-heap**; repeatedly pop the smallest node, append it to the result, and push its successor. Every node passes through the heap once \u2192 O(N log k). Pairwise **divide-and-conquer** merging achieves the same bound using only the two-list merge you already know.`,
+    approaches: [
+      {
+        name: "Sequential merging",
+        complexityTime: "O(k\xB7N)",
+        complexitySpace: "O(1)",
+        body: "Fold lists into an accumulator with merge-two \u2014 the first list is traversed k times."
+      },
+      {
+        name: "Min-heap of heads",
+        complexityTime: "O(N log k)",
+        complexitySpace: "O(k)",
+        body: "Heap always knows the globally smallest remaining node."
+      },
+      {
+        name: "Divide and conquer",
+        complexityTime: "O(N log k)",
+        complexitySpace: "O(log k)",
+        body: "Merge pairs of lists, halving the count each round."
+      }
+    ],
+    complexityTime: "O(N log k)",
+    complexitySpace: "O(k)",
+    youtubeUrl: yt("neetcode merge k sorted lists"),
+    tags: ["heap", "linked-list", "divide-and-conquer"],
+    starterCode: buildStarter("kLists", "list", "mergeKLists"),
+    reference: (input) => {
+      const ls = lines(input);
+      const k = int(ls[0]);
+      const all = [];
+      for (let i = 0; i < k; i++) all.push(...ints(ls[1 + i]));
+      return arrOut(all.sort((a, b) => a - b));
+    },
+    tests: [
+      { input: "3\n1 4 5\n1 3 4\n2 6", sample: true },
+      { input: "1\n", sample: true },
+      { input: "0" },
+      { input: "2\n-10 -5 0\n-7 3" },
+      { input: "4\n1\n\n2\n1 1" }
+    ]
+  },
+  {
+    slug: "kth-smallest-element-in-a-sorted-matrix",
+    title: "Kth Smallest Element in a Sorted Matrix",
+    difficulty: "MEDIUM",
+    statement: `Each row and each column of an n\xD7n matrix is sorted ascending. Return the k-th smallest element **in sorted order** (not the k-th distinct value).
+
+**Input**
+- Line 1: \`n n\` \u2014 the matrix dimensions
+- Next n lines: the matrix rows
+- Last line: the integer \`k\`
+
+**Output**: the k-th smallest element.`,
+    constraints: `- 1 \u2264 n \u2264 300
+- -10^9 \u2264 values \u2264 10^9
+- 1 \u2264 k \u2264 n\xB2`,
+    examples: [
+      {
+        input: "3 3\n1 5 9\n10 11 13\n12 13 15\n8",
+        output: "13",
+        explanation: "Sorted: 1 5 9 10 11 12 13 13 15 \u2014 the 8th is 13."
+      },
+      { input: "1 1\n-5\n1", output: "-5" }
+    ],
+    hints: [
+      "A min-heap seeded with each row's head pops the global smallest k times \u2014 merge k sorted lists in disguise.",
+      "Only push a popped cell's right neighbor; column starts are already seeded.",
+      "The O(n log(range)) alternative: binary search the value space, counting cells \u2264 mid via a staircase walk."
+    ],
+    editorial: `Two respectable answers. **Heap**: treat each row as a sorted list and k-way merge \u2014 seed the heap with column 0 of every row (capped at k rows), then pop/push-right-neighbor k times: O(k log n). **Binary search on the value** is the elegant one: for a candidate v, count elements \u2264 v in O(n) by walking the staircase from the bottom-left corner (step up when the cell exceeds v, right otherwise); binary search the smallest v whose count reaches k over the number range: O(n log(max\u2212min)), constant space. The staircase count exploits both sort orders at once \u2014 the property the problem gives you specifically so you'll use it.`,
+    approaches: [
+      {
+        name: "Min-heap k-way merge",
+        complexityTime: "O(k log n)",
+        complexitySpace: "O(n)",
+        body: "Seed row heads; pop the min, push its right neighbor, k times."
+      },
+      {
+        name: "Binary search + staircase count",
+        complexityTime: "O(n log range)",
+        complexitySpace: "O(1)",
+        body: "Count cells \u2264 mid from the bottom-left corner; search the value space."
+      }
+    ],
+    complexityTime: "O(n log range)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("kth smallest element sorted matrix leetcode"),
+    tags: ["heap", "binary-search", "matrix"],
+    starterCode: buildStarter("matrixK", "int", "kthSmallest"),
+    reference: (input) => {
+      const ls = lines(input);
+      const [r] = ints(ls[0]);
+      const all = [];
+      for (let i = 0; i < r; i++) all.push(...ints(ls[1 + i]));
+      const k = ints(ls[1 + r])[0];
+      all.sort((a, b) => a - b);
+      return String(all[k - 1]);
+    },
+    tests: [
+      { input: "3 3\n1 5 9\n10 11 13\n12 13 15\n8", sample: true },
+      { input: "1 1\n-5\n1", sample: true },
+      { input: "2 2\n1 2\n1 3\n2" },
+      { input: "2 2\n-5 -4\n-5 -4\n4" },
+      { input: "3 3\n1 3 5\n6 7 12\n11 14 14\n6" }
+    ]
+  }
+];
+
+// src/data/problems/backtracking.ts
+var first8 = (s) => ints(s.split("\n")[0]);
+var backtracking = [
+  {
+    slug: "subsets",
+    title: "Subsets",
+    difficulty: "MEDIUM",
+    statement: `Given an array of **distinct** integers, return all possible subsets (the power set).
+
+**Input**: one line of space-separated integers.
+**Output**: one subset per line, elements in ascending order (the empty subset prints as an empty line). Subsets may be produced in any order \u2014 the template prints them canonically.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10
+- Distinct values.`,
+    examples: [
+      { input: "1 2 3", output: "\n1\n1 2\n1 2 3\n1 3\n2\n2 3\n3" },
+      { input: "0", output: "\n0" }
+    ],
+    hints: [
+      "Every element is either in or out \u2014 2\u207F combinations.",
+      "Backtrack: at index i, branch on include/exclude and recurse on i+1.",
+      "Record the current path at every node of the recursion tree, not just leaves."
+    ],
+    editorial: `Classic backtracking: walk indices left to right, and at each step either take the element or skip it, recording the running path as a subset at every call. The recursion tree has exactly 2\u207F leaves; total work is O(n \xB7 2\u207F). Sorting the input first makes each subset come out in ascending order.`,
+    approaches: [
+      {
+        name: "Iterative doubling",
+        complexityTime: "O(n \xB7 2\u207F)",
+        complexitySpace: "O(2\u207F)",
+        body: "Start with [[]]; for each element, append it to a copy of every existing subset."
+      },
+      {
+        name: "Backtracking DFS",
+        complexityTime: "O(n \xB7 2\u207F)",
+        complexitySpace: "O(n) recursion",
+        body: "Include/exclude branching over indices; emit the path at each node."
+      }
+    ],
+    complexityTime: "O(n \xB7 2\u207F)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode subsets backtracking"),
+    tags: ["backtracking", "bit-manipulation", "recursion"],
+    starterCode: buildStarter("intArray", "sortedIntMatrix", "subsets"),
+    reference: (input) => {
+      const nums = first8(input).sort((a, b) => a - b);
+      const rows = [];
+      const path = [];
+      const dfs = (i) => {
+        rows.push([...path]);
+        for (let j = i; j < nums.length; j++) {
+          path.push(nums[j]);
+          dfs(j + 1);
+          path.pop();
+        }
+      };
+      dfs(0);
+      return sortedMatOut(rows);
+    },
+    tests: [
+      { input: "1 2 3", sample: true },
+      { input: "0", sample: true },
+      { input: "5 7" },
+      { input: "4 1 0 -3" }
+    ]
+  },
+  {
+    slug: "permutations",
+    title: "Permutations",
+    difficulty: "MEDIUM",
+    statement: `Given an array of **distinct** integers, return all possible orderings (permutations).
+
+**Input**: one line of space-separated integers.
+**Output**: one permutation per line, space-separated. Any generation order \u2014 the template prints canonically.`,
+    constraints: `- 1 \u2264 nums.length \u2264 6
+- Distinct values.`,
+    examples: [
+      { input: "1 2 3", output: "1 2 3\n1 3 2\n2 1 3\n2 3 1\n3 1 2\n3 2 1" },
+      { input: "1", output: "1" }
+    ],
+    hints: [
+      "Build the permutation one position at a time.",
+      "Track which elements are already used (a boolean array or in-place swapping)."
+    ],
+    editorial: `Backtrack over positions: at each depth, try every unused element, mark it used, recurse, then unmark. The recursion tree has n! leaves and each permutation costs O(n) to copy \u2192 O(n \xB7 n!). The in-place swap variant avoids the used-array by fixing one element per depth via swapping.`,
+    complexityTime: "O(n \xB7 n!)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode permutations backtracking"),
+    tags: ["backtracking", "recursion"],
+    starterCode: buildStarter("intArray", "sortedIntMatrix", "permute"),
+    reference: (input) => {
+      const nums = first8(input);
+      const rows = [];
+      const used = new Array(nums.length).fill(false);
+      const path = [];
+      const dfs = () => {
+        if (path.length === nums.length) {
+          rows.push([...path]);
+          return;
+        }
+        for (let i = 0; i < nums.length; i++) {
+          if (used[i]) continue;
+          used[i] = true;
+          path.push(nums[i]);
+          dfs();
+          path.pop();
+          used[i] = false;
+        }
+      };
+      dfs();
+      return sortedMatOut(rows);
+    },
+    tests: [
+      { input: "1 2 3", sample: true },
+      { input: "1", sample: true },
+      { input: "0 1" },
+      { input: "5 4 6 2" }
+    ]
+  },
+  {
+    slug: "combination-sum",
+    title: "Combination Sum",
+    difficulty: "MEDIUM",
+    statement: `Given an array of **distinct** positive integers \`candidates\` and a \`target\`, return all unique combinations that sum to \`target\`. The same candidate may be used **unlimited** times.
+
+**Input**
+- Line 1: space-separated candidates
+- Line 2: integer \`target\`
+
+**Output**: one combination per line, elements in non-decreasing order. Print nothing if none exist.`,
+    constraints: `- 1 \u2264 candidates.length \u2264 30
+- 2 \u2264 candidates[i] \u2264 40, distinct
+- 1 \u2264 target \u2264 40`,
+    examples: [
+      { input: "2 3 6 7\n7", output: "2 2 3\n7" },
+      { input: "2 3 5\n8", output: "2 2 2 2\n2 3 3\n3 5" },
+      { input: "2\n1", output: "" }
+    ],
+    hints: [
+      "To reuse an element, recurse with the same start index after taking it.",
+      "To avoid duplicate combinations, never look backwards \u2014 only consider candidates from the current index on.",
+      "Prune when the remaining target goes negative."
+    ],
+    editorial: `DFS over (start index, remaining target): take \`candidates[i]\` and recurse **without advancing** \`i\` (unlimited reuse), or move on to \`i + 1\`. Restricting choices to indices \u2265 start guarantees each combination is generated exactly once in non-decreasing order. Prune on negative remainders; emit on zero.`,
+    complexityTime: "O(k \xB7 2^(target/min))",
+    complexitySpace: "O(target/min)",
+    youtubeUrl: yt("neetcode combination sum"),
+    tags: ["backtracking", "recursion", "array"],
+    starterCode: buildStarter("intArrayTarget", "sortedIntMatrix", "combinationSum"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const cands = ints(l0).sort((a, b) => a - b);
+      const target = int(l1);
+      const rows = [];
+      const path = [];
+      const dfs = (start, rem) => {
+        if (rem === 0) {
+          rows.push([...path]);
+          return;
+        }
+        for (let i = start; i < cands.length; i++) {
+          if (cands[i] > rem) break;
+          path.push(cands[i]);
+          dfs(i, rem - cands[i]);
+          path.pop();
+        }
+      };
+      dfs(0, target);
+      return sortedMatOut(rows);
+    },
+    tests: [
+      { input: "2 3 6 7\n7", sample: true },
+      { input: "2 3 5\n8", sample: true },
+      { input: "2\n1", sample: true },
+      { input: "7 3 2\n18" },
+      { input: "8 7 4 3\n11" }
+    ]
+  },
+  {
+    slug: "combination-sum-ii",
+    title: "Combination Sum II",
+    difficulty: "MEDIUM",
+    statement: `Given a list of positive integers \`candidates\` (duplicates possible) and a \`target\`, return all **unique** combinations summing to \`target\`. Each candidate may be used **at most once**.
+
+**Input**
+- Line 1: space-separated candidates
+- Line 2: integer \`target\`
+
+**Output**: one combination per line, elements in non-decreasing order; no duplicate lines.`,
+    constraints: `- 1 \u2264 candidates.length \u2264 100
+- 1 \u2264 candidates[i] \u2264 50
+- 1 \u2264 target \u2264 30`,
+    examples: [
+      { input: "10 1 2 7 6 1 5\n8", output: "1 1 6\n1 2 5\n1 7\n2 6" },
+      { input: "2 5 2 1 2\n5", output: "1 2 2\n5" }
+    ],
+    hints: [
+      "Sort first so duplicates are adjacent.",
+      "Advance to i+1 when recursing (single use).",
+      "At the same recursion depth, skip a candidate equal to its predecessor \u2014 that's what kills duplicate combinations."
+    ],
+    editorial: `Sort, then DFS advancing the index on every take (single use). The deduplication rule: within one loop level, if \`candidates[i] == candidates[i-1]\` and \`i > start\`, skip \u2014 using the second copy where the first was already tried can only recreate the same combination. Prune when the candidate exceeds the remainder.`,
+    complexityTime: "O(2\u207F)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode combination sum ii"),
+    tags: ["backtracking", "recursion", "array"],
+    starterCode: buildStarter("intArrayTarget", "sortedIntMatrix", "combinationSum2"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const cands = ints(l0).sort((a, b) => a - b);
+      const target = int(l1);
+      const rows = [];
+      const path = [];
+      const dfs = (start, rem) => {
+        if (rem === 0) {
+          rows.push([...path]);
+          return;
+        }
+        for (let i = start; i < cands.length; i++) {
+          if (i > start && cands[i] === cands[i - 1]) continue;
+          if (cands[i] > rem) break;
+          path.push(cands[i]);
+          dfs(i + 1, rem - cands[i]);
+          path.pop();
+        }
+      };
+      dfs(0, target);
+      return sortedMatOut(rows);
+    },
+    tests: [
+      { input: "10 1 2 7 6 1 5\n8", sample: true },
+      { input: "2 5 2 1 2\n5", sample: true },
+      { input: "1 1 1 1\n2" },
+      { input: "3 1 3 5 1 1\n8" }
+    ]
+  },
+  {
+    slug: "generate-parentheses",
+    title: "Generate Parentheses",
+    difficulty: "MEDIUM",
+    statement: `Given \`n\`, generate all combinations of \`n\` pairs of well-formed parentheses.
+
+**Input**: one line, the integer \`n\`.
+**Output**: one combination per line. Any order \u2014 the template prints canonically.`,
+    constraints: `- 1 \u2264 n \u2264 8`,
+    examples: [
+      { input: "3", output: "((()))\n(()())\n(())()\n()(())\n()()()" },
+      { input: "1", output: "()" }
+    ],
+    hints: [
+      "Track how many opens and closes you've placed.",
+      "You may open while opens < n; you may close while closes < opens.",
+      "Those two rules alone guarantee validity \u2014 no post-filtering needed."
+    ],
+    editorial: `Backtrack on a partial string with counts \`(open, close)\`: place \`(\` while \`open < n\`, place \`)\` while \`close < open\`. Every leaf at length 2n is valid by construction. The number of results is the n-th **Catalan number**, so the work is O(4\u207F/\u221An) \u2014 tiny for interview-sized n.`,
+    complexityTime: "O(4\u207F / \u221An)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode generate parentheses"),
+    tags: ["backtracking", "string", "recursion"],
+    starterCode: buildStarter("int", "sortedLines", "generateParenthesis"),
+    reference: (input) => {
+      const n = int(lines(input)[0]);
+      const res = [];
+      const dfs = (cur, open, close) => {
+        if (cur.length === 2 * n) {
+          res.push(cur);
+          return;
+        }
+        if (open < n) dfs(cur + "(", open + 1, close);
+        if (close < open) dfs(cur + ")", open, close + 1);
+      };
+      dfs("", 0, 0);
+      return sortedLinesOut(res);
+    },
+    tests: [
+      { input: "3", sample: true },
+      { input: "1", sample: true },
+      { input: "2" },
+      { input: "4" }
+    ]
+  },
+  {
+    slug: "letter-combinations-of-a-phone-number",
+    title: "Letter Combinations of a Phone Number",
+    difficulty: "MEDIUM",
+    statement: `Given a string of digits 2\u20139, return all letter combinations the number could represent on a classic phone keypad (2=abc, 3=def, 4=ghi, 5=jkl, 6=mno, 7=pqrs, 8=tuv, 9=wxyz).
+
+**Input**: one line, the digit string (may be empty).
+**Output**: one combination per line (nothing for an empty input). Any order \u2014 printed canonically.`,
+    constraints: `- 0 \u2264 digits.length \u2264 4
+- Digits 2\u20139 only.`,
+    examples: [
+      { input: "23", output: "ad\nae\naf\nbd\nbe\nbf\ncd\nce\ncf" },
+      { input: "2", output: "a\nb\nc" }
+    ],
+    hints: [
+      "One recursion level per digit; branch over that digit's letters.",
+      "The result count is the product of the group sizes."
+    ],
+    editorial: `Map each digit to its letters and do a depth-per-digit DFS, appending one letter per level and emitting at full length. Equivalent iterative view: fold each digit into the running result as a cartesian product. Output size is up to 4\u207F, which dominates the cost.`,
+    complexityTime: "O(n \xB7 4\u207F)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode letter combinations of a phone number"),
+    tags: ["backtracking", "string", "hash-table"],
+    starterCode: buildStarter("string", "sortedLines", "letterCombinations"),
+    reference: (input) => {
+      const digits = (lines(input)[0] ?? "").trim();
+      if (!digits) return "";
+      const map = {
+        "2": "abc",
+        "3": "def",
+        "4": "ghi",
+        "5": "jkl",
+        "6": "mno",
+        "7": "pqrs",
+        "8": "tuv",
+        "9": "wxyz"
+      };
+      let res = [""];
+      for (const d of digits) {
+        const next = [];
+        for (const prefix of res) for (const c of map[d]) next.push(prefix + c);
+        res = next;
+      }
+      return sortedLinesOut(res);
+    },
+    tests: [
+      { input: "23", sample: true },
+      { input: "2", sample: true },
+      { input: "" },
+      { input: "79" }
+    ]
+  },
+  {
+    slug: "palindrome-partitioning",
+    title: "Palindrome Partitioning",
+    difficulty: "MEDIUM",
+    statement: `Given a string \`s\`, partition it so every piece is a palindrome. Return all such partitions.
+
+**Input**: one line, the string \`s\`.
+**Output**: one partition per line \u2014 its pieces space-separated, in order. Any partition order \u2014 printed canonically.`,
+    constraints: `- 1 \u2264 s.length \u2264 16
+- Lowercase English letters.`,
+    examples: [
+      { input: "aab", output: "a a b\naa b" },
+      { input: "a", output: "a" }
+    ],
+    hints: [
+      "Choose a palindromic prefix, then recurse on the remaining suffix.",
+      "Backtrack over the cut position; test each prefix for palindromicity.",
+      "Precomputing a isPal[i][j] DP table avoids re-checking substrings."
+    ],
+    editorial: `DFS over cut positions: at index \`i\`, try every \`j \u2265 i\` where \`s[i..j]\` is a palindrome, push that piece, recurse from \`j + 1\`, pop. Every full segmentation reaching the end is emitted. An O(n\xB2) palindrome table turns each check into O(1); the output itself can be exponential (e.g. all-equal strings), which bounds the runtime.`,
+    complexityTime: "O(n \xB7 2\u207F)",
+    complexitySpace: "O(n\xB2)",
+    youtubeUrl: yt("neetcode palindrome partitioning"),
+    tags: ["backtracking", "string", "dynamic-programming"],
+    starterCode: buildStarter("string", "sortedLines", "partition"),
+    reference: (input) => {
+      const s = (lines(input)[0] ?? "").trim();
+      const res = [];
+      const path = [];
+      const isPal = (a, b) => {
+        while (a < b) {
+          if (s[a] !== s[b]) return false;
+          a++;
+          b--;
+        }
+        return true;
+      };
+      const dfs = (i) => {
+        if (i === s.length) {
+          res.push(path.join(" "));
+          return;
+        }
+        for (let j = i; j < s.length; j++) {
+          if (isPal(i, j)) {
+            path.push(s.slice(i, j + 1));
+            dfs(j + 1);
+            path.pop();
+          }
+        }
+      };
+      dfs(0);
+      return sortedLinesOut(res);
+    },
+    tests: [
+      { input: "aab", sample: true },
+      { input: "a", sample: true },
+      { input: "abba" },
+      { input: "aaa" }
+    ]
+  },
+  {
+    slug: "n-queens-ii",
+    title: "N-Queens II",
+    difficulty: "HARD",
+    statement: `Count the number of distinct ways to place \`n\` queens on an \`n \xD7 n\` chessboard so that no two attack each other (no shared row, column, or diagonal).
+
+**Input**: one line, the integer \`n\`.
+**Output**: the number of solutions.`,
+    constraints: `- 1 \u2264 n \u2264 9`,
+    examples: [
+      { input: "4", output: "2" },
+      { input: "1", output: "1" }
+    ],
+    hints: [
+      "Place one queen per row; only columns and diagonals need checking.",
+      "Index diagonals by (row \u2212 col) and (row + col) for O(1) conflict checks.",
+      "Sets (or bitmasks) for columns and both diagonal families make the check constant-time."
+    ],
+    editorial: `Backtrack row by row, choosing a column for each queen. Conflicts are captured by three sets: used columns, used \u2198 diagonals (row \u2212 col), and used \u2199 diagonals (row + col) \u2014 membership tests are O(1). On a dead row, backtrack. Bitmask variants pack the three sets into integers for the fastest known simple solver. Roughly O(n!) worst case.`,
+    complexityTime: "O(n!)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode n queens"),
+    tags: ["backtracking", "recursion"],
+    starterCode: buildStarter("int", "int", "totalNQueens"),
+    reference: (input) => {
+      const n = int(lines(input)[0]);
+      const cols = /* @__PURE__ */ new Set();
+      const d1 = /* @__PURE__ */ new Set();
+      const d2 = /* @__PURE__ */ new Set();
+      let count = 0;
+      const dfs = (row) => {
+        if (row === n) {
+          count++;
+          return;
+        }
+        for (let c = 0; c < n; c++) {
+          if (cols.has(c) || d1.has(row - c) || d2.has(row + c)) continue;
+          cols.add(c);
+          d1.add(row - c);
+          d2.add(row + c);
+          dfs(row + 1);
+          cols.delete(c);
+          d1.delete(row - c);
+          d2.delete(row + c);
+        }
+      };
+      dfs(0);
+      return String(count);
+    },
+    tests: [
+      { input: "4", sample: true },
+      { input: "1", sample: true },
+      { input: "2" },
+      { input: "5" },
+      { input: "8" }
+    ]
+  },
+  {
+    slug: "subsets-ii",
+    title: "Subsets II",
+    difficulty: "MEDIUM",
+    statement: `Given an array of integers **that may contain duplicates**, return all possible subsets \u2014 without any duplicate subsets in the output.
+
+**Input**: one line of space-separated integers.
+**Output**: one subset per line, elements in ascending order (the empty subset prints as an empty line). Subsets may be produced in any order \u2014 the template prints them canonically.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10
+- -10 \u2264 values \u2264 10 (duplicates allowed)`,
+    examples: [
+      { input: "1 2 2", output: "\n1\n1 2\n1 2 2\n2\n2 2" },
+      { input: "0", output: "\n0" }
+    ],
+    hints: [
+      "Sort first so duplicates sit together.",
+      "Generating all subsets then deduping with a set works \u2014 but the elegant fix prunes duplicates before they're born.",
+      "At each recursion level, skip a value equal to the one just tried at the same level: if j > i and nums[j] == nums[j\u22121], continue."
+    ],
+    editorial: `Sort, then run the standard subsets DFS with one added guard: within a single level of the recursion (the for-loop over candidate positions), never *start* a branch with a value you already started one with \u2014 \`j > i && nums[j] === nums[j\u22121] \u2192 skip\`. Choosing the second '2' at a level where the first '2' was already explored would rebuild the identical subtree of subsets. Note the condition is about *the same level*, not adjacent picks \u2014 taking consecutive equal values deeper in one branch (to form [2 2]) remains legal. O(n \xB7 2\u207F) worst case, and the same skip-guard powers Combination Sum II and Permutations II \u2014 it's the canonical dedup idiom for backtracking.`,
+    approaches: [
+      {
+        name: "Sort + same-level skip",
+        complexityTime: "O(n \xB7 2\u207F)",
+        complexitySpace: "O(n) recursion",
+        body: "The standard include/exclude walk; equal values may only start one branch per level."
+      },
+      {
+        name: "Generate + set dedup",
+        complexityTime: "O(n \xB7 2\u207F)",
+        complexitySpace: "O(2\u207F)",
+        body: "Serialize each subset into a set \u2014 correct but wasteful; mention, don't submit."
+      }
+    ],
+    complexityTime: "O(n \xB7 2\u207F)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode subsets ii backtracking"),
+    tags: ["backtracking", "recursion", "sorting"],
+    starterCode: buildStarter("intArray", "sortedIntMatrix", "subsetsWithDup"),
+    reference: (input) => {
+      const nums = first8(input).sort((a, b) => a - b);
+      const rows = [];
+      const path = [];
+      const dfs = (i) => {
+        rows.push([...path]);
+        for (let j = i; j < nums.length; j++) {
+          if (j > i && nums[j] === nums[j - 1]) continue;
+          path.push(nums[j]);
+          dfs(j + 1);
+          path.pop();
+        }
+      };
+      dfs(0);
+      return sortedMatOut(rows);
+    },
+    tests: [
+      { input: "1 2 2", sample: true },
+      { input: "0", sample: true },
+      { input: "4 4 4 1 4" },
+      { input: "-1 -1 0" },
+      { input: "5 5" }
+    ]
+  }
+];
+
+// src/data/problems/graphs.ts
+var parseGrid = (input) => {
+  const ls = lines(input);
+  const [r] = ints(ls[0]);
+  const grid = [];
+  for (let i = 0; i < r; i++) grid.push(ints(ls[1 + i]));
+  return { grid, rest: ls.slice(1 + r) };
+};
+var parseEdges = (input) => {
+  const ls = lines(input);
+  const [n, m] = ints(ls[0]);
+  const edges = [];
+  for (let i = 0; i < m; i++) edges.push(ints(ls[1 + i]));
+  return { n, edges, rest: ls.slice(1 + m) };
+};
+var graphs = [
+  {
+    slug: "number-of-islands",
+    title: "Number of Islands",
+    difficulty: "MEDIUM",
+    statement: `Given an \`r \xD7 c\` grid of \`1\` (land) and \`0\` (water), count the islands \u2014 groups of land connected horizontally or vertically.
+
+**Input**
+- Line 1: two integers \`r c\`
+- Next r lines: the grid rows (space-separated 0/1)
+
+**Output**: the number of islands.`,
+    constraints: `- 1 \u2264 r, c \u2264 300`,
+    examples: [
+      { input: "4 5\n1 1 1 1 0\n1 1 0 1 0\n1 1 0 0 0\n0 0 0 0 0", output: "1" },
+      { input: "4 5\n1 1 0 0 0\n1 1 0 0 0\n0 0 1 0 0\n0 0 0 1 1", output: "3" }
+    ],
+    hints: [
+      "Every unvisited land cell starts a new island.",
+      "Flood-fill (DFS or BFS) marks the whole island so it's counted once."
+    ],
+    editorial: `Scan the grid; each time you find un-visited land, increment the count and **flood fill** from it (DFS/BFS through 4-directional neighbors), sinking the island by marking cells visited. Every cell is visited a constant number of times \u2192 O(r\xB7c). This is *the* template for connected-component-in-grid problems.`,
+    complexityTime: "O(r\xB7c)",
+    complexitySpace: "O(r\xB7c)",
+    youtubeUrl: yt("neetcode number of islands"),
+    tags: ["graph", "bfs", "dfs", "matrix", "union-find"],
+    starterCode: buildStarter("matrix", "int", "numIslands"),
+    reference: (input) => {
+      const { grid } = parseGrid(input);
+      const r = grid.length;
+      const c = grid[0].length;
+      let count = 0;
+      const sink = (i, j) => {
+        if (i < 0 || j < 0 || i >= r || j >= c || grid[i][j] !== 1) return;
+        grid[i][j] = 0;
+        sink(i + 1, j);
+        sink(i - 1, j);
+        sink(i, j + 1);
+        sink(i, j - 1);
+      };
+      for (let i = 0; i < r; i++) {
+        for (let j = 0; j < c; j++) {
+          if (grid[i][j] === 1) {
+            count++;
+            sink(i, j);
+          }
+        }
+      }
+      return String(count);
+    },
+    tests: [
+      { input: "4 5\n1 1 1 1 0\n1 1 0 1 0\n1 1 0 0 0\n0 0 0 0 0", sample: true },
+      { input: "4 5\n1 1 0 0 0\n1 1 0 0 0\n0 0 1 0 0\n0 0 0 1 1", sample: true },
+      { input: "1 1\n0" },
+      { input: "1 3\n1 0 1" },
+      { input: "3 3\n1 0 1\n0 1 0\n1 0 1" }
+    ]
+  },
+  {
+    slug: "max-area-of-island",
+    title: "Max Area of Island",
+    difficulty: "MEDIUM",
+    statement: `Given a 0/1 grid, return the area (cell count) of the largest island, or \`0\` if there is no land. Islands connect 4-directionally.
+
+**Input**
+- Line 1: \`r c\`
+- Next r lines: the grid rows
+
+**Output**: the maximum island area.`,
+    constraints: `- 1 \u2264 r, c \u2264 50`,
+    examples: [
+      {
+        input: "4 5\n0 1 0 0 1\n1 1 0 1 1\n0 0 0 1 1\n0 0 0 0 0",
+        output: "5",
+        explanation: "The right-side island has 5 cells."
+      },
+      { input: "1 1\n0", output: "0" }
+    ],
+    hints: [
+      "Same flood fill as Number of Islands, but return the size of each fill.",
+      "DFS returns 1 + sum of its four neighbor fills."
+    ],
+    editorial: `Flood fill each island, but make the DFS **return the area**: 0 for water/out-of-bounds, else 1 plus the four recursive neighbor areas, marking cells as visited on entry. Track the max over all starts. O(r\xB7c) time.`,
+    complexityTime: "O(r\xB7c)",
+    complexitySpace: "O(r\xB7c)",
+    youtubeUrl: yt("max area of island neetcode"),
+    tags: ["graph", "dfs", "bfs", "matrix"],
+    starterCode: buildStarter("matrix", "int", "maxAreaOfIsland"),
+    reference: (input) => {
+      const { grid } = parseGrid(input);
+      const r = grid.length;
+      const c = grid[0].length;
+      const area = (i, j) => {
+        if (i < 0 || j < 0 || i >= r || j >= c || grid[i][j] !== 1) return 0;
+        grid[i][j] = 0;
+        return 1 + area(i + 1, j) + area(i - 1, j) + area(i, j + 1) + area(i, j - 1);
+      };
+      let best = 0;
+      for (let i = 0; i < r; i++)
+        for (let j = 0; j < c; j++) best = Math.max(best, area(i, j));
+      return String(best);
+    },
+    tests: [
+      { input: "4 5\n0 1 0 0 1\n1 1 0 1 1\n0 0 0 1 1\n0 0 0 0 0", sample: true },
+      { input: "1 1\n0", sample: true },
+      { input: "2 2\n1 1\n1 1" },
+      { input: "3 3\n1 0 0\n0 1 0\n0 0 1" }
+    ]
+  },
+  {
+    slug: "flood-fill",
+    title: "Flood Fill",
+    difficulty: "EASY",
+    statement: `Given an image as an integer grid, a start pixel \`(sr, sc)\`, and a new \`color\`, flood-fill: recolor the start pixel and every 4-directionally connected pixel sharing its original color. Return the resulting image.
+
+**Input**
+- Line 1: \`r c\`
+- Next r lines: the image rows
+- Last line: three integers \`sr sc color\`
+
+**Output**: the filled image, one row per line.`,
+    constraints: `- 1 \u2264 r, c \u2264 50
+- 0 \u2264 colors \u2264 2^16`,
+    examples: [
+      {
+        input: "3 3\n1 1 1\n1 1 0\n1 0 1\n1 1 2",
+        output: "2 2 2\n2 2 0\n2 0 1",
+        explanation: "The bottom-right 1 is not 4-connected to the start."
+      },
+      { input: "2 2\n0 0\n0 0\n0 0 0", output: "0 0\n0 0" }
+    ],
+    hints: [
+      "Standard DFS/BFS from the start pixel over same-colored neighbors.",
+      "If the new color equals the old color, return immediately \u2014 otherwise you'll loop forever."
+    ],
+    editorial: `Record the start pixel's original color and DFS/BFS outward, recoloring matching neighbors. The one classic trap: when \`color\` equals the original, the naive recursion never terminates \u2014 bail out early. O(r\xB7c) time.`,
+    complexityTime: "O(r\xB7c)",
+    complexitySpace: "O(r\xB7c)",
+    youtubeUrl: yt("flood fill leetcode dfs"),
+    tags: ["graph", "dfs", "bfs", "matrix"],
+    starterCode: buildStarter("matrixK", "intMatrix", "floodFill"),
+    reference: (input) => {
+      const { grid, rest } = parseGrid(input);
+      const [sr, sc, color] = ints(rest[0]);
+      const old = grid[sr][sc];
+      if (old !== color) {
+        const r = grid.length;
+        const c = grid[0].length;
+        const fill = (i, j) => {
+          if (i < 0 || j < 0 || i >= r || j >= c || grid[i][j] !== old) return;
+          grid[i][j] = color;
+          fill(i + 1, j);
+          fill(i - 1, j);
+          fill(i, j + 1);
+          fill(i, j - 1);
+        };
+        fill(sr, sc);
+      }
+      return matOut(grid);
+    },
+    tests: [
+      { input: "3 3\n1 1 1\n1 1 0\n1 0 1\n1 1 2", sample: true },
+      { input: "2 2\n0 0\n0 0\n0 0 0", sample: true },
+      { input: "1 1\n5\n0 0 9" },
+      { input: "2 3\n1 2 1\n2 1 2\n0 1 7" }
+    ]
+  },
+  {
+    slug: "rotting-oranges",
+    title: "Rotting Oranges",
+    difficulty: "MEDIUM",
+    statement: `In a grid, \`0\` is empty, \`1\` is a fresh orange, \`2\` is rotten. Every minute, fresh oranges 4-adjacent to a rotten one rot. Return the minutes until no fresh orange remains, or \`-1\` if that never happens.
+
+**Input**
+- Line 1: \`r c\`
+- Next r lines: the grid rows
+
+**Output**: minutes, or -1.`,
+    constraints: `- 1 \u2264 r, c \u2264 10`,
+    examples: [
+      { input: "3 3\n2 1 1\n1 1 0\n0 1 1", output: "4" },
+      { input: "3 3\n2 1 1\n0 1 1\n1 0 1", output: "-1", explanation: "The bottom-left orange is unreachable." },
+      { input: "1 3\n0 2 0", output: "0" }
+    ],
+    hints: [
+      "Rot spreads simultaneously from every rotten orange \u2014 that's multi-source BFS.",
+      "Seed the queue with all initially rotten oranges; each BFS layer is one minute.",
+      "Count fresh oranges up front to detect the impossible case."
+    ],
+    editorial: `**Multi-source BFS**: enqueue every initially rotten orange at time 0 and expand layer by layer; each layer is one simultaneous minute. Track the fresh count \u2014 if any remain after the queue drains, return -1, else the time of the last rot. O(r\xB7c) time. Single-source BFS from each rotten orange overcounts time; simultaneity is the crux.`,
+    complexityTime: "O(r\xB7c)",
+    complexitySpace: "O(r\xB7c)",
+    youtubeUrl: yt("neetcode rotting oranges"),
+    tags: ["graph", "bfs", "matrix"],
+    starterCode: buildStarter("matrix", "int", "orangesRotting"),
+    reference: (input) => {
+      const { grid } = parseGrid(input);
+      const r = grid.length;
+      const c = grid[0].length;
+      let fresh = 0;
+      let q = [];
+      for (let i = 0; i < r; i++)
+        for (let j = 0; j < c; j++) {
+          if (grid[i][j] === 1) fresh++;
+          else if (grid[i][j] === 2) q.push([i, j]);
+        }
+      let minutes = 0;
+      while (q.length && fresh > 0) {
+        const next = [];
+        for (const [i, j] of q) {
+          for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const ni = i + di;
+            const nj = j + dj;
+            if (ni >= 0 && nj >= 0 && ni < r && nj < c && grid[ni][nj] === 1) {
+              grid[ni][nj] = 2;
+              fresh--;
+              next.push([ni, nj]);
+            }
+          }
+        }
+        q = next;
+        minutes++;
+      }
+      return String(fresh === 0 ? minutes : -1);
+    },
+    tests: [
+      { input: "3 3\n2 1 1\n1 1 0\n0 1 1", sample: true },
+      { input: "3 3\n2 1 1\n0 1 1\n1 0 1", sample: true },
+      { input: "1 3\n0 2 0", sample: true },
+      { input: "1 1\n1" },
+      { input: "2 2\n2 2\n2 2" }
+    ]
+  },
+  {
+    slug: "walls-and-gates",
+    title: "Walls and Gates",
+    difficulty: "MEDIUM",
+    statement: `You are given a grid where \`-1\` is a wall, \`0\` is a gate, and \`2147483647\` (INF) is an empty room. Fill each empty room with the distance to its **nearest gate** (leave INF if unreachable). Return the grid.
+
+**Input**
+- Line 1: \`r c\`
+- Next r lines: the grid rows
+
+**Output**: the filled grid, one row per line.`,
+    constraints: `- 1 \u2264 r, c \u2264 250`,
+    examples: [
+      {
+        input: "4 4\n2147483647 -1 0 2147483647\n2147483647 2147483647 2147483647 -1\n2147483647 -1 2147483647 -1\n0 -1 2147483647 2147483647",
+        output: "3 -1 0 1\n2 2 1 -1\n1 -1 2 -1\n0 -1 3 4"
+      },
+      { input: "1 2\n-1 0", output: "-1 0" }
+    ],
+    hints: [
+      "BFS from every room to its nearest gate is O((r\xB7c)\xB2).",
+      "Flip it: BFS **from all gates at once** \u2014 first arrival is the nearest gate."
+    ],
+    editorial: `Multi-source BFS seeded with **every gate simultaneously**. Expanding layer by layer, the first time a room is reached is necessarily its shortest gate distance, so each cell is written once. O(r\xB7c) total \u2014 versus quadratic if you BFS from each room separately.`,
+    complexityTime: "O(r\xB7c)",
+    complexitySpace: "O(r\xB7c)",
+    youtubeUrl: yt("walls and gates multi source bfs"),
+    tags: ["graph", "bfs", "matrix"],
+    starterCode: buildStarter("matrix", "intMatrix", "wallsAndGates"),
+    reference: (input) => {
+      const { grid } = parseGrid(input);
+      const r = grid.length;
+      const c = grid[0].length;
+      const INF = 2147483647;
+      let q = [];
+      for (let i = 0; i < r; i++)
+        for (let j = 0; j < c; j++) if (grid[i][j] === 0) q.push([i, j]);
+      let dist = 0;
+      while (q.length) {
+        dist++;
+        const next = [];
+        for (const [i, j] of q) {
+          for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const ni = i + di;
+            const nj = j + dj;
+            if (ni >= 0 && nj >= 0 && ni < r && nj < c && grid[ni][nj] === INF) {
+              grid[ni][nj] = dist;
+              next.push([ni, nj]);
+            }
+          }
+        }
+        q = next;
+      }
+      return matOut(grid);
+    },
+    tests: [
+      {
+        input: "4 4\n2147483647 -1 0 2147483647\n2147483647 2147483647 2147483647 -1\n2147483647 -1 2147483647 -1\n0 -1 2147483647 2147483647",
+        sample: true
+      },
+      { input: "1 2\n-1 0", sample: true },
+      { input: "1 1\n2147483647" },
+      { input: "2 2\n0 2147483647\n2147483647 2147483647" }
+    ]
+  },
+  {
+    slug: "course-schedule",
+    title: "Course Schedule",
+    difficulty: "MEDIUM",
+    statement: `There are \`n\` courses labeled \`0 \u2026 n\u22121\`. Each prerequisite pair \`a b\` means you must take course \`b\` before course \`a\`. Return \`true\` if all courses can be finished.
+
+**Input**
+- Line 1: two integers \`n m\` (courses, prerequisite pairs)
+- Next m lines: \`a b\`
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 n \u2264 2000
+- 0 \u2264 m \u2264 5000`,
+    examples: [
+      { input: "2 1\n1 0", output: "true", explanation: "Take 0, then 1." },
+      { input: "2 2\n1 0\n0 1", output: "false", explanation: "Circular dependency." }
+    ],
+    hints: [
+      "The question is: does the prerequisite graph contain a cycle?",
+      "Kahn's algorithm: repeatedly remove nodes with indegree 0.",
+      "If you can't remove all n nodes, a cycle blocks the rest."
+    ],
+    editorial: `Model courses as a directed graph (edge b \u2192 a). All courses are finishable iff the graph is a **DAG**. Kahn's algorithm: compute indegrees, repeatedly dequeue indegree-0 nodes and decrement their neighbors. If the processed count reaches n, no cycle exists. DFS coloring (white/gray/black) detects cycles equally well. O(V + E).`,
+    approaches: [
+      {
+        name: "DFS cycle detection",
+        complexityTime: "O(V + E)",
+        complexitySpace: "O(V)",
+        body: "Gray nodes on the current path; hitting a gray node means a cycle."
+      },
+      {
+        name: "Kahn's topological sort",
+        complexityTime: "O(V + E)",
+        complexitySpace: "O(V)",
+        body: "Peel indegree-0 vertices; a full peel means acyclic."
+      }
+    ],
+    complexityTime: "O(V + E)",
+    complexitySpace: "O(V + E)",
+    youtubeUrl: yt("neetcode course schedule"),
+    tags: ["graph", "topological-sort", "bfs", "dfs"],
+    starterCode: buildStarter("nEdges", "bool", "canFinish"),
+    reference: (input) => {
+      const { n, edges } = parseEdges(input);
+      const adj = Array.from({ length: n }, () => []);
+      const indeg = new Array(n).fill(0);
+      for (const [a, b] of edges) {
+        adj[b].push(a);
+        indeg[a]++;
+      }
+      const q = [];
+      for (let i = 0; i < n; i++) if (indeg[i] === 0) q.push(i);
+      let seen = 0;
+      while (q.length) {
+        const u = q.shift();
+        seen++;
+        for (const v of adj[u]) if (--indeg[v] === 0) q.push(v);
+      }
+      return boolOut(seen === n);
+    },
+    tests: [
+      { input: "2 1\n1 0", sample: true },
+      { input: "2 2\n1 0\n0 1", sample: true },
+      { input: "1 0" },
+      { input: "4 3\n1 0\n2 1\n3 2" },
+      { input: "3 3\n0 1\n1 2\n2 0" }
+    ]
+  },
+  {
+    slug: "course-schedule-ii",
+    title: "Course Schedule II",
+    difficulty: "MEDIUM",
+    statement: `Same setup as Course Schedule: \`n\` courses and prerequisite pairs \`a b\` (take \`b\` before \`a\`). Return a valid order to take all courses; among valid orders return the **lexicographically smallest**. If impossible, print \`-1\`.
+
+**Input**
+- Line 1: \`n m\`
+- Next m lines: \`a b\`
+
+**Output**: the order, space-separated \u2014 or -1.`,
+    constraints: `- 1 \u2264 n \u2264 2000
+- 0 \u2264 m \u2264 5000`,
+    examples: [
+      { input: "2 1\n1 0", output: "0 1" },
+      { input: "4 4\n1 0\n2 0\n3 1\n3 2", output: "0 1 2 3" },
+      { input: "2 2\n1 0\n0 1", output: "-1" }
+    ],
+    hints: [
+      "Kahn's algorithm produces a topological order as it peels.",
+      "For the lexicographically smallest order, always peel the smallest available course \u2014 use a min-heap instead of a queue."
+    ],
+    editorial: `Kahn's algorithm emits a valid topological order directly. To make the answer deterministic and lexicographically smallest, replace the FIFO queue with a **min-heap**: always process the smallest indegree-0 course available. If the emitted order is shorter than n, a cycle makes it impossible. O((V + E) log V) with the heap.`,
+    complexityTime: "O((V + E) log V)",
+    complexitySpace: "O(V + E)",
+    youtubeUrl: yt("course schedule ii topological sort"),
+    tags: ["graph", "topological-sort", "heap"],
+    starterCode: buildStarter("nEdges", "intArray", "findOrder"),
+    reference: (input) => {
+      const { n, edges } = parseEdges(input);
+      const adj = Array.from({ length: n }, () => []);
+      const indeg = new Array(n).fill(0);
+      for (const [a, b] of edges) {
+        adj[b].push(a);
+        indeg[a]++;
+      }
+      const avail = [];
+      for (let i = 0; i < n; i++) if (indeg[i] === 0) avail.push(i);
+      const order = [];
+      while (avail.length) {
+        avail.sort((a, b) => a - b);
+        const u = avail.shift();
+        order.push(u);
+        for (const v of adj[u]) if (--indeg[v] === 0) avail.push(v);
+      }
+      return order.length === n ? arrOut(order) : "-1";
+    },
+    tests: [
+      { input: "2 1\n1 0", sample: true },
+      { input: "4 4\n1 0\n2 0\n3 1\n3 2", sample: true },
+      { input: "2 2\n1 0\n0 1", sample: true },
+      { input: "1 0" },
+      { input: "3 2\n0 2\n1 2" }
+    ]
+  },
+  {
+    slug: "graph-valid-tree",
+    title: "Graph Valid Tree",
+    difficulty: "MEDIUM",
+    statement: `Given \`n\` nodes labeled \`0 \u2026 n\u22121\` and a list of undirected edges, return \`true\` if the edges form a valid tree: connected and acyclic.
+
+**Input**
+- Line 1: \`n m\`
+- Next m lines: \`u v\`
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 n \u2264 2000
+- 0 \u2264 m \u2264 5000; no duplicate edges.`,
+    examples: [
+      { input: "5 4\n0 1\n0 2\n0 3\n1 4", output: "true" },
+      { input: "5 5\n0 1\n1 2\n2 3\n1 3\n1 4", output: "false", explanation: "1-2-3 forms a cycle." }
+    ],
+    hints: [
+      "A tree on n nodes has exactly n \u2212 1 edges.",
+      "n \u2212 1 edges + connected \u27FA tree. Check connectivity with BFS/DFS or union-find."
+    ],
+    editorial: `Use the counting fact: a graph is a tree iff it has exactly **n \u2212 1 edges** and is **connected** (either condition alone is insufficient). Check the edge count, then one BFS/DFS (or union-find, where any merge of two already-joined nodes signals a cycle) confirms connectivity. O(V + E).`,
+    complexityTime: "O(V + E)",
+    complexitySpace: "O(V)",
+    youtubeUrl: yt("graph valid tree union find"),
+    tags: ["graph", "union-find", "bfs", "dfs"],
+    starterCode: buildStarter("nEdges", "bool", "validTree"),
+    reference: (input) => {
+      const { n, edges } = parseEdges(input);
+      if (edges.length !== n - 1) return boolOut(false);
+      const parent = Array.from({ length: n }, (_, i) => i);
+      const find = (x) => {
+        while (parent[x] !== x) {
+          parent[x] = parent[parent[x]];
+          x = parent[x];
+        }
+        return x;
+      };
+      for (const [u, v] of edges) {
+        const ru = find(u);
+        const rv = find(v);
+        if (ru === rv) return boolOut(false);
+        parent[ru] = rv;
+      }
+      return boolOut(true);
+    },
+    tests: [
+      { input: "5 4\n0 1\n0 2\n0 3\n1 4", sample: true },
+      { input: "5 5\n0 1\n1 2\n2 3\n1 3\n1 4", sample: true },
+      { input: "1 0" },
+      { input: "4 2\n0 1\n2 3" },
+      { input: "2 1\n0 1" }
+    ]
+  },
+  {
+    slug: "number-of-connected-components-in-an-undirected-graph",
+    title: "Number of Connected Components in an Undirected Graph",
+    difficulty: "MEDIUM",
+    statement: `Given \`n\` nodes and a list of undirected edges, return the number of connected components.
+
+**Input**
+- Line 1: \`n m\`
+- Next m lines: \`u v\`
+
+**Output**: the component count.`,
+    constraints: `- 1 \u2264 n \u2264 2000
+- 0 \u2264 m \u2264 5000`,
+    examples: [
+      { input: "5 3\n0 1\n1 2\n3 4", output: "2" },
+      { input: "5 4\n0 1\n1 2\n2 3\n3 4", output: "1" }
+    ],
+    hints: [
+      "Start with n components; each edge that joins two different groups reduces the count by one.",
+      "Union-find with path compression makes each union nearly O(1)."
+    ],
+    editorial: `**Union-find**: initialize n singleton components; for each edge, union its endpoints and decrement the count when the union actually merges two distinct roots. Path compression + union by size gives near-constant amortized operations \u2192 O(E \u03B1(V)). BFS/DFS counting works equally well at O(V + E).`,
+    complexityTime: "O(E \u03B1(V))",
+    complexitySpace: "O(V)",
+    youtubeUrl: yt("number of connected components union find"),
+    tags: ["graph", "union-find", "bfs", "dfs"],
+    starterCode: buildStarter("nEdges", "int", "countComponents"),
+    reference: (input) => {
+      const { n, edges } = parseEdges(input);
+      const parent = Array.from({ length: n }, (_, i) => i);
+      const find = (x) => {
+        while (parent[x] !== x) {
+          parent[x] = parent[parent[x]];
+          x = parent[x];
+        }
+        return x;
+      };
+      let count = n;
+      for (const [u, v] of edges) {
+        const ru = find(u);
+        const rv = find(v);
+        if (ru !== rv) {
+          parent[ru] = rv;
+          count--;
+        }
+      }
+      return String(count);
+    },
+    tests: [
+      { input: "5 3\n0 1\n1 2\n3 4", sample: true },
+      { input: "5 4\n0 1\n1 2\n2 3\n3 4", sample: true },
+      { input: "3 0" },
+      { input: "1 0" },
+      { input: "4 4\n0 1\n1 2\n2 0\n0 3" }
+    ]
+  },
+  {
+    slug: "redundant-connection",
+    title: "Redundant Connection",
+    difficulty: "MEDIUM",
+    statement: `A tree with \`n\` nodes (labeled 1\u2026n) had exactly one extra undirected edge added. Given the resulting edge list, return the edge that can be removed to restore a tree. If several qualify, return the one appearing **last** in the input.
+
+**Input**
+- Line 1: \`n n\` (the graph has exactly n edges)
+- Next n lines: \`u v\`
+
+**Output**: the edge \`u v\`.`,
+    constraints: `- 3 \u2264 n \u2264 1000
+- The input is a tree plus one extra edge.`,
+    examples: [
+      { input: "3 3\n1 2\n1 3\n2 3", output: "2 3" },
+      { input: "5 5\n1 2\n2 3\n3 4\n1 4\n1 5", output: "1 4" }
+    ],
+    hints: [
+      "Process edges in order, unioning endpoints.",
+      "The first edge whose endpoints are already connected closes the cycle \u2014 and it's the last-in-input edge on that cycle."
+    ],
+    editorial: `Feed edges into **union-find** in input order. The moment an edge's endpoints already share a root, that edge closes the cycle \u2014 and because every earlier cycle edge merged successfully, it is precisely the last cycle edge in input order, satisfying the tie-break for free. O(n \u03B1(n)).`,
+    complexityTime: "O(n \u03B1(n))",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("redundant connection union find"),
+    tags: ["graph", "union-find"],
+    starterCode: buildStarter("nEdges", "intArray", "findRedundantConnection"),
+    reference: (input) => {
+      const { n, edges } = parseEdges(input);
+      const parent = Array.from({ length: n + 1 }, (_, i) => i);
+      const find = (x) => {
+        while (parent[x] !== x) {
+          parent[x] = parent[parent[x]];
+          x = parent[x];
+        }
+        return x;
+      };
+      for (const [u, v] of edges) {
+        const ru = find(u);
+        const rv = find(v);
+        if (ru === rv) return `${u} ${v}`;
+        parent[ru] = rv;
+      }
+      return "";
+    },
+    tests: [
+      { input: "3 3\n1 2\n1 3\n2 3", sample: true },
+      { input: "5 5\n1 2\n2 3\n3 4\n1 4\n1 5", sample: true },
+      { input: "4 4\n1 2\n3 4\n2 3\n1 4" },
+      { input: "3 3\n2 3\n1 2\n1 3" }
+    ]
+  },
+  {
+    slug: "network-delay-time",
+    title: "Network Delay Time",
+    difficulty: "MEDIUM",
+    statement: `A network has \`n\` nodes (1\u2026n) and directed edges \`u v w\` meaning a signal takes \`w\` time to travel u \u2192 v. A signal starts at node \`k\`. Return the time for **all** nodes to receive it, or \`-1\` if some node never does.
+
+**Input**
+- Line 1: \`n m\`
+- Next m lines: \`u v w\`
+- Last line: the start node \`k\`
+
+**Output**: the total time, or -1.`,
+    constraints: `- 1 \u2264 n \u2264 100
+- 1 \u2264 m \u2264 6000
+- 1 \u2264 w \u2264 100`,
+    examples: [
+      { input: "4 3\n2 1 1\n2 3 1\n3 4 1\n2", output: "2" },
+      { input: "2 1\n1 2 1\n1", output: "1" },
+      { input: "2 1\n1 2 1\n2", output: "-1" }
+    ],
+    hints: [
+      "You need shortest paths from one source with non-negative weights.",
+      "Dijkstra with a min-heap; the answer is the largest shortest-path distance.",
+      "Any unreachable node forces -1."
+    ],
+    editorial: `Single-source shortest paths with non-negative weights \u2192 **Dijkstra**. Run it from \`k\` with a min-heap; the answer is the maximum distance over all nodes (the last one to hear the signal), or -1 if any distance stays infinite. O(E log V).`,
+    complexityTime: "O(E log V)",
+    complexitySpace: "O(V + E)",
+    youtubeUrl: yt("network delay time dijkstra"),
+    tags: ["graph", "dijkstra", "shortest-path", "heap"],
+    starterCode: buildStarter("nEdgesQ", "int", "networkDelayTime"),
+    reference: (input) => {
+      const { n, edges, rest } = parseEdges(input);
+      const k = int(rest[0]);
+      const adj = Array.from({ length: n + 1 }, () => []);
+      for (const [u, v, w] of edges) adj[u].push([v, w]);
+      const dist = new Array(n + 1).fill(Infinity);
+      dist[k] = 0;
+      const visited = new Array(n + 1).fill(false);
+      for (let iter = 0; iter < n; iter++) {
+        let u = -1;
+        for (let i = 1; i <= n; i++)
+          if (!visited[i] && (u === -1 || dist[i] < dist[u])) u = i;
+        if (u === -1 || dist[u] === Infinity) break;
+        visited[u] = true;
+        for (const [v, w] of adj[u])
+          if (dist[u] + w < dist[v]) dist[v] = dist[u] + w;
+      }
+      let best = 0;
+      for (let i = 1; i <= n; i++) best = Math.max(best, dist[i]);
+      return String(best === Infinity ? -1 : best);
+    },
+    tests: [
+      { input: "4 3\n2 1 1\n2 3 1\n3 4 1\n2", sample: true },
+      { input: "2 1\n1 2 1\n1", sample: true },
+      { input: "2 1\n1 2 1\n2", sample: true },
+      { input: "1 0\n1" },
+      { input: "3 3\n1 2 1\n2 3 2\n1 3 4\n1" }
+    ]
+  },
+  {
+    slug: "cheapest-flights-within-k-stops",
+    title: "Cheapest Flights Within K Stops",
+    difficulty: "MEDIUM",
+    statement: `There are \`n\` cities (0\u2026n\u22121) and directed flights \`u v w\` (from u to v costing w). Find the cheapest price from \`src\` to \`dst\` using **at most k stops** (i.e. at most k intermediate cities), or \`-1\` if impossible.
+
+**Input**
+- Line 1: \`n m\`
+- Next m lines: \`u v w\`
+- Last line: three integers \`src dst k\`
+
+**Output**: the cheapest price, or -1.`,
+    constraints: `- 1 \u2264 n \u2264 100
+- 0 \u2264 k < n
+- 1 \u2264 w \u2264 10^4`,
+    examples: [
+      { input: "4 5\n0 1 100\n1 2 100\n2 0 100\n1 3 600\n2 3 200\n0 3 1", output: "700", explanation: "0\u21921\u21923; the cheaper 0\u21921\u21922\u21923 needs 2 stops." },
+      { input: "3 3\n0 1 100\n1 2 100\n0 2 500\n0 2 1", output: "200" },
+      { input: "3 3\n0 1 100\n1 2 100\n0 2 500\n0 2 0", output: "500" }
+    ],
+    hints: [
+      "Plain Dijkstra ignores the stop limit \u2014 it can lock in a cheap path that uses too many hops.",
+      "Bellman-Ford naturally bounds path length: k+1 relaxation rounds allow at most k stops.",
+      "Relax from a snapshot of the previous round's distances so one round adds at most one edge per path."
+    ],
+    editorial: `**Bellman-Ford, bounded**: run exactly \`k + 1\` relaxation rounds (a path with k stops has k+1 edges), each round relaxing all edges against a **copy** of the previous round's distances \u2014 the copy prevents multi-edge propagation inside a single round. Final \`dist[dst]\` (or -1) answers it. O(k \xB7 E).`,
+    complexityTime: "O(k \xB7 E)",
+    complexitySpace: "O(V)",
+    youtubeUrl: yt("neetcode cheapest flights within k stops"),
+    tags: ["graph", "bellman-ford", "shortest-path", "dynamic-programming"],
+    starterCode: buildStarter("nEdgesQ", "int", "findCheapestPrice"),
+    reference: (input) => {
+      const { n, edges, rest } = parseEdges(input);
+      const [src, dst, k] = ints(rest[0]);
+      let dist = new Array(n).fill(Infinity);
+      dist[src] = 0;
+      for (let round = 0; round <= k; round++) {
+        const next = [...dist];
+        for (const [u, v, w] of edges) {
+          if (dist[u] !== Infinity && dist[u] + w < next[v]) next[v] = dist[u] + w;
+        }
+        dist = next;
+      }
+      return String(dist[dst] === Infinity ? -1 : dist[dst]);
+    },
+    tests: [
+      { input: "4 5\n0 1 100\n1 2 100\n2 0 100\n1 3 600\n2 3 200\n0 3 1", sample: true },
+      { input: "3 3\n0 1 100\n1 2 100\n0 2 500\n0 2 1", sample: true },
+      { input: "3 3\n0 1 100\n1 2 100\n0 2 500\n0 2 0", sample: true },
+      { input: "2 1\n1 0 5\n0 1 0" },
+      { input: "5 6\n0 1 5\n1 2 5\n0 3 2\n3 1 2\n1 4 1\n4 2 1\n0 2 2" }
+    ]
+  },
+  {
+    slug: "min-cost-to-connect-all-points",
+    title: "Min Cost to Connect All Points",
+    difficulty: "MEDIUM",
+    statement: `You are given points on a 2D plane. The cost to connect two points is their **Manhattan distance** |x\u2081\u2212x\u2082| + |y\u2081\u2212y\u2082|. Return the minimum total cost to make all points connected (directly or indirectly) \u2014 i.e., the weight of a minimum spanning tree.
+
+**Input**
+- Line 1: \`n 2\` \u2014 the number of points and the coordinate count
+- Next n lines: \`x y\` for each point
+
+**Output**: the minimum total cost.`,
+    constraints: `- 1 \u2264 n \u2264 1000
+- -10^6 \u2264 coordinates \u2264 10^6
+- All points distinct.`,
+    examples: [
+      {
+        input: "5 2\n0 0\n2 2\n3 10\n5 2\n7 0",
+        output: "20",
+        explanation: "Edges (0,0)-(2,2), (2,2)-(5,2), (5,2)-(7,0), (2,2)-(3,10) cost 4+3+4+9."
+      },
+      { input: "3 2\n3 12\n-2 5\n-4 1", output: "18" }
+    ],
+    hints: [
+      "Connecting everything at minimum cost with no cycles worth paying for = minimum spanning tree.",
+      "The graph is complete (n\xB2 edges) \u2014 Kruskal must sort them all; Prim without a heap is O(n\xB2) and needs no edge list at all.",
+      "Prim on dense graphs: keep dist[v] = cheapest link from the growing tree to v; each round, absorb the closest outsider and relax."
+    ],
+    editorial: `The graph is *complete* \u2014 every pair of points is an edge \u2014 which flips the usual advice: Kruskal pays O(n\xB2 log n) to sort half a million edges, while **array-based Prim** runs O(n\xB2) with O(n) memory and never materializes an edge list. Maintain \`dist[v]\`: the cheapest Manhattan edge from the current tree to each outside point. Each of n rounds picks the closest outsider, adds its distance to the total, and relaxes every remaining point against the newcomer. For n = 1000 that's a million distance computations \u2014 instant. The interview lesson: heap-Prim (O(E log V)) is for sparse graphs; on dense ones the humble O(n\xB2) scan wins. Union-Find Kruskal remains the right call the moment edges are given explicitly and sparsely.`,
+    approaches: [
+      {
+        name: "Prim, O(n\xB2) array version",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(n)",
+        body: "dist[] relaxation against each absorbed point; no edge list, no heap."
+      },
+      {
+        name: "Kruskal + Union-Find",
+        complexityTime: "O(n\xB2 log n)",
+        complexitySpace: "O(n\xB2)",
+        body: "Generate all pair edges, sort, union until n\u22121 accepted. Fine, but dominated here."
+      }
+    ],
+    complexityTime: "O(n\xB2)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode min cost to connect all points"),
+    tags: ["graph", "minimum-spanning-tree", "prim"],
+    starterCode: buildStarter("matrix", "int", "minCostConnectPoints"),
+    reference: (input) => {
+      const ls = lines(input);
+      const [n] = ints(ls[0]);
+      const pts = [];
+      for (let i = 0; i < n; i++) pts.push(ints(ls[1 + i]));
+      const dist = new Array(n).fill(Infinity);
+      const used = new Array(n).fill(false);
+      dist[0] = 0;
+      let total = 0;
+      for (let round = 0; round < n; round++) {
+        let u = -1;
+        for (let v = 0; v < n; v++) {
+          if (!used[v] && (u === -1 || dist[v] < dist[u])) u = v;
+        }
+        used[u] = true;
+        total += dist[u];
+        for (let v = 0; v < n; v++) {
+          if (!used[v]) {
+            const d = Math.abs(pts[u][0] - pts[v][0]) + Math.abs(pts[u][1] - pts[v][1]);
+            if (d < dist[v]) dist[v] = d;
+          }
+        }
+      }
+      return String(total);
+    },
+    tests: [
+      { input: "5 2\n0 0\n2 2\n3 10\n5 2\n7 0", sample: true },
+      { input: "3 2\n3 12\n-2 5\n-4 1", sample: true },
+      { input: "1 2\n0 0" },
+      { input: "2 2\n-1000000 -1000000\n1000000 1000000" },
+      { input: "4 2\n0 0\n0 1\n1 0\n1 1" }
+    ]
+  }
+];
+
+// src/data/problems/greedy.ts
+var first9 = (s) => ints(s.split("\n")[0]);
+var greedy = [
+  {
+    slug: "assign-cookies",
+    title: "Assign Cookies",
+    difficulty: "EASY",
+    statement: `Child \`i\` is content with a cookie of size \u2265 \`g[i]\`. Each child gets at most one cookie. Given greed factors \`g\` and cookie sizes \`s\`, return the maximum number of content children.
+
+**Input**
+- Line 1: space-separated greed factors \`g\`
+- Line 2: space-separated cookie sizes \`s\` (may be empty)
+
+**Output**: the maximum number of content children.`,
+    constraints: `- 1 \u2264 g.length \u2264 3\xB710^4
+- 0 \u2264 s.length \u2264 3\xB710^4`,
+    examples: [
+      { input: "1 2 3\n1 1", output: "1" },
+      { input: "1 2\n1 2 3", output: "2" }
+    ],
+    hints: [
+      "Sort both arrays.",
+      "Give the smallest sufficient cookie to the least greedy unmatched child."
+    ],
+    editorial: `Sort children and cookies ascending, then sweep with two pointers: offer the current cookie to the least greedy unmatched child; if it satisfies them, both advance, otherwise the cookie is discarded (it satisfies no one remaining). Exchanging any assignment in an optimal solution for this greedy one never loses a match. O(n log n + m log m).`,
+    complexityTime: "O(n log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("assign cookies greedy leetcode"),
+    tags: ["greedy", "sorting", "two-pointers"],
+    starterCode: buildStarter("twoIntArrays", "int", "findContentChildren"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const g = ints(l0).sort((a, b) => a - b);
+      const s = ints(l1).sort((a, b) => a - b);
+      let i = 0;
+      for (const cookie of s) {
+        if (i < g.length && cookie >= g[i]) i++;
+      }
+      return String(i);
+    },
+    tests: [
+      { input: "1 2 3\n1 1", sample: true },
+      { input: "1 2\n1 2 3", sample: true },
+      { input: "10 9 8 7\n5 6 7 8" },
+      { input: "1\n" }
+    ]
+  },
+  {
+    slug: "lemonade-change",
+    title: "Lemonade Change",
+    difficulty: "EASY",
+    statement: `Customers queue to buy $5 lemonade, paying with $5, $10, or $20 bills. You start with no change. Return \`true\` if you can give every customer correct change, processing them in order.
+
+**Input**: one line of space-separated bills (each 5, 10, or 20).
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 bills.length \u2264 10^5`,
+    examples: [
+      { input: "5 5 5 10 20", output: "true" },
+      { input: "5 5 10 10 20", output: "false" }
+    ],
+    hints: [
+      "Only track how many $5 and $10 bills you hold.",
+      "For a $20, prefer giving $10 + $5 over three $5s \u2014 fives are more versatile."
+    ],
+    editorial: `Simulate with counts of fives and tens. A $10 needs one five; a $20 needs \`10+5\` **preferring the ten** (fives also serve $10 payers, tens serve no one else) or three fives as fallback. If change is ever impossible, fail. The exchange argument justifies the preference. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("lemonade change greedy"),
+    tags: ["greedy", "simulation"],
+    starterCode: buildStarter("intArray", "bool", "lemonadeChange"),
+    reference: (input) => {
+      const bills = first9(input);
+      let fives = 0;
+      let tens = 0;
+      for (const b of bills) {
+        if (b === 5) fives++;
+        else if (b === 10) {
+          if (fives === 0) return boolOut(false);
+          fives--;
+          tens++;
+        } else {
+          if (tens > 0 && fives > 0) {
+            tens--;
+            fives--;
+          } else if (fives >= 3) {
+            fives -= 3;
+          } else return boolOut(false);
+        }
+      }
+      return boolOut(true);
+    },
+    tests: [
+      { input: "5 5 5 10 20", sample: true },
+      { input: "5 5 10 10 20", sample: true },
+      { input: "5 5 10" },
+      { input: "10" },
+      { input: "5 5 5 5 20 5 20 5" }
+    ]
+  },
+  {
+    slug: "jump-game",
+    title: "Jump Game",
+    difficulty: "MEDIUM",
+    statement: `You start at index 0 of array \`nums\`, where \`nums[i]\` is your maximum jump length from position \`i\`. Return \`true\` if you can reach the last index.
+
+**Input**: one line of space-separated non-negative integers.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^4
+- 0 \u2264 nums[i] \u2264 10^5`,
+    examples: [
+      { input: "2 3 1 1 4", output: "true", explanation: "0\u21921\u21924." },
+      { input: "3 2 1 0 4", output: "false", explanation: "Index 3 is a trap." }
+    ],
+    hints: [
+      "Track the farthest index reachable so far.",
+      "If your scan position ever exceeds that reach, you're stuck."
+    ],
+    editorial: `Sweep left to right maintaining \`reach\`, the farthest reachable index. At each position \u2264 \`reach\`, update \`reach = max(reach, i + nums[i])\`. If \`i > reach\` at any point, the last index is unreachable. Greedy works because only the frontier matters, not how you got there. O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode jump game"),
+    tags: ["greedy", "array", "dynamic-programming"],
+    starterCode: buildStarter("intArray", "bool", "canJump"),
+    reference: (input) => {
+      const nums = first9(input);
+      let reach = 0;
+      for (let i = 0; i < nums.length; i++) {
+        if (i > reach) return boolOut(false);
+        reach = Math.max(reach, i + nums[i]);
+      }
+      return boolOut(true);
+    },
+    tests: [
+      { input: "2 3 1 1 4", sample: true },
+      { input: "3 2 1 0 4", sample: true },
+      { input: "0" },
+      { input: "1 0 1" },
+      { input: "5 0 0 0 0 0" }
+    ]
+  },
+  {
+    slug: "jump-game-ii",
+    title: "Jump Game II",
+    difficulty: "MEDIUM",
+    statement: `Same setup as Jump Game, but reaching the last index is guaranteed. Return the **minimum** number of jumps needed.
+
+**Input**: one line of space-separated non-negative integers.
+**Output**: the minimum jump count.`,
+    constraints: `- 1 \u2264 nums.length \u2264 10^4
+- Reaching the end is always possible.`,
+    examples: [
+      { input: "2 3 1 1 4", output: "2", explanation: "0\u21921 then 1\u21924." },
+      { input: "2 3 0 1 4", output: "2" }
+    ],
+    hints: [
+      "Think in BFS layers: everything reachable in j jumps forms a window.",
+      "Track the current window's end and the farthest reach within it; crossing the end starts a new jump."
+    ],
+    editorial: `Implicit BFS over index windows: maintain the current jump's window \`[start, end]\` and the farthest index reachable from inside it. When the scan passes \`end\`, one more jump begins and the window extends to that farthest reach. Each index is visited once \u2192 O(n), O(1) space \u2014 no DP table needed.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode jump game ii"),
+    tags: ["greedy", "array", "bfs"],
+    starterCode: buildStarter("intArray", "int", "jump"),
+    reference: (input) => {
+      const nums = first9(input);
+      let jumps = 0;
+      let end = 0;
+      let far = 0;
+      for (let i = 0; i < nums.length - 1; i++) {
+        far = Math.max(far, i + nums[i]);
+        if (i === end) {
+          jumps++;
+          end = far;
+        }
+      }
+      return String(jumps);
+    },
+    tests: [
+      { input: "2 3 1 1 4", sample: true },
+      { input: "2 3 0 1 4", sample: true },
+      { input: "1" },
+      { input: "1 1 1 1" },
+      { input: "10 1 1 1 1" }
+    ]
+  },
+  {
+    slug: "gas-station",
+    title: "Gas Station",
+    difficulty: "MEDIUM",
+    statement: `There are \`n\` gas stations on a circle. \`gas[i]\` is fuel available at station \`i\`; \`cost[i]\` is fuel needed to drive to station \`i+1\`. Starting empty at some station, return the index from which you can complete one full clockwise circuit, or \`-1\`. The answer is unique when it exists.
+
+**Input**
+- Line 1: space-separated \`gas\`
+- Line 2: space-separated \`cost\`
+
+**Output**: the starting index, or -1.`,
+    constraints: `- 1 \u2264 n \u2264 10^5`,
+    examples: [
+      { input: "1 2 3 4 5\n3 4 5 1 2", output: "3" },
+      { input: "2 3 4\n3 4 3", output: "-1" }
+    ],
+    hints: [
+      "If total gas < total cost, no start works. Otherwise one must.",
+      "If you run dry between start s and station i, no station in (s, i] can work either \u2014 restart from i+1."
+    ],
+    editorial: `Two facts make greedy work: (1) if \`\u03A3gas < \u03A3cost\` no answer exists, otherwise one does; (2) if starting at \`s\` you first fail reaching \`i+1\`, then any start strictly between \`s\` and \`i\` also fails there (it enters with less fuel) \u2014 so jump the candidate straight to \`i + 1\`. One pass tracking the running tank and total balance. O(n), O(1).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode gas station"),
+    tags: ["greedy", "array"],
+    starterCode: buildStarter("twoIntArrays", "int", "canCompleteCircuit"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const gas = ints(l0);
+      const cost = ints(l1);
+      let total = 0;
+      let tank = 0;
+      let start = 0;
+      for (let i = 0; i < gas.length; i++) {
+        const d = gas[i] - cost[i];
+        total += d;
+        tank += d;
+        if (tank < 0) {
+          start = i + 1;
+          tank = 0;
+        }
+      }
+      return String(total >= 0 ? start : -1);
+    },
+    tests: [
+      { input: "1 2 3 4 5\n3 4 5 1 2", sample: true },
+      { input: "2 3 4\n3 4 3", sample: true },
+      { input: "5\n4" },
+      { input: "3\n3" },
+      { input: "5 1 2 3 4\n4 4 1 5 1" }
+    ]
+  },
+  {
+    slug: "hand-of-straights",
+    title: "Hand of Straights",
+    difficulty: "MEDIUM",
+    statement: `Alice has a hand of cards and wants to rearrange them into groups of exactly \`k\` **consecutive** cards. Return \`true\` if she can.
+
+**Input**
+- Line 1: space-separated card values
+- Line 2: integer \`k\`
+
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 hand.length \u2264 10^4
+- 1 \u2264 k \u2264 hand.length`,
+    examples: [
+      { input: "1 2 3 6 2 3 4 7 8\n3", output: "true", explanation: "[1,2,3] [2,3,4] [6,7,8]." },
+      { input: "1 2 3 4 5\n4", output: "false", explanation: "5 cards can't split into groups of 4." }
+    ],
+    hints: [
+      "If the total count isn't divisible by k, fail immediately.",
+      "The smallest remaining card must start a group \u2014 it has no other home.",
+      "Count cards in a map; repeatedly consume runs starting at the current minimum."
+    ],
+    editorial: `The smallest remaining card is forced to begin a group, so greedily consume \`k\` consecutive values starting there, decrementing counts; any missing value fails. Processing values in sorted order with a count map gives O(n log n). The forced-move argument is what makes greedy provably correct here.`,
+    complexityTime: "O(n log n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode hand of straights"),
+    tags: ["greedy", "hash-table", "sorting"],
+    starterCode: buildStarter("intArrayK", "bool", "isNStraightHand"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const hand = ints(l0);
+      const k = int(l1);
+      if (hand.length % k !== 0) return boolOut(false);
+      const count = /* @__PURE__ */ new Map();
+      for (const c of hand) count.set(c, (count.get(c) ?? 0) + 1);
+      const keys = [...count.keys()].sort((a, b) => a - b);
+      for (const start of keys) {
+        const c = count.get(start);
+        if (c === 0) continue;
+        for (let v = start; v < start + k; v++) {
+          const have = count.get(v) ?? 0;
+          if (have < c) return boolOut(false);
+          count.set(v, have - c);
+        }
+      }
+      return boolOut(true);
+    },
+    tests: [
+      { input: "1 2 3 6 2 3 4 7 8\n3", sample: true },
+      { input: "1 2 3 4 5\n4", sample: true },
+      { input: "8 10 12\n3" },
+      { input: "4\n1" },
+      { input: "1 1 2 2 3 3\n3" }
+    ]
+  },
+  {
+    slug: "partition-labels",
+    title: "Partition Labels",
+    difficulty: "MEDIUM",
+    statement: `Partition a string into as many parts as possible so that **no letter appears in more than one part**, and return the sizes of the parts (in order).
+
+**Input**: one line, the string \`s\`.
+**Output**: the part sizes, space-separated.`,
+    constraints: `- 1 \u2264 s.length \u2264 500
+- Lowercase English letters.`,
+    examples: [
+      { input: "ababcbacadefegdehijhklij", output: "9 7 8", explanation: '"ababcbaca" "defegde" "hijhklij".' },
+      { input: "eccbbbbdec", output: "10" }
+    ],
+    hints: [
+      "Precompute each letter's last occurrence.",
+      "A part can end only once you've passed the last occurrence of every letter inside it."
+    ],
+    editorial: `Record each character's **last index**. Sweep with a growing window: extend the window's required end to the last occurrence of each character seen; when the scan reaches that end, the part is closed and its size emitted. Greedy is safe because a letter's full span must live in one part. O(n) time, O(26) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode partition labels"),
+    tags: ["greedy", "string", "two-pointers"],
+    starterCode: buildStarter("string", "intArray", "partitionLabels"),
+    reference: (input) => {
+      const s = (lines(input)[0] ?? "").trim();
+      const last = /* @__PURE__ */ new Map();
+      for (let i = 0; i < s.length; i++) last.set(s[i], i);
+      const res = [];
+      let start = 0;
+      let end = 0;
+      for (let i = 0; i < s.length; i++) {
+        end = Math.max(end, last.get(s[i]));
+        if (i === end) {
+          res.push(end - start + 1);
+          start = i + 1;
+        }
+      }
+      return arrOut(res);
+    },
+    tests: [
+      { input: "ababcbacadefegdehijhklij", sample: true },
+      { input: "eccbbbbdec", sample: true },
+      { input: "a" },
+      { input: "abcdef" },
+      { input: "caedbdedda" }
+    ]
+  },
+  {
+    slug: "valid-parenthesis-string",
+    title: "Valid Parenthesis String",
+    difficulty: "MEDIUM",
+    statement: `A string contains \`(\`, \`)\`, and \`*\`, where each \`*\` can act as \`(\`, \`)\`, or an empty string. Return \`true\` if the string can be made a valid parenthesis sequence.
+
+**Input**: one line, the string.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 s.length \u2264 100`,
+    examples: [
+      { input: "()", output: "true" },
+      { input: "(*)", output: "true" },
+      { input: "(*))", output: "true" }
+    ],
+    hints: [
+      "Track a range [lo, hi] of possible open-bracket counts.",
+      "'(' raises both; ')' lowers both; '*' widens the range by one in each direction.",
+      "Fail if hi goes negative; succeed if lo can end at 0 (clamp lo at 0)."
+    ],
+    editorial: `Keep the interval \`[lo, hi]\` of achievable open-paren counts: \`(\` increments both, \`)\` decrements both, \`*\` does \`lo\u22121, hi+1\`. If \`hi < 0\` the string is already broken; clamp \`lo\` at 0 (a \`*\` never has to become \`)\` when nothing is open). Valid iff \`lo == 0\` at the end. One pass, O(1) space \u2014 the interval trick replaces exponential case-splitting.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("valid parenthesis string greedy"),
+    tags: ["greedy", "string", "dynamic-programming"],
+    starterCode: buildStarter("string", "bool", "checkValidString"),
+    reference: (input) => {
+      const s = (lines(input)[0] ?? "").trim();
+      let lo = 0;
+      let hi = 0;
+      for (const c of s) {
+        if (c === "(") {
+          lo++;
+          hi++;
+        } else if (c === ")") {
+          lo--;
+          hi--;
+        } else {
+          lo--;
+          hi++;
+        }
+        if (hi < 0) return boolOut(false);
+        if (lo < 0) lo = 0;
+      }
+      return boolOut(lo === 0);
+    },
+    tests: [
+      { input: "()", sample: true },
+      { input: "(*)", sample: true },
+      { input: "(*))", sample: true },
+      { input: ")(" },
+      { input: "(((*)" },
+      { input: "*(" }
+    ]
+  },
+  {
+    slug: "non-overlapping-intervals",
+    title: "Non-overlapping Intervals",
+    difficulty: "MEDIUM",
+    statement: `Given intervals \`[start, end)\`, return the minimum number of intervals to remove so the rest don't overlap (touching endpoints don't overlap).
+
+**Input**
+- Line 1: \`n 2\`
+- Next n lines: \`start end\`
+
+**Output**: the minimum removals.`,
+    constraints: `- 1 \u2264 n \u2264 10^5
+- -5\xB710^4 \u2264 start < end \u2264 5\xB710^4`,
+    examples: [
+      { input: "4 2\n1 2\n2 3\n3 4\n1 3", output: "1", explanation: "Remove [1,3]." },
+      { input: "3 2\n1 2\n1 2\n1 2", output: "2" },
+      { input: "2 2\n1 2\n2 3", output: "0" }
+    ],
+    hints: [
+      "Equivalent problem: keep the maximum number of non-overlapping intervals.",
+      "Sort by end time; always keep the interval that finishes earliest."
+    ],
+    editorial: `Flip to "keep the most non-overlapping intervals" \u2014 the classic **activity selection** problem. Sort by end; greedily keep any interval starting at or after the last kept end. The earliest-finishing choice leaves maximal room, provable by exchange. Removals = total \u2212 kept. O(n log n).`,
+    complexityTime: "O(n log n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode non overlapping intervals"),
+    tags: ["greedy", "intervals", "sorting"],
+    starterCode: buildStarter("matrix", "int", "eraseOverlapIntervals"),
+    reference: (input) => {
+      const ls = lines(input);
+      const [n] = ints(ls[0]);
+      const iv = [];
+      for (let i = 0; i < n; i++) iv.push(ints(ls[1 + i]));
+      iv.sort((a, b) => a[1] - b[1]);
+      let kept = 0;
+      let lastEnd = -Infinity;
+      for (const [s, e] of iv) {
+        if (s >= lastEnd) {
+          kept++;
+          lastEnd = e;
+        }
+      }
+      return String(n - kept);
+    },
+    tests: [
+      { input: "4 2\n1 2\n2 3\n3 4\n1 3", sample: true },
+      { input: "3 2\n1 2\n1 2\n1 2", sample: true },
+      { input: "2 2\n1 2\n2 3", sample: true },
+      { input: "1 2\n0 10" },
+      { input: "5 2\n0 5\n1 2\n2 3\n3 4\n4 6" }
+    ]
+  },
+  {
+    slug: "best-time-to-buy-and-sell-stock-ii",
+    title: "Best Time to Buy and Sell Stock II",
+    difficulty: "EASY",
+    statement: `Given daily prices, you may buy and sell as many times as you like (holding at most one share at a time; selling and re-buying the same day is allowed). Return the maximum total profit.
+
+**Input**: one line of space-separated prices.
+**Output**: the maximum profit.`,
+    constraints: `- 1 \u2264 prices.length \u2264 3\xB710^4
+- 0 \u2264 prices[i] \u2264 10^4`,
+    examples: [
+      {
+        input: "7 1 5 3 6 4",
+        output: "7",
+        explanation: "Buy 1 \u2192 sell 5 (+4), buy 3 \u2192 sell 6 (+3)."
+      },
+      { input: "1 2 3 4 5", output: "4", explanation: "One long hold \u2014 or every daily rise; same total." },
+      { input: "7 6 4 3 1", output: "0" }
+    ],
+    hints: [
+      "With unlimited transactions, which price movements can you capture?",
+      "Any multi-day gain decomposes into consecutive daily gains: p[j] \u2212 p[i] = \u03A3 daily diffs.",
+      "Sum every positive prices[i] \u2212 prices[i\u22121]."
+    ],
+    editorial: `Harvest every rise: the answer is the sum of all positive day-over-day differences. Why the greedy is exact \u2014 any transaction's profit p[sell] \u2212 p[buy] telescopes into the sum of daily moves between them, so the best conceivable strategy can never beat collecting every positive move, and 'buy before each rise, sell after' actually achieves that collection. One pass, O(n)/O(1). Contrast with Stock I (single transaction \u2014 track min-so-far) and the k-transaction variants (DP): recognizing *which* constraint you're under is the real interview test here.`,
+    approaches: [
+      {
+        name: "Sum positive deltas",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "profit += max(0, p[i] \u2212 p[i\u22121]) \u2014 the telescoping argument makes it exact."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("best time to buy and sell stock ii greedy"),
+    tags: ["greedy", "array"],
+    starterCode: buildStarter("intArray", "int", "maxProfit"),
+    reference: (input) => {
+      const p = ints(lines(input)[0]);
+      let profit = 0;
+      for (let i = 1; i < p.length; i++) {
+        if (p[i] > p[i - 1]) profit += p[i] - p[i - 1];
+      }
+      return String(profit);
+    },
+    tests: [
+      { input: "7 1 5 3 6 4", sample: true },
+      { input: "1 2 3 4 5", sample: true },
+      { input: "7 6 4 3 1", sample: true },
+      { input: "5" },
+      { input: "2 1 2 0 1" },
+      { input: "3 3 5 0 0 3 1 4" }
+    ]
+  }
+];
+
+// src/data/problems/dynamic-programming.ts
+var first10 = (s) => ints(s.split("\n")[0]);
+var dynamicProgramming = [
+  {
+    slug: "climbing-stairs",
+    title: "Climbing Stairs",
+    difficulty: "EASY",
+    statement: `You climb a staircase of \`n\` steps, taking 1 or 2 steps at a time. How many distinct ways can you reach the top?
+
+**Input**: one line, the integer \`n\`.
+**Output**: the number of distinct ways.`,
+    constraints: `- 1 \u2264 n \u2264 45`,
+    examples: [
+      { input: "2", output: "2", explanation: "1+1 or 2." },
+      { input: "3", output: "3", explanation: "1+1+1, 1+2, 2+1." }
+    ],
+    hints: [
+      "The last move was a 1-step or a 2-step.",
+      "ways(n) = ways(n\u22121) + ways(n\u22122) \u2014 Fibonacci in disguise."
+    ],
+    editorial: `To stand on step n you arrived from n\u22121 or n\u22122, so \`ways(n) = ways(n\u22121) + ways(n\u22122)\` with \`ways(1)=1, ways(2)=2\` \u2014 the Fibonacci recurrence. Iterate with two rolling variables for O(n) time, O(1) space. This is the "hello world" of DP: define the state, find the transition, seed the base cases.`,
+    approaches: [
+      {
+        name: "Naive recursion",
+        complexityTime: "O(2\u207F)",
+        complexitySpace: "O(n)",
+        body: "Branches twice per step \u2014 exponential blowup from recomputed subproblems."
+      },
+      {
+        name: "Bottom-up with rolling variables",
+        complexityTime: "O(n)",
+        complexitySpace: "O(1)",
+        body: "Keep only the last two values of the recurrence."
+      }
+    ],
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode climbing stairs"),
+    tags: ["dynamic-programming", "math", "memoization"],
+    starterCode: buildStarter("int", "int", "climbStairs"),
+    reference: (input) => {
+      const n = int(lines(input)[0]);
+      let a = 1;
+      let b = 1;
+      for (let i = 0; i < n - 1; i++) {
+        [a, b] = [b, a + b];
+      }
+      return String(b);
+    },
+    tests: [
+      { input: "2", sample: true },
+      { input: "3", sample: true },
+      { input: "1" },
+      { input: "10" },
+      { input: "45" }
+    ]
+  },
+  {
+    slug: "min-cost-climbing-stairs",
+    title: "Min Cost Climbing Stairs",
+    difficulty: "EASY",
+    statement: `\`cost[i]\` is the toll for stepping on stair \`i\`; after paying you may climb 1 or 2 stairs. You may start at index 0 or 1. Return the minimum cost to reach the top (one past the last stair).
+
+**Input**: one line of space-separated integers \`cost\`.
+**Output**: the minimum total cost.`,
+    constraints: `- 2 \u2264 cost.length \u2264 1000
+- 0 \u2264 cost[i] \u2264 999`,
+    examples: [
+      { input: "10 15 20", output: "15", explanation: "Start at 15, jump to the top." },
+      { input: "1 100 1 1 1 100 1 1 100 1", output: "6" }
+    ],
+    hints: [
+      "dp[i] = min cost to *leave* stair i = cost[i] + min(dp[i+1], dp[i+2]).",
+      "Or forward: minimum cost to reach position i."
+    ],
+    editorial: `Let \`dp[i]\` be the cheapest way to stand on stair i: \`dp[i] = cost[i] + min(dp[i\u22121], dp[i\u22122])\` with free starts at 0 and 1. Answer is \`min(dp[n\u22121], dp[n\u22122])\` since either can jump off the top. Two rolling variables suffice \u2192 O(n) time, O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("min cost climbing stairs dp"),
+    tags: ["dynamic-programming", "array"],
+    starterCode: buildStarter("intArray", "int", "minCostClimbingStairs"),
+    reference: (input) => {
+      const cost = first10(input);
+      let a = cost[0];
+      let b = cost[1];
+      for (let i = 2; i < cost.length; i++) {
+        [a, b] = [b, cost[i] + Math.min(a, b)];
+      }
+      return String(Math.min(a, b));
+    },
+    tests: [
+      { input: "10 15 20", sample: true },
+      { input: "1 100 1 1 1 100 1 1 100 1", sample: true },
+      { input: "0 0" },
+      { input: "5 3" },
+      { input: "1 2 3 4 5" }
+    ]
+  },
+  {
+    slug: "house-robber",
+    title: "House Robber",
+    difficulty: "MEDIUM",
+    statement: `A robber walks a street of houses with cash amounts \`nums\`, but robbing two **adjacent** houses trips the alarm. Return the maximum loot.
+
+**Input**: one line of space-separated non-negative integers.
+**Output**: the maximum amount.`,
+    constraints: `- 1 \u2264 nums.length \u2264 100
+- 0 \u2264 nums[i] \u2264 400`,
+    examples: [
+      { input: "1 2 3 1", output: "4", explanation: "Rob houses 0 and 2." },
+      { input: "2 7 9 3 1", output: "12", explanation: "Rob 2 + 9 + 1." }
+    ],
+    hints: [
+      "For each house: rob it (skip the previous) or skip it.",
+      "dp[i] = max(dp[i\u22121], dp[i\u22122] + nums[i])."
+    ],
+    editorial: `At house i the choice is binary: skip (keep \`dp[i\u22121]\`) or rob (gain \`nums[i] + dp[i\u22122]\`). Take the max. Two rolling variables replace the array \u2192 O(n) time, O(1) space. The "include/exclude with a gap" pattern recurs in many disguises (deleting elements, scheduling, etc.).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode house robber"),
+    tags: ["dynamic-programming", "array"],
+    starterCode: buildStarter("intArray", "int", "rob"),
+    reference: (input) => {
+      const nums = first10(input);
+      let prev = 0;
+      let cur = 0;
+      for (const x of nums) {
+        [prev, cur] = [cur, Math.max(cur, prev + x)];
+      }
+      return String(cur);
+    },
+    tests: [
+      { input: "1 2 3 1", sample: true },
+      { input: "2 7 9 3 1", sample: true },
+      { input: "5" },
+      { input: "10 1" },
+      { input: "2 1 1 2" }
+    ]
+  },
+  {
+    slug: "house-robber-ii",
+    title: "House Robber II",
+    difficulty: "MEDIUM",
+    statement: `Same as House Robber, but the houses form a **circle** \u2014 the first and last are adjacent. Return the maximum loot.
+
+**Input**: one line of space-separated non-negative integers.
+**Output**: the maximum amount.`,
+    constraints: `- 1 \u2264 nums.length \u2264 100
+- 0 \u2264 nums[i] \u2264 1000`,
+    examples: [
+      { input: "2 3 2", output: "3", explanation: "Houses 0 and 2 are adjacent \u2014 can't take both 2s." },
+      { input: "1 2 3 1", output: "4" }
+    ],
+    hints: [
+      "The circle only forbids taking both endpoints.",
+      "Solve the linear problem twice: once excluding the first house, once excluding the last."
+    ],
+    editorial: `In a circle you can never rob both the first and last house, so the answer is the better of two **linear** House Robber runs: on \`nums[0..n\u22122]\` and on \`nums[1..n\u22121]\` (single-house case handled directly). Reduces a new constraint to a solved subproblem \u2014 a favorite interview move. O(n), O(1).`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode house robber ii"),
+    tags: ["dynamic-programming", "array"],
+    starterCode: buildStarter("intArray", "int", "robCircular"),
+    reference: (input) => {
+      const nums = first10(input);
+      if (nums.length === 1) return String(nums[0]);
+      const linear = (arr) => {
+        let prev = 0;
+        let cur = 0;
+        for (const x of arr) {
+          [prev, cur] = [cur, Math.max(cur, prev + x)];
+        }
+        return cur;
+      };
+      return String(Math.max(linear(nums.slice(1)), linear(nums.slice(0, -1))));
+    },
+    tests: [
+      { input: "2 3 2", sample: true },
+      { input: "1 2 3 1", sample: true },
+      { input: "1 2 3" },
+      { input: "1" },
+      { input: "200 3 140 20 10" }
+    ]
+  },
+  {
+    slug: "coin-change",
+    title: "Coin Change",
+    difficulty: "MEDIUM",
+    statement: `Given coin denominations \`coins\` (unlimited supply) and an \`amount\`, return the fewest coins needed to make the amount exactly, or \`-1\` if impossible.
+
+**Input**
+- Line 1: space-separated coin values
+- Line 2: integer \`amount\`
+
+**Output**: the fewest coins, or -1.`,
+    constraints: `- 1 \u2264 coins.length \u2264 12
+- 1 \u2264 coins[i] \u2264 2^31 \u2212 1
+- 0 \u2264 amount \u2264 10^4`,
+    examples: [
+      { input: "1 2 5\n11", output: "3", explanation: "5 + 5 + 1." },
+      { input: "2\n3", output: "-1" },
+      { input: "1\n0", output: "0" }
+    ],
+    hints: [
+      "Greedy (largest coin first) fails: coins [1,3,4], amount 6.",
+      "dp[a] = fewest coins for amount a = 1 + min over coins c of dp[a \u2212 c]."
+    ],
+    editorial: `Unbounded knapsack over amounts: \`dp[a] = 1 + min(dp[a \u2212 c])\` across coins, seeded with \`dp[0] = 0\` and \u221E elsewhere. Fill upward to \`amount\`; unreachable stays \u221E \u2192 -1. Greedy fails on non-canonical coin systems, which is exactly why this is a DP classic. O(amount \xD7 coins) time, O(amount) space.`,
+    approaches: [
+      {
+        name: "BFS on amounts",
+        complexityTime: "O(amount \xB7 coins)",
+        complexitySpace: "O(amount)",
+        body: "Level = number of coins used; first time you reach `amount` is optimal."
+      },
+      {
+        name: "Bottom-up DP",
+        complexityTime: "O(amount \xB7 coins)",
+        complexitySpace: "O(amount)",
+        body: "dp over every amount from 1 to target."
+      }
+    ],
+    complexityTime: "O(amount \xB7 coins)",
+    complexitySpace: "O(amount)",
+    youtubeUrl: yt("neetcode coin change"),
+    tags: ["dynamic-programming", "bfs", "array"],
+    starterCode: buildStarter("intArrayTarget", "int", "coinChange"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const coins = ints(l0);
+      const amount = int(l1);
+      const dp = new Array(amount + 1).fill(Infinity);
+      dp[0] = 0;
+      for (let a = 1; a <= amount; a++) {
+        for (const c of coins) {
+          if (c <= a && dp[a - c] + 1 < dp[a]) dp[a] = dp[a - c] + 1;
+        }
+      }
+      return String(dp[amount] === Infinity ? -1 : dp[amount]);
+    },
+    tests: [
+      { input: "1 2 5\n11", sample: true },
+      { input: "2\n3", sample: true },
+      { input: "1\n0", sample: true },
+      { input: "1 3 4\n6" },
+      { input: "186 419 83 408\n6249" }
+    ]
+  },
+  {
+    slug: "longest-increasing-subsequence",
+    title: "Longest Increasing Subsequence",
+    difficulty: "MEDIUM",
+    statement: `Return the length of the longest **strictly increasing** subsequence of \`nums\` (elements keep their order but need not be contiguous).
+
+**Input**: one line of space-separated integers.
+**Output**: the LIS length.`,
+    constraints: `- 1 \u2264 nums.length \u2264 2500
+- -10^4 \u2264 nums[i] \u2264 10^4`,
+    examples: [
+      { input: "10 9 2 5 3 7 101 18", output: "4", explanation: "[2,3,7,101] (or [2,5,7,18])." },
+      { input: "0 1 0 3 2 3", output: "4" },
+      { input: "7 7 7 7", output: "1" }
+    ],
+    hints: [
+      "dp[i] = LIS ending exactly at i = 1 + max dp[j] over j < i with nums[j] < nums[i].",
+      "The O(n log n) upgrade: maintain 'tails' \u2014 the smallest possible tail of an increasing subsequence of each length \u2014 with binary search."
+    ],
+    editorial: `Quadratic DP: \`dp[i] = 1 + max(dp[j])\` over earlier smaller elements; answer is the max entry. The celebrated O(n log n) method keeps \`tails[k]\` = smallest tail of any increasing subsequence of length k+1; each element binary-searches its slot (patience sorting). Both are worth knowing \u2014 the follow-up is almost guaranteed.`,
+    approaches: [
+      {
+        name: "Quadratic DP",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(n)",
+        body: "Best subsequence ending at each index."
+      },
+      {
+        name: "Patience sorting / tails + binary search",
+        complexityTime: "O(n log n)",
+        complexitySpace: "O(n)",
+        body: "tails stays sorted; lower-bound each element into it."
+      }
+    ],
+    complexityTime: "O(n log n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode longest increasing subsequence"),
+    tags: ["dynamic-programming", "binary-search", "array"],
+    starterCode: buildStarter("intArray", "int", "lengthOfLIS"),
+    reference: (input) => {
+      const nums = first10(input);
+      const dp = new Array(nums.length).fill(1);
+      let best = 1;
+      for (let i = 1; i < nums.length; i++) {
+        for (let j = 0; j < i; j++) {
+          if (nums[j] < nums[i]) dp[i] = Math.max(dp[i], dp[j] + 1);
+        }
+        best = Math.max(best, dp[i]);
+      }
+      return String(best);
+    },
+    tests: [
+      { input: "10 9 2 5 3 7 101 18", sample: true },
+      { input: "0 1 0 3 2 3", sample: true },
+      { input: "7 7 7 7", sample: true },
+      { input: "1" },
+      { input: "5 4 3 2 1" }
+    ]
+  },
+  {
+    slug: "longest-common-subsequence",
+    title: "Longest Common Subsequence",
+    difficulty: "MEDIUM",
+    statement: `Given strings \`text1\` and \`text2\`, return the length of their longest common subsequence (characters in order, not necessarily contiguous); 0 if none.
+
+**Input**
+- Line 1: string \`text1\`
+- Line 2: string \`text2\`
+
+**Output**: the LCS length.`,
+    constraints: `- 1 \u2264 lengths \u2264 1000
+- Lowercase English letters.`,
+    examples: [
+      { input: "abcde\nace", output: "3", explanation: '"ace".' },
+      { input: "abc\ndef", output: "0" }
+    ],
+    hints: [
+      "Compare last characters: equal \u2192 1 + LCS of both prefixes; unequal \u2192 best of dropping one.",
+      "Tabulate over prefix lengths (i, j) \u2014 the classic 2D grid."
+    ],
+    editorial: `The textbook 2D DP: \`dp[i][j]\` = LCS of the first i chars of text1 and first j of text2. Matching characters extend the diagonal (\`1 + dp[i\u22121][j\u22121]\`); otherwise take the better of dropping a character from either string. O(m\xB7n) time; two rows of space suffice. This grid underlies diff tools and edit distance alike.`,
+    complexityTime: "O(m\xB7n)",
+    complexitySpace: "O(min(m, n))",
+    youtubeUrl: yt("neetcode longest common subsequence"),
+    tags: ["dynamic-programming", "string"],
+    starterCode: buildStarter("twoStrings", "int", "longestCommonSubsequence"),
+    reference: (input) => {
+      const [a = "", b = ""] = lines(input);
+      const m = a.length;
+      const n = b.length;
+      const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+        }
+      }
+      return String(dp[m][n]);
+    },
+    tests: [
+      { input: "abcde\nace", sample: true },
+      { input: "abc\ndef", sample: true },
+      { input: "abc\nabc" },
+      { input: "bsbininm\njmjkbkjkv" },
+      { input: "a\na" }
+    ]
+  },
+  {
+    slug: "unique-paths",
+    title: "Unique Paths",
+    difficulty: "MEDIUM",
+    statement: `A robot starts at the top-left of an \`m \xD7 n\` grid and moves only right or down. How many distinct paths reach the bottom-right?
+
+**Input**: one line, two integers \`m n\`.
+**Output**: the number of paths.`,
+    constraints: `- 1 \u2264 m, n \u2264 100
+- The answer fits in a 32-bit integer for the given tests.`,
+    examples: [
+      { input: "3 7", output: "28" },
+      { input: "3 2", output: "3" }
+    ],
+    hints: [
+      "Each cell is reached from above or from the left.",
+      "dp[i][j] = dp[i\u22121][j] + dp[i][j\u22121]; edges have exactly 1 path.",
+      "Closed form: C(m+n\u22122, m\u22121) \u2014 it's a combinatorics problem too."
+    ],
+    editorial: `Paths into a cell come from above or the left, so \`dp[i][j] = dp[i\u22121][j] + dp[i][j\u22121]\` with 1s along the borders. A single rolling row reduces space to O(n). The counting identity \`C(m+n\u22122, m\u22121)\` (choosing when to go down among all moves) gives an O(m+n) closed form \u2014 mention it and win points.`,
+    complexityTime: "O(m\xB7n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode unique paths"),
+    tags: ["dynamic-programming", "math", "combinatorics"],
+    starterCode: buildStarter("twoIntsLine", "int", "uniquePaths"),
+    reference: (input) => {
+      const [m, n] = ints(lines(input)[0]);
+      const row = new Array(n).fill(1);
+      for (let i = 1; i < m; i++) {
+        for (let j = 1; j < n; j++) row[j] += row[j - 1];
+      }
+      return String(row[n - 1]);
+    },
+    tests: [
+      { input: "3 7", sample: true },
+      { input: "3 2", sample: true },
+      { input: "1 1" },
+      { input: "10 10" },
+      { input: "1 25" }
+    ]
+  },
+  {
+    slug: "minimum-path-sum",
+    title: "Minimum Path Sum",
+    difficulty: "MEDIUM",
+    statement: `Given a grid of non-negative integers, find a path from top-left to bottom-right (moving only right or down) minimizing the sum of visited values. Return that sum.
+
+**Input**
+- Line 1: \`r c\`
+- Next r lines: the grid rows
+
+**Output**: the minimum path sum.`,
+    constraints: `- 1 \u2264 r, c \u2264 200
+- 0 \u2264 values \u2264 100`,
+    examples: [
+      { input: "3 3\n1 3 1\n1 5 1\n4 2 1", output: "7", explanation: "1\u21923\u21921\u21921\u21921." },
+      { input: "2 3\n1 2 3\n4 5 6", output: "12" }
+    ],
+    hints: [
+      "Same shape as Unique Paths, but take a min instead of a sum of counts.",
+      "dp[i][j] = grid[i][j] + min(dp[i\u22121][j], dp[i][j\u22121])."
+    ],
+    editorial: `Grid DP with the same dependency structure as Unique Paths: each cell's best cost is its own value plus the cheaper of the cell above or to the left; first row/column accumulate linearly. In-place accumulation over the grid gives O(r\xB7c) time with O(1) extra space.`,
+    complexityTime: "O(r\xB7c)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("minimum path sum dp"),
+    tags: ["dynamic-programming", "matrix"],
+    starterCode: buildStarter("matrix", "int", "minPathSum"),
+    reference: (input) => {
+      const ls = lines(input);
+      const [r, c] = ints(ls[0]);
+      const g = [];
+      for (let i = 0; i < r; i++) g.push(ints(ls[1 + i]));
+      for (let i = 0; i < r; i++) {
+        for (let j = 0; j < c; j++) {
+          if (i === 0 && j === 0) continue;
+          const up = i > 0 ? g[i - 1][j] : Infinity;
+          const left = j > 0 ? g[i][j - 1] : Infinity;
+          g[i][j] += Math.min(up, left);
+        }
+      }
+      return String(g[r - 1][c - 1]);
+    },
+    tests: [
+      { input: "3 3\n1 3 1\n1 5 1\n4 2 1", sample: true },
+      { input: "2 3\n1 2 3\n4 5 6", sample: true },
+      { input: "1 1\n5" },
+      { input: "1 4\n1 2 3 4" },
+      { input: "3 1\n2\n3\n4" }
+    ]
+  },
+  {
+    slug: "decode-ways",
+    title: "Decode Ways",
+    difficulty: "MEDIUM",
+    statement: `Letters map to digits A=1 \u2026 Z=26. Given a digit string \`s\`, count how many ways it can be decoded (e.g. "12" \u2192 "AB" or "L"). Leading zeros in a group are invalid.
+
+**Input**: one line, the digit string.
+**Output**: the number of decodings (0 if none).`,
+    constraints: `- 1 \u2264 s.length \u2264 100
+- Digits only; may contain zeros.`,
+    examples: [
+      { input: "12", output: "2" },
+      { input: "226", output: "3", explanation: "2|26, 22|6, 2|2|6." },
+      { input: "06", output: "0" }
+    ],
+    hints: [
+      "Like Climbing Stairs, but a step is valid only if the 1- or 2-digit group is a real letter.",
+      "A single '0' contributes nothing; '10'\u2013'26' allows a two-digit step.",
+      "dp[i] = (s[i\u22121] \u2260 '0' ? dp[i\u22121] : 0) + (s[i\u22122..i\u22121] \u2208 [10,26] ? dp[i\u22122] : 0)."
+    ],
+    editorial: `Climbing Stairs with legality checks: ending at position i, the last group was one digit (valid unless '0') or two digits (valid if 10\u201326). Sum the corresponding earlier counts. Zeros are the trap \u2014 '0' alone kills a path, and '30' has no decoding at all. O(n) time, O(1) space with rolling variables.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode decode ways"),
+    tags: ["dynamic-programming", "string"],
+    starterCode: buildStarter("string", "int", "numDecodings"),
+    reference: (input) => {
+      const s = (lines(input)[0] ?? "").trim();
+      if (!s || s[0] === "0") return "0";
+      let prev = 1;
+      let cur = 1;
+      for (let i = 1; i < s.length; i++) {
+        let next = 0;
+        if (s[i] !== "0") next += cur;
+        const two = parseInt(s.slice(i - 1, i + 1), 10);
+        if (two >= 10 && two <= 26) next += prev;
+        [prev, cur] = [cur, next];
+        if (cur === 0) return "0";
+      }
+      return String(cur);
+    },
+    tests: [
+      { input: "12", sample: true },
+      { input: "226", sample: true },
+      { input: "06", sample: true },
+      { input: "10" },
+      { input: "2101" },
+      { input: "111111" }
+    ]
+  },
+  {
+    slug: "edit-distance",
+    title: "Edit Distance",
+    difficulty: "MEDIUM",
+    statement: `Given strings \`word1\` and \`word2\`, return the minimum number of single-character operations (insert, delete, replace) to convert \`word1\` into \`word2\`.
+
+**Input**
+- Line 1: \`word1\`
+- Line 2: \`word2\`
+
+**Output**: the minimum operation count.`,
+    constraints: `- 0 \u2264 lengths \u2264 500
+- Lowercase English letters.`,
+    examples: [
+      { input: "horse\nros", output: "3" },
+      { input: "intention\nexecution", output: "5" }
+    ],
+    hints: [
+      "Compare the last characters of both prefixes.",
+      "Equal \u2192 no cost, move both. Unequal \u2192 1 + min(insert, delete, replace) on the smaller subproblems.",
+      "dp[i][j] over prefix lengths; first row/column are i and j (pure inserts/deletes)."
+    ],
+    editorial: `**Levenshtein distance**: \`dp[i][j]\` converts the first i chars of word1 into the first j of word2. Matching last characters inherit the diagonal; otherwise \`1 + min(dp[i\u22121][j] /*delete*/, dp[i][j\u22121] /*insert*/, dp[i\u22121][j\u22121] /*replace*/)\`. Borders are trivial conversions from/to empty. O(m\xB7n) time, one rolling row of space. Powers spell-checkers and diffs.`,
+    complexityTime: "O(m\xB7n)",
+    complexitySpace: "O(min(m, n))",
+    youtubeUrl: yt("neetcode edit distance"),
+    tags: ["dynamic-programming", "string"],
+    starterCode: buildStarter("twoStrings", "int", "minDistance"),
+    reference: (input) => {
+      const [a = "", b = ""] = lines(input);
+      const m = a.length;
+      const n = b.length;
+      const dp = Array.from({ length: m + 1 }, (_, i) => {
+        const row = new Array(n + 1).fill(0);
+        row[0] = i;
+        return row;
+      });
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+        }
+      }
+      return String(dp[m][n]);
+    },
+    tests: [
+      { input: "horse\nros", sample: true },
+      { input: "intention\nexecution", sample: true },
+      { input: "\nabc" },
+      { input: "abc\n" },
+      { input: "same\nsame" }
+    ]
+  },
+  {
+    slug: "partition-equal-subset-sum",
+    title: "Partition Equal Subset Sum",
+    difficulty: "MEDIUM",
+    statement: `Return \`true\` if the array \`nums\` can be split into two subsets with equal sums.
+
+**Input**: one line of space-separated positive integers.
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- 1 \u2264 nums.length \u2264 200
+- 1 \u2264 nums[i] \u2264 100`,
+    examples: [
+      { input: "1 5 11 5", output: "true", explanation: "[1,5,5] and [11]." },
+      { input: "1 2 3 5", output: "false" }
+    ],
+    hints: [
+      "An odd total is an instant no.",
+      "Otherwise: does any subset sum to total/2? That's 0/1 knapsack.",
+      "Boolean dp over reachable sums; iterate sums downward to avoid reusing an element."
+    ],
+    editorial: `Reduce to **subset-sum**: a valid split exists iff some subset reaches \`total/2\` (odd totals fail immediately). Boolean DP over achievable sums: for each number, mark \`dp[s] |= dp[s \u2212 num]\`, sweeping \`s\` **downward** so each element is used at most once. O(n \xB7 total/2) time, O(total/2) space \u2014 the canonical 0/1 knapsack feasibility table.`,
+    complexityTime: "O(n \xB7 sum)",
+    complexitySpace: "O(sum)",
+    youtubeUrl: yt("neetcode partition equal subset sum"),
+    tags: ["dynamic-programming", "knapsack", "array"],
+    starterCode: buildStarter("intArray", "bool", "canPartition"),
+    reference: (input) => {
+      const nums = first10(input);
+      const total = nums.reduce((a, b) => a + b, 0);
+      if (total % 2 !== 0) return boolOut(false);
+      const target = total / 2;
+      const dp = new Array(target + 1).fill(false);
+      dp[0] = true;
+      for (const x of nums) {
+        for (let s = target; s >= x; s--) {
+          if (dp[s - x]) dp[s] = true;
+        }
+      }
+      return boolOut(dp[target]);
+    },
+    tests: [
+      { input: "1 5 11 5", sample: true },
+      { input: "1 2 3 5", sample: true },
+      { input: "1 1" },
+      { input: "3" },
+      { input: "2 2 1 1" }
+    ]
+  },
+  {
+    slug: "target-sum",
+    title: "Target Sum",
+    difficulty: "MEDIUM",
+    statement: `Assign \`+\` or \`-\` to every element of \`nums\`; count the assignments whose total equals \`target\`.
+
+**Input**
+- Line 1: space-separated non-negative integers
+- Line 2: integer \`target\`
+
+**Output**: the number of ways.`,
+    constraints: `- 1 \u2264 nums.length \u2264 20
+- 0 \u2264 nums[i] \u2264 1000; \u03A3nums \u2264 1000
+- -1000 \u2264 target \u2264 1000`,
+    examples: [
+      { input: "1 1 1 1 1\n3", output: "5" },
+      { input: "1\n1", output: "1" }
+    ],
+    hints: [
+      "Let P = sum of positives, N = sum of negatives. P \u2212 N = target and P + N = total.",
+      "So P = (target + total) / 2 \u2014 count subsets summing to P.",
+      "If target + total is odd or negative, the answer is 0."
+    ],
+    editorial: `Algebra collapses this to **counting subset-sums**: positives must total \`(target + \u03A3)/2\`. If that's fractional or negative, zero ways. Then a counting knapsack \u2014 \`dp[s] += dp[s \u2212 num]\`, iterating sums downward per element \u2014 tallies the subsets. O(n \xB7 \u03A3) time. The transformation is the interview insight; the DP is routine.`,
+    complexityTime: "O(n \xB7 sum)",
+    complexitySpace: "O(sum)",
+    youtubeUrl: yt("target sum dp leetcode"),
+    tags: ["dynamic-programming", "knapsack", "backtracking"],
+    starterCode: buildStarter("intArrayTarget", "int", "findTargetSumWays"),
+    reference: (input) => {
+      const [l0, l1] = lines(input);
+      const nums = ints(l0);
+      const target = int(l1);
+      const total = nums.reduce((a, b) => a + b, 0);
+      const doubled = target + total;
+      if (doubled < 0 || doubled % 2 !== 0) return "0";
+      const goal = doubled / 2;
+      const dp = new Array(goal + 1).fill(0);
+      dp[0] = 1;
+      for (const x of nums) {
+        for (let s = goal; s >= x; s--) dp[s] += dp[s - x];
+      }
+      return String(dp[goal]);
+    },
+    tests: [
+      { input: "1 1 1 1 1\n3", sample: true },
+      { input: "1\n1", sample: true },
+      { input: "1\n2" },
+      { input: "0 0 1\n1" },
+      { input: "2 3 5 7\n1" }
+    ]
+  },
+  {
+    slug: "palindromic-substrings",
+    title: "Palindromic Substrings",
+    difficulty: "MEDIUM",
+    statement: `Count the palindromic substrings of \`s\` (substrings with different positions count separately).
+
+**Input**: one line, the string \`s\`.
+**Output**: the count.`,
+    constraints: `- 1 \u2264 s.length \u2264 1000
+- Lowercase English letters.`,
+    examples: [
+      { input: "abc", output: "3", explanation: "a, b, c." },
+      { input: "aaa", output: "6", explanation: "a\xD73, aa\xD72, aaa." }
+    ],
+    hints: [
+      "Every palindrome has a center \u2014 a character or a gap between two.",
+      "Expand around each of the 2n\u22121 centers, counting while the ends match."
+    ],
+    editorial: `**Expand around center**: each of the \`2n \u2212 1\` centers (n characters + n\u22121 gaps) grows outward while the boundary characters match, counting one palindrome per successful expansion. O(n\xB2) time, O(1) space, and far simpler than the DP table. (Manacher's algorithm reaches O(n) if the interviewer pushes.)`,
+    complexityTime: "O(n\xB2)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode palindromic substrings"),
+    tags: ["dynamic-programming", "string", "two-pointers"],
+    starterCode: buildStarter("string", "int", "countSubstrings"),
+    reference: (input) => {
+      const s = (lines(input)[0] ?? "").trim();
+      let count = 0;
+      for (let center = 0; center < 2 * s.length - 1; center++) {
+        let l = Math.floor(center / 2);
+        let r = l + center % 2;
+        while (l >= 0 && r < s.length && s[l] === s[r]) {
+          count++;
+          l--;
+          r++;
+        }
+      }
+      return String(count);
+    },
+    tests: [
+      { input: "abc", sample: true },
+      { input: "aaa", sample: true },
+      { input: "a" },
+      { input: "abba" },
+      { input: "racecar" }
+    ]
+  },
+  {
+    slug: "longest-palindromic-subsequence",
+    title: "Longest Palindromic Subsequence",
+    difficulty: "MEDIUM",
+    statement: `Return the length of the longest **subsequence** of \`s\` that is a palindrome. A subsequence keeps relative order but need not be contiguous.
+
+**Input**: one line, the string \`s\`.
+**Output**: the length of the longest palindromic subsequence.`,
+    constraints: `- 1 \u2264 s.length \u2264 1000
+- Lowercase English letters.`,
+    examples: [
+      { input: "bbbab", output: "4", explanation: '"bbbb".' },
+      { input: "cbbd", output: "2", explanation: '"bb".' },
+      { input: "agbdba", output: "5", explanation: '"abdba".' }
+    ],
+    hints: [
+      "Subsequence \u2260 substring \u2014 'longest palindromic substring' techniques don't transfer.",
+      "Interval DP: define dp[i][j] = LPS length within s[i..j].",
+      "If s[i] == s[j], they wrap the inside: 2 + dp[i+1][j\u22121]; otherwise drop one end and take the max."
+    ],
+    editorial: `Interval DP over substring ranges: \`dp[i][j]\` is the longest palindromic subsequence inside \`s[i..j]\`. Matching endpoints contribute both characters around the inner answer (\`2 + dp[i+1][j\u22121]\`); mismatched endpoints mean at least one is expendable (\`max(dp[i+1][j], dp[i][j\u22121])\`). Fill by increasing interval length (or iterate i downward, j upward) with single characters as the base case 1. O(n\xB2) time and space; a rolling 1-D array cuts memory. The slick alternative \u2014 LPS(s) = LCS(s, reverse(s)) \u2014 reduces it to a problem you already know, and knowing *both* framings is the flex. This DP also answers 'minimum insertions to make s a palindrome': n \u2212 LPS(s).`,
+    approaches: [
+      {
+        name: "Interval DP",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(n\xB2) \u2192 O(n) rolled",
+        body: "dp[i][j] over ranges; endpoints match \u2192 wrap, else drop an end."
+      },
+      {
+        name: "LCS with the reverse",
+        complexityTime: "O(n\xB2)",
+        complexitySpace: "O(n\xB2)",
+        body: "LPS(s) = LCS(s, reverse(s)) \u2014 reuse the LCS table verbatim."
+      }
+    ],
+    complexityTime: "O(n\xB2)",
+    complexitySpace: "O(n\xB2)",
+    youtubeUrl: yt("longest palindromic subsequence dp"),
+    tags: ["dynamic-programming", "string", "interval-dp"],
+    starterCode: buildStarter("string", "int", "longestPalindromeSubseq"),
+    reference: (input) => {
+      const s = (lines(input)[0] ?? "").trim();
+      const n = s.length;
+      if (n === 0) return "0";
+      const dp = Array.from({ length: n }, () => new Array(n).fill(0));
+      for (let i = n - 1; i >= 0; i--) {
+        dp[i][i] = 1;
+        for (let j = i + 1; j < n; j++) {
+          dp[i][j] = s[i] === s[j] ? 2 + (j - i > 1 ? dp[i + 1][j - 1] : 0) : Math.max(dp[i + 1][j], dp[i][j - 1]);
+        }
+      }
+      return String(dp[0][n - 1]);
+    },
+    tests: [
+      { input: "bbbab", sample: true },
+      { input: "cbbd", sample: true },
+      { input: "agbdba", sample: true },
+      { input: "a" },
+      { input: "abcdef" },
+      { input: "aibohphobia" }
+    ]
+  },
+  {
+    slug: "perfect-squares",
+    title: "Perfect Squares",
+    difficulty: "MEDIUM",
+    statement: `Return the least number of perfect squares (1, 4, 9, 16, \u2026) that sum to \`n\`.
+
+**Input**: one line, the integer \`n\`.
+**Output**: the minimum count.`,
+    constraints: `- 1 \u2264 n \u2264 10^4`,
+    examples: [
+      { input: "12", output: "3", explanation: "4 + 4 + 4." },
+      { input: "13", output: "2", explanation: "4 + 9." }
+    ],
+    hints: [
+      "It's coin change with coin denominations 1, 4, 9, 16, \u2026 \u2014 unlimited supply, minimize coins.",
+      "dp[i] = 1 + min over squares j\xB2 \u2264 i of dp[i \u2212 j\xB2].",
+      "Greedy (take the largest square) fails: 12 \u2192 9+1+1+1 is four, not three."
+    ],
+    editorial: `Unbounded coin change in disguise: denominations are the squares up to n. Build \`dp[0..n]\` with dp[0] = 0 and \`dp[i] = 1 + min(dp[i \u2212 j\xB2])\` over all j\xB2 \u2264 i. O(n\xB7\u221An) time, O(n) space \u2014 comfortably fast for 10\u2074. Greedy-largest-square fails (12 = 9+1+1+1 vs 4+4+4), which is worth saying because it's the trap. Number-theory dessert: **Lagrange's four-square theorem** caps every answer at 4, and Legendre's three-square theorem characterizes exactly when the answer is 4 (n of the form 4\u1D43(8b+7)) \u2014 so an O(\u221An) mathematical solution exists. Mentioning it after coding the DP is pure bonus signal.`,
+    approaches: [
+      {
+        name: "Coin-change DP",
+        complexityTime: "O(n\xB7\u221An)",
+        complexitySpace: "O(n)",
+        body: "dp[i] = 1 + min dp[i \u2212 j\xB2]; squares are the coin set."
+      },
+      {
+        name: "BFS on remainders",
+        complexityTime: "O(n\xB7\u221An)",
+        complexitySpace: "O(n)",
+        body: "Shortest path from n to 0 subtracting squares \u2014 finds the level (answer) early."
+      },
+      {
+        name: "Number theory",
+        complexityTime: "O(\u221An)",
+        complexitySpace: "O(1)",
+        body: "Answers are only ever 1\u20134 (Lagrange); classify with Legendre's condition."
+      }
+    ],
+    complexityTime: "O(n\xB7\u221An)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("perfect squares leetcode dp"),
+    tags: ["dynamic-programming", "math", "bfs"],
+    starterCode: buildStarter("int", "int", "numSquares"),
+    reference: (input) => {
+      const n = int(lines(input)[0]);
+      const dp = new Array(n + 1).fill(Infinity);
+      dp[0] = 0;
+      for (let i = 1; i <= n; i++) {
+        for (let j = 1; j * j <= i; j++) {
+          const cand = dp[i - j * j] + 1;
+          if (cand < dp[i]) dp[i] = cand;
+        }
+      }
+      return String(dp[n]);
+    },
+    tests: [
+      { input: "12", sample: true },
+      { input: "13", sample: true },
+      { input: "1" },
+      { input: "7" },
+      { input: "9999" },
+      { input: "8935" }
+    ]
+  }
+];
+
+// src/data/problems/bit-manipulation.ts
+var first11 = (s) => ints(s.split("\n")[0]);
+var bitManipulation = [
+  {
+    slug: "single-number",
+    title: "Single Number",
+    difficulty: "EASY",
+    statement: `Every element of \`nums\` appears exactly twice except one, which appears once. Find it in O(n) time and O(1) space.
+
+**Input**: one line of space-separated integers.
+**Output**: the single number.`,
+    constraints: `- 1 \u2264 nums.length \u2264 3\xB710^4 (odd)
+- Each value appears twice except one.`,
+    examples: [
+      { input: "2 2 1", output: "1" },
+      { input: "4 1 2 1 2", output: "4" }
+    ],
+    hints: [
+      "x ^ x = 0 and x ^ 0 = x.",
+      "XOR everything \u2014 pairs annihilate, the loner survives."
+    ],
+    editorial: `XOR is associative, commutative, and self-inverse, so XOR-folding the whole array cancels every pair and leaves the unique element. One pass, no extra memory \u2014 the cleanest bit-trick in the interview canon.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode single number"),
+    tags: ["bit-manipulation", "array"],
+    starterCode: buildStarter("intArray", "int", "singleNumber"),
+    reference: (input) => {
+      const nums = first11(input);
+      return String(nums.reduce((a, b) => a ^ b, 0));
+    },
+    tests: [
+      { input: "2 2 1", sample: true },
+      { input: "4 1 2 1 2", sample: true },
+      { input: "1" },
+      { input: "-3 5 5" },
+      { input: "7 3 7 9 3" }
+    ]
+  },
+  {
+    slug: "single-number-ii",
+    title: "Single Number II",
+    difficulty: "MEDIUM",
+    statement: `Every element appears exactly **three times** except one, which appears once. Find it in O(n) time and O(1) space.
+
+**Input**: one line of space-separated integers.
+**Output**: the single number.`,
+    constraints: `- 1 \u2264 nums.length \u2264 3\xB710^4
+- -2^31 \u2264 values \u2264 2^31 \u2212 1`,
+    examples: [
+      { input: "2 2 3 2", output: "3" },
+      { input: "0 1 0 1 0 1 99", output: "99" }
+    ],
+    hints: [
+      "Plain XOR doesn't cancel triples.",
+      "Count each bit position mod 3: the remainder pattern is the answer's bit.",
+      "The slick version tracks 'seen once' and 'seen twice' masks with two variables."
+    ],
+    editorial: `Per bit position, the total count of set bits across the array is \u2261 the unique number's bit (mod 3), since triples contribute multiples of 3. Summing each of the 32 positions mod 3 reconstructs the answer (mind the sign bit). The two-variable automaton (\`ones\`, \`twos\`) does the same in a single elegant pass. O(32n) \u2192 O(n), O(1) space.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("single number ii bit manipulation"),
+    tags: ["bit-manipulation", "array"],
+    starterCode: buildStarter("intArray", "int", "singleNumberII"),
+    reference: (input) => {
+      const nums = first11(input);
+      let ones = 0;
+      let twos = 0;
+      for (const x of nums) {
+        ones = (ones ^ x) & ~twos;
+        twos = (twos ^ x) & ~ones;
+      }
+      return String(ones);
+    },
+    tests: [
+      { input: "2 2 3 2", sample: true },
+      { input: "0 1 0 1 0 1 99", sample: true },
+      { input: "5" },
+      { input: "-2 -2 1 -2" },
+      { input: "30000 500 100 30000 100 30000 100" }
+    ]
+  },
+  {
+    slug: "number-of-1-bits",
+    title: "Number of 1 Bits",
+    difficulty: "EASY",
+    statement: `Return the number of set bits (the Hamming weight) in the binary representation of a non-negative integer \`n\`.
+
+**Input**: one line, the integer \`n\`.
+**Output**: the count of 1 bits.`,
+    constraints: `- 0 \u2264 n \u2264 2^31 \u2212 1`,
+    examples: [
+      { input: "11", output: "3", explanation: "1011\u2082." },
+      { input: "128", output: "1", explanation: "10000000\u2082." }
+    ],
+    hints: [
+      "Checking all 32 bits works. Can you loop only over the set bits?",
+      "n & (n \u2212 1) clears the lowest set bit."
+    ],
+    editorial: `The check-each-bit loop is fine, but **Kernighan's trick** is the expected answer: \`n & (n \u2212 1)\` zeroes the lowest set bit, so looping until n hits 0 iterates exactly once per set bit. O(number of 1s) \u2014 and the same identity powers the "power of two" test.`,
+    complexityTime: "O(set bits)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("number of 1 bits kernighan"),
+    tags: ["bit-manipulation"],
+    starterCode: buildStarter("int", "int", "hammingWeight"),
+    reference: (input) => {
+      let n = int(lines(input)[0]);
+      let count = 0;
+      while (n !== 0) {
+        n &= n - 1;
+        count++;
+      }
+      return String(count);
+    },
+    tests: [
+      { input: "11", sample: true },
+      { input: "128", sample: true },
+      { input: "0" },
+      { input: "1" },
+      { input: "2147483647" }
+    ]
+  },
+  {
+    slug: "counting-bits",
+    title: "Counting Bits",
+    difficulty: "EASY",
+    statement: `For every \`i\` from 0 to \`n\`, output the number of 1 bits in \`i\`. Aim for O(n) total \u2014 better than calling popcount n times.
+
+**Input**: one line, the integer \`n\`.
+**Output**: n+1 counts, space-separated.`,
+    constraints: `- 0 \u2264 n \u2264 10^5`,
+    examples: [
+      { input: "2", output: "0 1 1" },
+      { input: "5", output: "0 1 1 2 1 2" }
+    ],
+    hints: [
+      "Relate bits(i) to a smaller, already-computed value.",
+      "bits(i) = bits(i >> 1) + (i & 1) \u2014 shift off the last bit.",
+      "Or: bits(i) = bits(i & (i\u22121)) + 1."
+    ],
+    editorial: `A one-line DP: \`bits[i] = bits[i >> 1] + (i & 1)\` \u2014 i without its last bit is already solved, then add the last bit back. Each entry is O(1) \u2192 O(n) total, meeting the follow-up bound. Equivalent recurrence: \`bits[i & (i\u22121)] + 1\` via Kernighan.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(n)",
+    youtubeUrl: yt("neetcode counting bits"),
+    tags: ["bit-manipulation", "dynamic-programming"],
+    starterCode: buildStarter("int", "intArray", "countBits"),
+    reference: (input) => {
+      const n = int(lines(input)[0]);
+      const bits = new Array(n + 1).fill(0);
+      for (let i = 1; i <= n; i++) bits[i] = bits[i >> 1] + (i & 1);
+      return arrOut(bits);
+    },
+    tests: [
+      { input: "2", sample: true },
+      { input: "5", sample: true },
+      { input: "0" },
+      { input: "16" },
+      { input: "31" }
+    ]
+  },
+  {
+    slug: "missing-number",
+    title: "Missing Number",
+    difficulty: "EASY",
+    statement: `Array \`nums\` holds \`n\` distinct values from the range \`[0, n]\` \u2014 exactly one value is missing. Find it in O(n) time and O(1) space.
+
+**Input**: one line of space-separated integers.
+**Output**: the missing value.`,
+    constraints: `- 1 \u2264 n \u2264 10^4
+- Values are distinct and within [0, n].`,
+    examples: [
+      { input: "3 0 1", output: "2" },
+      { input: "9 6 4 2 3 5 7 0 1", output: "8" }
+    ],
+    hints: [
+      "Gauss: the full range sums to n(n+1)/2.",
+      "Or XOR indices against values \u2014 matched pairs cancel."
+    ],
+    editorial: `Two O(1)-space one-liners: subtract the array's sum from \`n(n+1)/2\` (Gauss), or XOR every index 0..n with every value \u2014 everything pairs off except the missing number. XOR avoids any overflow concern in fixed-width languages.`,
+    complexityTime: "O(n)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("neetcode missing number"),
+    tags: ["bit-manipulation", "math", "array"],
+    starterCode: buildStarter("intArray", "int", "missingNumber"),
+    reference: (input) => {
+      const nums = first11(input);
+      const n = nums.length;
+      let x = n;
+      for (let i = 0; i < n; i++) x ^= i ^ nums[i];
+      return String(x);
+    },
+    tests: [
+      { input: "3 0 1", sample: true },
+      { input: "9 6 4 2 3 5 7 0 1", sample: true },
+      { input: "0" },
+      { input: "1" },
+      { input: "1 2" }
+    ]
+  },
+  {
+    slug: "power-of-two",
+    title: "Power of Two",
+    difficulty: "EASY",
+    statement: `Return \`true\` if integer \`n\` is a power of two (n = 2\u1D4F for some k \u2265 0). No loops or recursion needed.
+
+**Input**: one line, the integer \`n\` (may be negative).
+**Output**: \`true\` or \`false\`.`,
+    constraints: `- -2^31 \u2264 n \u2264 2^31 \u2212 1`,
+    examples: [
+      { input: "1", output: "true", explanation: "2\u2070." },
+      { input: "16", output: "true" },
+      { input: "3", output: "false" }
+    ],
+    hints: [
+      "A power of two has exactly one set bit.",
+      "n & (n \u2212 1) == 0 for powers of two \u2014 but watch n \u2264 0."
+    ],
+    editorial: `A positive power of two has exactly one set bit, so \`n > 0 && (n & (n \u2212 1)) == 0\` decides it in O(1). The \`n > 0\` guard matters: 0 and negatives would otherwise slip through the bit test.`,
+    complexityTime: "O(1)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("power of two bit manipulation"),
+    tags: ["bit-manipulation", "math"],
+    starterCode: buildStarter("int", "bool", "isPowerOfTwo"),
+    reference: (input) => {
+      const n = int(lines(input)[0]);
+      return boolOut(n > 0 && (n & n - 1) === 0);
+    },
+    tests: [
+      { input: "1", sample: true },
+      { input: "16", sample: true },
+      { input: "3", sample: true },
+      { input: "0" },
+      { input: "-16" },
+      { input: "1073741824" }
+    ]
+  },
+  {
+    slug: "reverse-bits",
+    title: "Reverse Bits",
+    difficulty: "EASY",
+    statement: `Given the 32-bit binary representation of an unsigned integer, reverse the bits and return the resulting unsigned integer value.
+
+**Input**: one line \u2014 a 32-character binary string.
+**Output**: the decimal value after reversal.`,
+    constraints: `- The input is exactly 32 binary digits.`,
+    examples: [
+      {
+        input: "00000010100101000001111010011100",
+        output: "964176192",
+        explanation: "Reversed: 00111001011110000010100101000000\u2082."
+      },
+      {
+        input: "11111111111111111111111111111101",
+        output: "3221225471"
+      }
+    ],
+    hints: [
+      "Build the result bit by bit: shift the result left, append n's lowest bit, shift n right.",
+      "Watch unsigned semantics \u2014 the result can exceed a signed 32-bit int."
+    ],
+    editorial: `Peel bits off one end and push them onto the other: 32 iterations of \`result = (result << 1) | (n & 1); n >>= 1\`. In Java use \`long\`/unsigned shifts and in Python mask with \`0xFFFFFFFF\` \u2014 the reversed value may not fit a signed int. Divide-and-conquer mask swapping (swap halves, then quarters\u2026) does it in 5 operations for extra credit.`,
+    complexityTime: "O(32)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("reverse bits leetcode"),
+    tags: ["bit-manipulation"],
+    starterCode: buildStarter("string", "long", "reverseBits"),
+    reference: (input) => {
+      const s = (lines(input)[0] ?? "").trim();
+      const reversed = s.split("").reverse().join("");
+      return String(parseInt(reversed, 2));
+    },
+    tests: [
+      { input: "00000010100101000001111010011100", sample: true },
+      { input: "11111111111111111111111111111101", sample: true },
+      { input: "00000000000000000000000000000000" },
+      { input: "11111111111111111111111111111111" },
+      { input: "10000000000000000000000000000000" }
+    ]
+  },
+  {
+    slug: "sum-of-two-integers",
+    title: "Sum of Two Integers",
+    difficulty: "MEDIUM",
+    statement: `Compute \`a + b\` **without using + or -**.
+
+**Input**: one line, two integers \`a b\`.
+**Output**: their sum.`,
+    constraints: `- -1000 \u2264 a, b \u2264 1000`,
+    examples: [
+      { input: "1 2", output: "3" },
+      { input: "2 3", output: "5" }
+    ],
+    hints: [
+      "XOR adds without carrying; AND finds where carries happen.",
+      "Repeat: sum = a ^ b, carry = (a & b) << 1, until the carry dies.",
+      "In Python, mask to 32 bits to simulate fixed-width overflow."
+    ],
+    editorial: `Binary addition splits into a carry-less sum (\`a ^ b\`) and the carries (\`(a & b) << 1\`); iterating until the carry is zero converges because each round pushes carries one bit left. Fixed-width languages get negative numbers free via two's complement; Python needs explicit 32-bit masking. O(32) iterations max.`,
+    complexityTime: "O(1)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("sum of two integers bit manipulation neetcode"),
+    tags: ["bit-manipulation", "math"],
+    starterCode: buildStarter("twoIntsLine", "int", "getSum"),
+    reference: (input) => {
+      const [a, b] = ints(lines(input)[0]);
+      return String(a + b);
+    },
+    tests: [
+      { input: "1 2", sample: true },
+      { input: "2 3", sample: true },
+      { input: "-1 1" },
+      { input: "-12 -8" },
+      { input: "1000 -999" }
+    ]
+  },
+  {
+    slug: "add-binary",
+    title: "Add Binary",
+    difficulty: "EASY",
+    statement: `Given two binary strings \`a\` and \`b\`, return their sum as a binary string.
+
+**Input**
+- Line 1: binary string \`a\`
+- Line 2: binary string \`b\`
+
+**Output**: the binary sum.`,
+    constraints: `- 1 \u2264 lengths \u2264 10^4
+- No leading zeros except the string "0".`,
+    examples: [
+      { input: "11\n1", output: "100" },
+      { input: "1010\n1011", output: "10101" }
+    ],
+    hints: [
+      "Grade-school addition from the rightmost bits with a carry.",
+      "Loop while either string has digits or a carry remains."
+    ],
+    editorial: `Walk both strings from the right summing \`bitA + bitB + carry\`; emit \`sum % 2\`, carry \`sum / 2\`, and keep going while any digits or carry remain (999\u2026+1 analog: "1" + "1" \u2192 "10"). Building the answer backwards and reversing avoids O(n\xB2) prepends. O(max(m, n)).`,
+    complexityTime: "O(max(m, n))",
+    complexitySpace: "O(max(m, n))",
+    youtubeUrl: yt("add binary leetcode"),
+    tags: ["bit-manipulation", "string", "math"],
+    starterCode: buildStarter("twoStrings", "string", "addBinary"),
+    reference: (input) => {
+      const [a = "0", b = "0"] = lines(input);
+      let i = a.length - 1;
+      let j = b.length - 1;
+      let carry = 0;
+      const out = [];
+      while (i >= 0 || j >= 0 || carry) {
+        const s = (i >= 0 ? +a[i--] : 0) + (j >= 0 ? +b[j--] : 0) + carry;
+        out.push(String(s % 2));
+        carry = s >> 1;
+      }
+      return out.reverse().join("");
+    },
+    tests: [
+      { input: "11\n1", sample: true },
+      { input: "1010\n1011", sample: true },
+      { input: "0\n0" },
+      { input: "1\n111" },
+      { input: "1111\n1111" }
+    ]
+  },
+  {
+    slug: "hamming-distance",
+    title: "Hamming Distance",
+    difficulty: "EASY",
+    statement: `The Hamming distance between two integers is the number of bit positions where they differ. Given \`x\` and \`y\`, return their Hamming distance.
+
+**Input**: one line, two integers \`x y\`.
+**Output**: the Hamming distance.`,
+    constraints: `- 0 \u2264 x, y \u2264 2^31 \u2212 1`,
+    examples: [
+      {
+        input: "1 4",
+        output: "2",
+        explanation: "001 vs 100 \u2014 bits 0 and 2 differ."
+      },
+      { input: "3 1", output: "1" }
+    ],
+    hints: [
+      "XOR marks exactly the differing positions with 1s.",
+      "The problem reduces to popcount(x ^ y).",
+      "Count set bits with Kernighan: n & (n \u2212 1) clears the lowest one."
+    ],
+    editorial: `Two ideas you already own, composed: \`x ^ y\` produces a mask whose set bits are precisely the disagreements, and Kernighan's loop (\`n &= n \u2212 1\`, once per set bit) counts them. O(number of differing bits), O(1) space. Hamming distance is the unit of error detection \u2014 it's why parity bits catch single-bit flips and how error-correcting codes measure themselves \u2014 so this tiny problem has real hardware pedigree. Follow-up to expect: *total* Hamming distance over an array \u2014 per-bit column counting (ones \xD7 zeros per position), not pairwise XOR.`,
+    approaches: [
+      {
+        name: "XOR + Kernighan popcount",
+        complexityTime: "O(set bits)",
+        complexitySpace: "O(1)",
+        body: "Diff mask via XOR; strip lowest set bit until zero."
+      }
+    ],
+    complexityTime: "O(1)",
+    complexitySpace: "O(1)",
+    youtubeUrl: yt("hamming distance leetcode"),
+    tags: ["bit-manipulation"],
+    starterCode: buildStarter("twoIntsLine", "int", "hammingDistance"),
+    reference: (input) => {
+      const [a, b] = ints(lines(input)[0]);
+      let x = a ^ b;
+      let count = 0;
+      while (x !== 0) {
+        x &= x - 1;
+        count++;
+      }
+      return String(count);
+    },
+    tests: [
+      { input: "1 4", sample: true },
+      { input: "3 1", sample: true },
+      { input: "0 0" },
+      { input: "0 2147483647" },
+      { input: "93 73" }
+    ]
+  }
+];
+
+// src/data/topics.ts
+var dsaTopics = [
+  {
+    slug: "arrays",
+    name: "Arrays",
+    description: "Traversals, prefix sums, in-place tricks, and the hash-map staples.",
+    icon: "Brackets",
+    order: 1,
+    problems: arrays
+  },
+  {
+    slug: "strings",
+    name: "Strings",
+    description: "Two pointers, sliding windows, and frequency counting on text.",
+    icon: "Type",
+    order: 2,
+    problems: strings
+  },
+  {
+    slug: "two-pointers",
+    name: "Two Pointers",
+    description: "Converging and fast/slow pointer techniques on sorted data.",
+    icon: "MoveHorizontal",
+    order: 3,
+    problems: twoPointers
+  },
+  {
+    slug: "sliding-window",
+    name: "Sliding Window",
+    description: "Fixed and variable windows for subarray/substring problems.",
+    icon: "RectangleHorizontal",
+    order: 4,
+    problems: slidingWindow
+  },
+  {
+    slug: "binary-search",
+    name: "Binary Search",
+    description: "Search on sorted arrays and on the answer space.",
+    icon: "Search",
+    order: 5,
+    problems: binarySearch
+  },
+  {
+    slug: "stacks-queues",
+    name: "Stacks & Queues",
+    description: "Monotonic stacks, queues, and expression parsing.",
+    icon: "Layers",
+    order: 6,
+    problems: stacksQueues
+  },
+  {
+    slug: "linked-list",
+    name: "Linked Lists",
+    description: "Pointer manipulation, cycle detection, and reversal.",
+    icon: "Link2",
+    order: 7,
+    problems: linkedList
+  },
+  {
+    slug: "trees",
+    name: "Trees",
+    description: "Binary trees, BSTs, traversals, and recursion.",
+    icon: "GitFork",
+    order: 8,
+    problems: trees
+  },
+  {
+    slug: "tries",
+    name: "Tries",
+    description: "Prefix trees for word and dictionary problems.",
+    icon: "Network",
+    order: 9,
+    problems: tries
+  },
+  {
+    slug: "heaps",
+    name: "Heaps & Priority Queues",
+    description: "Top-K, streaming medians, and scheduling with heaps.",
+    icon: "TriangleRight",
+    order: 10,
+    problems: heaps
+  },
+  {
+    slug: "backtracking",
+    name: "Backtracking",
+    description: "Systematic search over subsets, permutations, and boards.",
+    icon: "Undo2",
+    order: 11,
+    problems: backtracking
+  },
+  {
+    slug: "graphs",
+    name: "Graphs",
+    description: "BFS, DFS, topological sort, and union-find.",
+    icon: "Waypoints",
+    order: 12,
+    problems: graphs
+  },
+  {
+    slug: "greedy",
+    name: "Greedy",
+    description: "Locally optimal choices that yield global optima.",
+    icon: "TrendingUp",
+    order: 13,
+    problems: greedy
+  },
+  {
+    slug: "dynamic-programming",
+    name: "Dynamic Programming",
+    description: "Memoization and tabulation over overlapping subproblems.",
+    icon: "Boxes",
+    order: 14,
+    problems: dynamicProgramming
+  },
+  {
+    slug: "bit-manipulation",
+    name: "Bit Manipulation",
+    description: "XOR tricks, masks, and counting bits.",
+    icon: "Binary",
+    order: 15,
+    problems: bitManipulation
+  }
+];
+
+// src/data/dsa.ts
+function buildProblem(topic, p) {
+  const { reference, tests, ...rest } = p;
+  return {
+    ...rest,
+    id: p.slug,
+    topic: { slug: topic.slug, name: topic.name },
+    testCases: tests.map((t) => ({
+      input: t.input,
+      expectedOutput: reference(t.input),
+      isSample: !!t.sample
+    }))
+  };
+}
+var orderedTopics = [...dsaTopics].sort((a, b) => a.order - b.order);
+var topics = orderedTopics.map((t) => ({
+  slug: t.slug,
+  name: t.name,
+  description: t.description,
+  icon: t.icon,
+  order: t.order,
+  problemCount: t.problems.length
+}));
+var problems = orderedTopics.flatMap(
+  (t) => t.problems.map((p) => buildProblem(t, p))
+);
+var problemsBySlug = new Map(problems.map((p) => [p.slug, p]));
+function getProblem(slug) {
+  return problemsBySlug.get(slug) ?? null;
+}
+function assembleSource(p, language, code) {
+  const snippet = p.starterCode[language];
+  return snippet ? snippet.prefix + code + snippet.suffix : code;
+}
+
+// src/services/execution/constants.ts
+var LANGUAGES = [
+  {
+    id: "python",
+    label: "Python",
+    monaco: "python",
+    piston: { language: "python", version: "3.10.0" },
+    paiza: "python3",
+    judge0: 71,
+    ext: "py"
+  },
+  {
+    id: "javascript",
+    label: "JavaScript",
+    monaco: "javascript",
+    piston: { language: "javascript", version: "18.15.0" },
+    paiza: "javascript",
+    judge0: 63,
+    ext: "js"
+  },
+  {
+    id: "java",
+    label: "Java",
+    monaco: "java",
+    piston: { language: "java", version: "15.0.2" },
+    paiza: "java",
+    judge0: 62,
+    ext: "java"
+  },
+  {
+    id: "cpp",
+    label: "C++",
+    monaco: "cpp",
+    piston: { language: "c++", version: "10.2.0" },
+    paiza: "cpp",
+    judge0: 54,
+    ext: "cpp"
+  }
+];
+function getLanguage(id) {
+  return LANGUAGES.find((l) => l.id === id);
+}
+
+// src/services/execution/paiza.ts
+var PAIZA_URL = process.env.PAIZA_API_URL || "https://api.paiza.io";
+var PAIZA_KEY = process.env.PAIZA_API_KEY || "guest";
+var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var PaizaProvider = class {
+  async run(input) {
+    const lang = getLanguage(input.languageId);
+    if (!lang) {
+      return errResult(`Unsupported language: ${input.languageId}`);
+    }
+    const started = Date.now();
+    let created;
+    try {
+      const params = new URLSearchParams({
+        source_code: input.source,
+        language: lang.paiza,
+        input: input.stdin ?? "",
+        api_key: PAIZA_KEY
+      });
+      const res = await fetch(`${PAIZA_URL}/runners/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+        cache: "no-store"
+      });
+      if (!res.ok) {
+        return errResult(
+          res.status === 429 ? "The code runner is busy right now. Please try again in a moment." : `Runner error (${res.status}).`
+        );
+      }
+      created = await res.json();
+    } catch (err) {
+      return errResult(
+        err instanceof Error ? err.message : "Failed to reach the code runner."
+      );
+    }
+    if (!created.id) {
+      return errResult(created.error || "Runner did not accept the job.");
+    }
+    let details = null;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      await sleep(attempt === 0 ? 400 : 600);
+      try {
+        const res = await fetch(
+          `${PAIZA_URL}/runners/get_details?id=${created.id}&api_key=${PAIZA_KEY}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) continue;
+        const d = await res.json();
+        if (d.status === "completed") {
+          details = d;
+          break;
+        }
+      } catch {
+      }
+    }
+    const timeMs = Date.now() - started;
+    if (!details) {
+      return {
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        timeMs,
+        status: "timeout",
+        message: "Execution timed out."
+      };
+    }
+    const buildFailed = details.build_result === "failure";
+    if (buildFailed) {
+      return {
+        stdout: "",
+        stderr: details.build_stderr ?? "",
+        compileOutput: details.build_stderr ?? "",
+        exitCode: details.build_exit_code ? Number(details.build_exit_code) : null,
+        timeMs,
+        status: "compile_error"
+      };
+    }
+    const exitCode = details.exit_code ? Number(details.exit_code) : 0;
+    let status = "success";
+    if (details.result === "timeout") status = "timeout";
+    else if (details.result === "failure" || exitCode !== 0) status = "runtime_error";
+    return {
+      stdout: details.stdout ?? "",
+      stderr: details.stderr ?? "",
+      exitCode,
+      timeMs: details.time ? Math.round(Number(details.time) * 1e3) : timeMs,
+      status
+    };
+  }
+};
+function errResult(message) {
+  return {
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    timeMs: null,
+    status: "error",
+    message
+  };
+}
+
+// src/services/execution/piston.ts
+var PISTON_URL = process.env.PISTON_API_URL || "https://emkc.org/api/v2/piston";
+function fileNameFor(languageId, ext) {
+  if (languageId === "java") return "Main.java";
+  return `main.${ext}`;
+}
+var PistonProvider = class {
+  async run(input) {
+    const lang = getLanguage(input.languageId);
+    if (!lang) {
+      return {
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        timeMs: null,
+        status: "error",
+        message: `Unsupported language: ${input.languageId}`
+      };
+    }
+    const body = {
+      language: lang.piston.language,
+      version: lang.piston.version,
+      files: [
+        {
+          name: fileNameFor(lang.id, lang.ext),
+          content: input.source
+        }
+      ],
+      stdin: input.stdin ?? "",
+      compile_timeout: 1e4,
+      run_timeout: 8e3
+    };
+    const started = Date.now();
+    let res;
+    try {
+      res = await fetch(`${PISTON_URL}/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        // Do not cache execution requests.
+        cache: "no-store"
+      });
+    } catch (err) {
+      return {
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        timeMs: null,
+        status: "error",
+        message: err instanceof Error ? err.message : "Failed to reach the code runner."
+      };
+    }
+    const timeMs = Date.now() - started;
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return {
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        timeMs,
+        status: "error",
+        message: res.status === 429 ? "The code runner is rate-limited right now. Please try again in a moment." : `Runner error (${res.status}). ${text.slice(0, 200)}`
+      };
+    }
+    const data = await res.json();
+    if (data.compile && data.compile.code !== 0) {
+      return {
+        stdout: data.compile.stdout ?? "",
+        stderr: data.compile.stderr ?? "",
+        compileOutput: data.compile.output ?? "",
+        exitCode: data.compile.code,
+        timeMs,
+        status: "compile_error"
+      };
+    }
+    const run = data.run;
+    const timedOut = run.signal === "SIGKILL" || run.signal === "SIGXCPU";
+    let status = "success";
+    if (timedOut) status = "timeout";
+    else if (run.code !== 0) status = "runtime_error";
+    return {
+      stdout: run.stdout ?? "",
+      stderr: run.stderr ?? "",
+      exitCode: run.code,
+      timeMs,
+      status
+    };
+  }
+};
+
+// src/services/execution/judge0.ts
+var Judge0Provider = class {
+  base = process.env.JUDGE0_URL || "https://judge0-ce.p.rapidapi.com";
+  rapidKey = process.env.JUDGE0_RAPIDAPI_KEY;
+  headers() {
+    const h = { "Content-Type": "application/json" };
+    if (this.rapidKey) {
+      h["X-RapidAPI-Key"] = this.rapidKey;
+      h["X-RapidAPI-Host"] = new URL(this.base).host;
+    }
+    return h;
+  }
+  async run(input) {
+    const lang = getLanguage(input.languageId);
+    if (!lang) {
+      return base("error", { message: `Unsupported language: ${input.languageId}` });
+    }
+    const started = Date.now();
+    try {
+      const res = await fetch(
+        `${this.base}/submissions?base64_encoded=false&wait=true`,
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({
+            language_id: lang.judge0,
+            source_code: input.source,
+            stdin: input.stdin ?? "",
+            cpu_time_limit: 8
+          }),
+          cache: "no-store"
+        }
+      );
+      const timeMs = Date.now() - started;
+      if (!res.ok) {
+        return base("error", { timeMs, message: `Runner error (${res.status}).` });
+      }
+      const d = await res.json();
+      const statusId = d.status?.id ?? 0;
+      let status = "success";
+      if (statusId === 6) status = "compile_error";
+      else if (statusId === 5) status = "timeout";
+      else if (statusId >= 7) status = "runtime_error";
+      return {
+        stdout: d.stdout ?? "",
+        stderr: d.stderr ?? "",
+        compileOutput: d.compile_output ?? void 0,
+        exitCode: d.exit_code ?? null,
+        timeMs: d.time ? Math.round(Number(d.time) * 1e3) : timeMs,
+        status
+      };
+    } catch (err) {
+      return base("error", {
+        message: err instanceof Error ? err.message : "Failed to reach the code runner."
+      });
+    }
+  }
+};
+function base(status, extra = {}) {
+  return {
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    timeMs: null,
+    status,
+    ...extra
+  };
+}
+
+// src/services/execution/index.ts
+function selectProvider() {
+  switch ((process.env.EXECUTION_PROVIDER || "paiza").toLowerCase()) {
+    case "piston":
+      return new PistonProvider();
+    case "judge0":
+      return new Judge0Provider();
+    default:
+      return new PaizaProvider();
+  }
+}
+var provider = selectProvider();
+function runCode(input) {
+  return provider.run(input);
+}
+function normalizeOutput(s) {
+  return s.replace(/\r\n/g, "\n").split("\n").map((line) => line.replace(/\s+$/g, "")).join("\n").replace(/\n+$/g, "");
+}
+async function runTestCase(languageId, source, testCase) {
+  const result = await runCode({
+    languageId,
+    source,
+    stdin: testCase.input
+  });
+  const passed = result.status === "success" && normalizeOutput(result.stdout) === normalizeOutput(testCase.expectedOutput);
+  return {
+    passed,
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.compileOutput ? `${result.compileOutput}
+${result.stderr}`.trim() : result.stderr,
+    expected: testCase.expectedOutput,
+    input: testCase.input,
+    timeMs: result.timeMs,
+    message: result.message
+  };
+}
+
+// src/services/judgeService.ts
+var MAX_SUBMIT_TESTS = 20;
+async function runSamples(params) {
+  const { slug, language, code, customInput } = params;
+  const problem = getProblem(slug);
+  const source = problem ? assembleSource(problem, language, code) : code;
+  if (typeof customInput === "string" && customInput.length > 0) {
+    const r = await runCode({ languageId: language, source, stdin: customInput });
+    return {
+      kind: "custom",
+      stdout: r.stdout,
+      stderr: r.compileOutput ? `${r.compileOutput}
+${r.stderr}`.trim() : r.stderr,
+      status: r.status,
+      timeMs: r.timeMs,
+      message: r.message
+    };
+  }
+  const samples = problem?.testCases.filter((tc) => tc.isSample) ?? [];
+  const results = [];
+  for (const tc of samples) {
+    results.push(
+      await runTestCase(language, source, {
+        input: tc.input,
+        expectedOutput: tc.expectedOutput
+      })
+    );
+  }
+  return {
+    kind: "samples",
+    results,
+    passed: results.filter((r) => r.passed).length,
+    total: results.length
+  };
+}
+async function submitSolution(params) {
+  const { slug, language, code } = params;
+  const problem = getProblem(slug);
+  const source = problem ? assembleSource(problem, language, code) : code;
+  const all = problem?.testCases ?? [];
+  const testCases = [
+    ...all.filter((tc) => tc.isSample),
+    ...all.filter((tc) => !tc.isSample)
+  ].slice(0, MAX_SUBMIT_TESTS);
+  const outcomes = [];
+  let totalTime = 0;
+  let firstFailure;
+  let status = "ACCEPTED";
+  let message;
+  for (const tc of testCases) {
+    const outcome = await runTestCase(language, source, {
+      input: tc.input,
+      expectedOutput: tc.expectedOutput
+    });
+    outcomes.push(outcome);
+    if (outcome.timeMs) totalTime += outcome.timeMs;
+    if (!outcome.passed && !firstFailure) {
+      if (outcome.status === "compile_error") status = "COMPILE_ERROR";
+      else if (outcome.status === "timeout") status = "TIME_LIMIT_EXCEEDED";
+      else if (outcome.status === "runtime_error") status = "RUNTIME_ERROR";
+      else if (outcome.status === "error") {
+        status = "PENDING";
+        message = outcome.message ?? "The code runner is unavailable.";
+      } else status = "WRONG_ANSWER";
+      firstFailure = {
+        input: tc.isSample ? tc.input : "[Hidden Test Case - Input withheld]",
+        expected: tc.isSample ? outcome.expected : "[Hidden Test Case - Expected output withheld]",
+        got: tc.isSample ? outcome.stdout : outcome.status === "timeout" ? "Time Limit Exceeded" : outcome.status === "compile_error" ? outcome.stderr : "[Incorrect Output]",
+        stderr: outcome.stderr
+      };
+    }
+  }
+  const passed = outcomes.filter((o) => o.passed).length;
+  const total = outcomes.length;
+  const runtimeMs = outcomes.length ? Math.round(totalTime / outcomes.length) : null;
+  return { status, passed, total, runtimeMs, firstFailure, message };
 }
 
 // src/controllers/codingController.ts
@@ -6785,23 +14031,16 @@ var getProblems = async (req, res) => {
     if (difficulty && difficulty !== "all") query.difficulty = difficulty;
     if (tag && tag !== "all") query.tags = { $in: [new RegExp(String(tag), "i")] };
     if (search) query.title = { $regex: String(search), $options: "i" };
-    let problems = await CodingProblem.find(query).select("-testCases -starter -hints").sort({ number: 1 }).limit(Number(limit));
-    if (!problems || problems.length === 0) {
-      problems = INITIAL_PROBLEMS;
-    }
-    res.json({ problems, total: problems.length, page: Number(page) });
+    const problems2 = await CodingProblem.find(query).select("-testCases -starter -hints").sort({ number: 1 }).limit(Number(limit));
+    res.json({ problems: problems2 || [], total: (problems2 || []).length, page: Number(page) });
   } catch (error) {
-    res.json({ problems: INITIAL_PROBLEMS, total: INITIAL_PROBLEMS.length, page: 1 });
+    res.json({ problems: [], total: 0, page: 1 });
   }
 };
 var getProblemBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    let problem = await CodingProblem.findOne({ slug, hidden: false });
-    if (!problem) {
-      const initP = INITIAL_PROBLEMS.find((p) => p.slug === slug);
-      if (initP) problem = initP;
-    }
+    const problem = await CodingProblem.findOne({ slug, hidden: false });
     if (!problem) {
       res.status(404).json({ message: "Problem not found" });
       return;
@@ -6813,206 +14052,76 @@ var getProblemBySlug = async (req, res) => {
 };
 var getProblemTags = async (req, res) => {
   try {
-    let tags = await CodingProblem.distinct("tags", { hidden: false });
-    if (!tags || tags.length === 0) {
-      const tagSet = /* @__PURE__ */ new Set();
-      INITIAL_PROBLEMS.forEach((p) => (p.tags || []).forEach((t) => tagSet.add(t)));
-      tags = Array.from(tagSet);
-    }
-    res.json(tags.sort());
+    const tags = await CodingProblem.distinct("tags", { hidden: false });
+    res.json((tags || []).sort());
   } catch (error) {
     res.json(["Array", "Dynamic Programming", "Hash Table", "Stack", "String"].sort());
   }
 };
-var isMatch = (actual, expected) => {
-  const act = (actual || "").trim();
-  const exp = (expected || "").trim();
-  if (act === exp) return true;
-  const actLower = act.toLowerCase();
-  const expLower = exp.toLowerCase();
-  if ((expLower === "true" || expLower === "false") && actLower === expLower) {
-    return true;
-  }
+var recordCodingActivity = async (req, res) => {
   try {
-    const parsedAct = JSON.parse(act);
-    const parsedExp = JSON.parse(exp);
-    if (JSON.stringify(parsedAct) === JSON.stringify(parsedExp)) {
-      return true;
-    }
-    if (Array.isArray(parsedAct) && Array.isArray(parsedExp) && parsedAct.length === parsedExp.length) {
-      if (typeof parsedAct[0] === "number" && typeof parsedExp[0] === "number") {
-        const sortedAct = [...parsedAct].sort((a, b) => a - b);
-        const sortedExp = [...parsedExp].sort((a, b) => a - b);
-        if (JSON.stringify(sortedAct) === JSON.stringify(sortedExp)) {
-          return true;
-        }
-      }
-    }
-  } catch (e) {
-    const normAct = act.replace(/['"]/g, "").replace(/\s+/g, " ").replace(/\s*,\s*/g, ",");
-    const normExp = exp.replace(/['"]/g, "").replace(/\s+/g, " ").replace(/\s*,\s*/g, ",");
-    if (normAct === normExp) return true;
-  }
-  const numAct = Number(act);
-  const numExp = Number(exp);
-  if (!isNaN(numAct) && !isNaN(numExp) && Math.abs(numAct - numExp) < 1e-4) {
-    return true;
-  }
-  return false;
-};
-var runCode = async (req, res) => {
-  try {
-    const { code, language, problemId, stdin = "" } = req.body;
-    if (!code || !language) {
-      res.status(400).json({ message: "Code and language are required" });
-      return;
-    }
-    if (!problemId) {
-      const batchRes = await runBatch(code, language, [fixInput(stdin)]);
-      const result = batchRes[0];
-      res.json({
-        results: [{
-          input: stdin,
-          expected: "",
-          actual: result ? result.stdout || result.stderr || "No output" : "No output",
-          passed: result ? result.exitCode === 0 : false,
-          stderr: result ? result.stderr : ""
-        }]
-      });
-      return;
-    }
-    const problem = await CodingProblem.findById(problemId);
-    if (!problem) {
-      res.status(404).json({ message: "Problem not found" });
-      return;
-    }
-    const wrapper = problem.codeWrapper?.[language] || "";
-    const finalCode = applyWrapper(code, wrapper);
-    const testCases = problem.testCases.filter((tc) => !tc.hidden);
-    if (testCases.length === 0) {
-      res.json({ results: [] });
-      return;
-    }
-    const inputs = testCases.map((tc) => fixInput(tc.input));
-    const batchResults = await runBatch(finalCode, language, inputs);
-    const results = testCases.map((tc, i) => {
-      const r = batchResults[i];
-      const actual = r ? r.stdout : "";
-      const expected = (tc.expected || "").trim();
-      const exitCode = r ? r.exitCode : 1;
-      const stderr = r ? r.stderr : "Execution error";
-      const statusLabel = r ? r.statusLabel : "Error";
-      return {
-        input: tc.input,
-        expected,
-        actual: exitCode !== 0 ? stderr || "Runtime Error" : actual,
-        passed: exitCode === 0 && isMatch(actual, expected),
-        stderr,
-        statusLabel
-      };
-    });
-    res.json({ results });
-  } catch (error) {
-    res.status(500).json({ message: "Error running code. Please try again." });
-  }
-};
-var submitCode = async (req, res) => {
-  try {
-    const { code, language, problemId } = req.body;
     const userId = req.user?._id;
     if (!userId) {
       res.status(401).json({ message: "Authentication required" });
       return;
     }
-    const problem = await CodingProblem.findById(problemId);
+    const { slug, language, verdict, passed = 0, total = 0, runtimeMs = null } = req.body;
+    if (!slug || !language || !verdict) {
+      res.status(400).json({ message: "Slug, language, and verdict are required" });
+      return;
+    }
+    const verdictMap = {
+      ACCEPTED: "Accepted",
+      WRONG_ANSWER: "Wrong Answer",
+      RUNTIME_ERROR: "Runtime Error",
+      TIME_LIMIT_EXCEEDED: "Time Limit Exceeded",
+      COMPILE_ERROR: "Compilation Error"
+    };
+    const canonicalVerdict = verdictMap[String(verdict).toUpperCase()] || "Wrong Answer";
+    let problem = await CodingProblem.findOne({ slug });
     if (!problem) {
-      res.status(404).json({ message: "Problem not found" });
-      return;
-    }
-    const wrapper = problem.codeWrapper?.[language] || "";
-    const finalCode = applyWrapper(code, wrapper);
-    const testCases = problem.testCases;
-    if (testCases.length === 0) {
-      const batchRes = await runBatch(finalCode, language, [""]);
-      const result = batchRes[0];
-      const exitCode = result ? result.exitCode : 1;
-      const verdict2 = exitCode === 0 ? "Accepted" : "Runtime Error";
-      const sub2 = new CodingSubmission({
-        user: userId,
-        problem: problemId,
-        language,
-        code,
-        verdict: verdict2,
-        runtime: result ? result.runtime : "N/A",
-        testsPassed: exitCode === 0 ? 1 : 0,
-        testsTotal: 1,
-        output: result ? result.stdout : "",
-        stderr: result ? result.stderr : ""
+      const formattedTitle = slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      problem = new CodingProblem({
+        slug,
+        title: formattedTitle,
+        difficulty: "Medium",
+        category: "Algorithms",
+        tags: ["DSA", "Solvarch"],
+        description: `DSA Challenge: ${formattedTitle}`,
+        points: 100,
+        hidden: false,
+        testCases: []
       });
-      await sub2.save();
-      const gamification2 = await updateUserCodingStats(userId.toString(), problem, verdict2 === "Accepted");
-      res.json({ ...sub2.toObject(), beats: 85, failCase: null, gamification: gamification2 });
-      return;
+      await problem.save();
     }
-    const inputs = testCases.map((tc) => fixInput(tc.input));
-    const batchResults = await runBatch(finalCode, language, inputs);
-    let passed = 0;
-    let firstFail = null;
-    let totalRuntime = 0;
-    for (let i = 0; i < testCases.length; i++) {
-      const tc = testCases[i];
-      const r = batchResults[i];
-      if (!tc || !r) continue;
-      totalRuntime += r.runtimeMs || 0;
-      const actual = r.stdout;
-      const expected = (tc.expected || "").trim();
-      if (r.exitCode !== 0) {
-        if (!firstFail) {
-          firstFail = {
-            input: tc.input,
-            expected,
-            actual: r.stderr || "Runtime Error",
-            stderr: r.stderr,
-            isHidden: tc.hidden
-          };
-        }
-        break;
-      }
-      if (isMatch(actual, expected)) {
-        passed++;
-      } else if (!firstFail) {
-        firstFail = {
-          input: tc.hidden ? "(hidden testcase)" : tc.input,
-          expected: tc.hidden ? "(hidden testcase)" : expected,
-          actual: tc.hidden ? "(hidden testcase)" : actual,
-          isHidden: tc.hidden
-        };
-      }
-    }
-    const verdict = passed === testCases.length ? "Accepted" : firstFail?.stderr ? "Runtime Error" : "Wrong Answer";
     const sub = new CodingSubmission({
       user: userId,
-      problem: problemId,
-      language,
-      code,
-      verdict,
-      runtime: `${Math.round(totalRuntime / testCases.length)}ms`,
-      testsPassed: passed,
-      testsTotal: testCases.length,
-      output: firstFail ? JSON.stringify(firstFail) : "",
-      stderr: firstFail?.stderr || ""
+      problem: problem._id,
+      language: ["cpp", "python", "java", "c", "javascript"].includes(language) ? language : "javascript",
+      code: "// Source stored in student workspace draft",
+      verdict: canonicalVerdict,
+      runtime: runtimeMs ? `${runtimeMs}ms` : "N/A",
+      testsPassed: Number(passed) || 0,
+      testsTotal: Number(total) || 0,
+      output: "",
+      stderr: ""
     });
     await sub.save();
-    const gamification = await updateUserCodingStats(userId.toString(), problem, verdict === "Accepted");
+    const isAccepted = canonicalVerdict === "Accepted";
+    const gamification = await updateUserCodingStats(userId.toString(), problem, isAccepted);
     res.json({
-      ...sub.toObject(),
-      beats: verdict === "Accepted" ? Math.floor(Math.random() * 30 + 65) : null,
-      failCase: firstFail,
+      success: true,
+      submissionId: sub._id,
+      verdict: canonicalVerdict,
       gamification
     });
   } catch (error) {
-    res.status(500).json({ message: "Submission failed. Please try again." });
+    console.error("recordCodingActivity error:", error);
+    res.status(500).json({ message: "Failed to record coding activity" });
   }
+};
+var runCode2 = async (req, res) => {
+  return executeCode(req, res);
 };
 var getUserSubmissions = async (req, res) => {
   try {
@@ -7395,6 +14504,94 @@ function getRatingTitle(r) {
   if (r < 2800) return "Elite Programmer";
   return "Legendary Coder";
 }
+var executeCode = async (req, res) => {
+  try {
+    const { slug, language, code, customInput } = req.body;
+    if (!slug || !language || !code) {
+      res.status(400).json({ message: "slug, language, and code are required" });
+      return;
+    }
+    const result = await runSamples({ slug, language, code, customInput });
+    res.json(result);
+  } catch (err) {
+    console.error("executeCode error:", err);
+    res.status(500).json({ message: err.message || "Execution failed" });
+  }
+};
+var submitCode = async (req, res) => {
+  try {
+    const { slug, language, code } = req.body;
+    if (!slug || !language || !code) {
+      res.status(400).json({ message: "slug, language, and code are required" });
+      return;
+    }
+    const result = await submitSolution({ slug, language, code });
+    const userId = req.user?._id;
+    if (userId) {
+      try {
+        const submission = new CodingSubmission({
+          user: userId,
+          problemId: slug,
+          language,
+          code: code.slice(0, 5e3),
+          status: result.status,
+          runtime: result.runtimeMs || 0,
+          passedTestCases: result.passed,
+          totalTestCases: result.total,
+          memory: 0,
+          output: result.firstFailure ? `${result.firstFailure.got}
+${result.firstFailure.stderr}`.trim() : "",
+          error: result.firstFailure?.stderr || ""
+        });
+        await submission.save();
+        if (result.status === "ACCEPTED") {
+          await updateUserCodingStats(userId.toString(), 50, true);
+        } else {
+          await updateUserCodingStats(userId.toString(), 10, false);
+        }
+      } catch (saveErr) {
+        console.error("Failed to auto-save submission in submitCode:", saveErr);
+      }
+    }
+    res.json(result);
+  } catch (err) {
+    console.error("submitCode error:", err);
+    res.status(500).json({ message: err.message || "Submission failed" });
+  }
+};
+var getDsaCatalogData = (_req, res) => {
+  try {
+    const summaryProblems = problems.map((p) => ({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+      difficulty: p.difficulty,
+      topic: p.topic
+    }));
+    res.json({ topics, problems: summaryProblems, total: problems.length });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to load DSA catalog" });
+  }
+};
+var getDsaProblemData = (req, res) => {
+  try {
+    const { slug } = req.params;
+    const p = getProblem(slug);
+    if (!p) {
+      res.status(404).json({ message: "Problem not found" });
+      return;
+    }
+    const safeProblem = {
+      ...p,
+      testCases: p.testCases.map(
+        (tc) => tc.isSample ? tc : { ...tc, input: "[Hidden Test Case - Withheld]", expectedOutput: "[Hidden Test Case - Withheld]" }
+      )
+    };
+    res.json(safeProblem);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to load problem details" });
+  }
+};
 
 // src/routes/codingRoutes.ts
 var router4 = Router4();
@@ -7402,8 +14599,12 @@ router4.get("/problems", optionalAuth, getProblems);
 router4.get("/problems/tags", optionalAuth, getProblemTags);
 router4.get("/problems/:slug", optionalAuth, getProblemBySlug);
 router4.get("/leaderboard", optionalAuth, getLeaderboard2);
-router4.post("/run", protect, runCode);
-router4.post("/submit", protect, submitCode);
+router4.get("/dsa/catalog", getDsaCatalogData);
+router4.get("/dsa/problem/:slug", getDsaProblemData);
+router4.post("/execute", optionalAuth, executeCode);
+router4.post("/run", optionalAuth, runCode2);
+router4.post("/submit", optionalAuth, submitCode);
+router4.post("/record-activity", protect, recordCodingActivity);
 router4.get("/submissions", protect, getUserSubmissions);
 router4.post("/ai/hint", protect, getAIHint);
 router4.post("/ai/analyze", protect, analyzeCodeWithAI);
@@ -7760,13 +14961,13 @@ var GDTopicDiscoveryService = class {
       const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
       const match = hostname.match(ipv4Regex);
       if (match) {
-        const first = parseInt(match[1], 10);
+        const first12 = parseInt(match[1], 10);
         const second = parseInt(match[2], 10);
-        if (first === 10) return false;
-        if (first === 127) return false;
-        if (first === 169 && second === 254) return false;
-        if (first === 192 && second === 168) return false;
-        if (first === 172 && second >= 16 && second <= 31) return false;
+        if (first12 === 10) return false;
+        if (first12 === 127) return false;
+        if (first12 === 169 && second === 254) return false;
+        if (first12 === 192 && second === 168) return false;
+        if (first12 === 172 && second >= 16 && second <= 31) return false;
       }
       return true;
     } catch {
@@ -8431,13 +15632,13 @@ var GDTranscriptMetricsService = class {
     for (let i = 0; i < transcript.length; i++) {
       const seg = transcript[i];
       const bucket = metricsMap.get(seg.participantId);
-      const words = seg.text ? seg.text.trim().split(/\s+/).filter((w) => w.length > 0).length : 0;
-      const duration = seg.durationSeconds > 0 ? seg.durationSeconds : Math.max(2, Math.round(words / 2.5));
+      const words2 = seg.text ? seg.text.trim().split(/\s+/).filter((w) => w.length > 0).length : 0;
+      const duration = seg.durationSeconds > 0 ? seg.durationSeconds : Math.max(2, Math.round(words2 / 2.5));
       totalObservedSpeakingSeconds += duration;
-      totalGroupWords += words;
+      totalGroupWords += words2;
       if (bucket) {
         bucket.segmentCount += 1;
-        bucket.wordCount += words;
+        bucket.wordCount += words2;
         bucket.totalSpeakingSeconds += duration;
         if (i > 0 && transcript[i - 1].participantId !== seg.participantId) {
           bucket.responseCount += 1;
@@ -8694,11 +15895,11 @@ var GDEvaluationService = class {
    * Deterministic rule-based evaluation when AI inference is unavailable.
    */
   evaluateStudentWithRules(topic, student, studentMetrics, studentSegments, fullTranscript, totalDurationSeconds, expectedLanguage) {
-    const words = studentMetrics?.wordCount || 0;
+    const words2 = studentMetrics?.wordCount || 0;
     const turns = studentSegments.length;
     const speakingSeconds = studentMetrics?.totalSpeakingSeconds || 0;
     const percentTime = studentMetrics?.percentSpeakingTime || 0;
-    if (turns === 0 || words < 5) {
+    if (turns === 0 || words2 < 5) {
       return {
         userId: student.userId ? student.userId.toString() : void 0,
         participantId: student.id,
@@ -8757,7 +15958,7 @@ var GDEvaluationService = class {
     const matchedKeywords = topicKeywords.filter((kw) => lowerText.includes(kw));
     if (matchedKeywords.length >= 3) topicRelevance += 6;
     else if (matchedKeywords.length >= 1) topicRelevance += 3;
-    if (words > 120) topicRelevance += 4;
+    if (words2 > 120) topicRelevance += 4;
     topicRelevance = Math.min(25, Math.max(5, topicRelevance));
     let reasoning = 9;
     if (lowerText.includes("because") || lowerText.includes("therefore") || lowerText.includes("reason")) reasoning += 2;
@@ -8765,13 +15966,13 @@ var GDEvaluationService = class {
     if (lowerText.includes("impact") || lowerText.includes("consequence") || lowerText.includes("result")) reasoning += 1;
     reasoning = Math.min(15, Math.max(3, reasoning));
     let clarity = 10;
-    if (words >= 80 && words <= 250) clarity += 3;
+    if (words2 >= 80 && words2 <= 250) clarity += 3;
     if (lowerText.includes("firstly") || lowerText.includes("secondly") || lowerText.includes("moreover") || lowerText.includes("in conclusion")) clarity += 2;
     clarity = Math.min(15, Math.max(3, clarity));
     let fluency = 7;
     const fillerWords = lowerText.match(/\b(um|uh|like|you know|basically|actually)\b/g) || [];
     if (fillerWords.length > 4) fluency -= 2;
-    else if (fillerWords.length === 0 && words > 60) fluency += 2;
+    else if (fillerWords.length === 0 && words2 > 60) fluency += 2;
     fluency = Math.min(10, Math.max(2, fluency));
     let activeListening = 6;
     const otherParticipants = fullTranscript.filter((t) => t.participantId !== student.id);
@@ -8793,7 +15994,7 @@ var GDEvaluationService = class {
       langConsistency = 5;
     }
     let intelligibility = 4;
-    if (words > 50 && studentSegments.every((s) => (s.confidence ?? 1) >= 0.8)) {
+    if (words2 > 50 && studentSegments.every((s) => (s.confidence ?? 1) >= 0.8)) {
       intelligibility = 5;
     }
     let etiquette = 4;
@@ -8837,7 +16038,7 @@ var GDEvaluationService = class {
         fillerWords.length > 2 ? `Frequent filler words observed (${fillerWords.slice(0, 3).join(", ")}).` : "Could enrich answers with specific statistical figures or industry benchmarks."
       ],
       speechPatterns: {
-        paceDescription: words / Math.max(1, speakingSeconds / 60) > 160 ? "Fast-paced delivery" : "Moderate, steady speaking pace",
+        paceDescription: words2 / Math.max(1, speakingSeconds / 60) > 160 ? "Fast-paced delivery" : "Moderate, steady speaking pace",
         fillerWords: Array.from(new Set(fillerWords)),
         repetitionsCount: 0,
         mumblingIndicators: ["No mumbling detected; clear microphone audio recorded."],
@@ -9454,7 +16655,7 @@ var GDSessionService = class {
   async addTranscriptSegment(sessionId, segment) {
     const session = await this.getSessionById(sessionId);
     if (!session) return null;
-    const words = segment.text ? segment.text.trim().split(/\s+/).filter(Boolean).length : 0;
+    const words2 = segment.text ? segment.text.trim().split(/\s+/).filter(Boolean).length : 0;
     const newSegment = {
       id: `seg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       participantId: segment.participantId,
@@ -9462,7 +16663,7 @@ var GDSessionService = class {
       username: segment.username?.toLowerCase().trim(),
       text: segment.text.trim(),
       timestamp: /* @__PURE__ */ new Date(),
-      durationSeconds: Math.max(1, segment.durationSeconds || Math.round(words / 2.5)),
+      durationSeconds: Math.max(1, segment.durationSeconds || Math.round(words2 / 2.5)),
       isInterruption: segment.isInterruption || false,
       language: segment.language || "en",
       confidence: segment.confidence || 1
@@ -9472,7 +16673,7 @@ var GDSessionService = class {
     if (p) {
       p.speakingTimeSeconds += newSegment.durationSeconds;
       p.segmentCount += 1;
-      p.wordCount += words;
+      p.wordCount += words2;
     }
     const totalSpeaking = session.participants.reduce((sum, part) => sum + part.speakingTimeSeconds, 0);
     if (totalSpeaking > 0) {
@@ -9584,13 +16785,13 @@ async function getRandomTopic(req, res) {
 }
 async function getTopicsPool(req, res) {
   try {
-    const topics = await gdTopicDiscoveryService.refreshTopicPool();
+    const topics2 = await gdTopicDiscoveryService.refreshTopicPool();
     const categories = gdTopicDiscoveryService.getCategories();
     res.json({
       success: true,
       categories,
-      count: topics.length,
-      topics: topics.slice(0, 20)
+      count: topics2.length,
+      topics: topics2.slice(0, 20)
     });
   } catch (error) {
     console.error("[GD Controller] Get topics pool error:", error);
@@ -10030,6 +17231,282 @@ router5.post("/sessions/:sessionId/bookmark", protect, toggleGDBookmark);
 router5.get("/bookmarks", protect, getGDBookmarks);
 var gdRoutes_default = router5;
 
+// src/routes/gamificationRoutes.ts
+import { Router as Router6 } from "express";
+init_User();
+init_gamificationService();
+var router6 = Router6();
+var MASTER_BADGES = [
+  {
+    id: "daily-pioneer",
+    name: "Daily Pioneer",
+    category: "General",
+    description: "Logged in and completed an activity today.",
+    icon: "CalendarCheck",
+    xpRequirement: 50
+  },
+  {
+    id: "on-fire",
+    name: "On Fire!",
+    category: "General",
+    description: "Maintained a 3-day active preparation streak.",
+    icon: "Flame",
+    xpRequirement: 150
+  },
+  {
+    id: "fast-learner",
+    name: "Fast Learner",
+    category: "General",
+    description: "Accumulated 100+ total XP across PrepX features.",
+    icon: "Zap",
+    xpRequirement: 100
+  },
+  {
+    id: "algorithm-ace",
+    name: "Algorithm Ace",
+    category: "Coding",
+    description: "Successfully solved and submitted 5+ DSA problems.",
+    icon: "Code2",
+    xpRequirement: 500
+  },
+  {
+    id: "speed-demon",
+    name: "Speed Demon",
+    category: "Coding",
+    description: "Executed a problem solution in under 50ms runtime.",
+    icon: "Timer",
+    xpRequirement: 250
+  },
+  {
+    id: "system-architect",
+    name: "System Architect",
+    category: "Coding",
+    description: "Completed system design scalability blueprints.",
+    icon: "Cpu",
+    xpRequirement: 400
+  },
+  {
+    id: "interview-pro",
+    name: "Interview Pro",
+    category: "Interview",
+    description: "Finished a comprehensive AI Technical Mock Interview.",
+    icon: "Award",
+    xpRequirement: 300
+  },
+  {
+    id: "resume-strategist",
+    name: "Resume Strategist",
+    category: "Resume",
+    description: "Analyzed your resume and achieved an 80+ ATS score.",
+    icon: "FileCheck",
+    xpRequirement: 200
+  },
+  {
+    id: "gd-orator",
+    name: "GD Orator",
+    category: "Discussion",
+    description: "Contributed effectively to a live AI Group Discussion round.",
+    icon: "MessagesSquare",
+    xpRequirement: 200
+  },
+  {
+    id: "rising-star",
+    name: "Rising Star",
+    category: "Milestone",
+    description: "Crossed 500+ XP milestone in engineering readiness.",
+    icon: "Star",
+    xpRequirement: 500
+  },
+  {
+    id: "prepx-champion",
+    name: "PrepX Champion",
+    category: "Milestone",
+    description: "Reached 1,000+ XP across coding, interviews, and resume.",
+    icon: "Trophy",
+    xpRequirement: 1e3
+  },
+  {
+    id: "grandmaster",
+    name: "Engineering Grandmaster",
+    category: "Milestone",
+    description: "Elite tier: 2,500+ XP and 20+ solved problems.",
+    icon: "Crown",
+    xpRequirement: 2500
+  }
+];
+function computeLevel(xp = 0) {
+  const levelNumber = Math.floor(xp / 500) + 1;
+  const levelXpFloor = (levelNumber - 1) * 500;
+  const levelXpCeil = levelNumber * 500;
+  const xpInLevel = xp - levelXpFloor;
+  const progressPct = Math.min(100, Math.round(xpInLevel / 500 * 1e3) / 10);
+  const levelTitles = [
+    "Junior Developer",
+    "Software Engineer",
+    "Full-Stack Architect",
+    "Principal Engineer",
+    "Staff System Architect",
+    "Engineering Lead",
+    "Distinguished Engineer",
+    "Chief Architect"
+  ];
+  const levelTitle = levelTitles[Math.min(levelTitles.length - 1, levelNumber - 1)];
+  const nextTitle = levelTitles[Math.min(levelTitles.length - 1, levelNumber)];
+  return {
+    levelNumber,
+    levelTitle,
+    nextTitle,
+    xpInLevel,
+    levelXpCeil,
+    progressPct
+  };
+}
+router6.get("/status", optionalAuth, async (req, res) => {
+  try {
+    let user = req.user;
+    if (user && user._id) {
+      const fresh = await User.findById(user._id);
+      if (fresh) user = fresh;
+    }
+    const currentXp = user?.xp || 0;
+    const streakDays = user?.streakDays || user?.codingStreak || 1;
+    const rating = user?.rating || 1200;
+    const ratingTitle = user?.ratingTitle || "Candidate";
+    const userBadges = user?.badges || [];
+    const solvedCount = user?.solved ? user.solved.length : 0;
+    const levelData = computeLevel(currentXp);
+    const dailyQuests = [
+      {
+        id: "quest-code",
+        title: "Code Master",
+        feature: "Coding Platform",
+        description: "Submit 1 accepted algorithm or data structure solution.",
+        xpReward: 100,
+        progress: solvedCount > 0 ? 1 : 0,
+        target: 1,
+        completed: solvedCount > 0,
+        claimed: false
+      },
+      {
+        id: "quest-interview",
+        title: "Interview Ready",
+        feature: "AI Interviewer",
+        description: "Complete 1 full AI technical or HR mock interview.",
+        xpReward: 150,
+        progress: userBadges.includes("Interview Pro") ? 1 : 0,
+        target: 1,
+        completed: userBadges.includes("Interview Pro"),
+        claimed: false
+      },
+      {
+        id: "quest-resume",
+        title: "Resume Polish",
+        feature: "Resume Analyzer",
+        description: "Score or optimize your resume with AI suggestions.",
+        xpReward: 75,
+        progress: userBadges.includes("Resume Strategist") ? 1 : 0,
+        target: 1,
+        completed: userBadges.includes("Resume Strategist"),
+        claimed: false
+      },
+      {
+        id: "quest-cs",
+        title: "CS Fundamentals",
+        feature: "CS Subjects",
+        description: "Revise 1 core Computer Science subject (OS, DBMS, Networks, OOP).",
+        xpReward: 50,
+        progress: 1,
+        target: 1,
+        completed: true,
+        claimed: false
+      },
+      {
+        id: "quest-streak",
+        title: "Daily Consistency",
+        feature: "Platform",
+        description: "Maintain your daily PrepX practice streak.",
+        xpReward: 50,
+        progress: streakDays >= 1 ? 1 : 0,
+        target: 1,
+        completed: streakDays >= 1,
+        claimed: true
+      }
+    ];
+    const badgesWithStatus = MASTER_BADGES.map((b) => ({
+      ...b,
+      unlocked: userBadges.includes(b.name)
+    }));
+    res.json({
+      success: true,
+      gamification: {
+        xp: currentXp,
+        ...levelData,
+        streakDays,
+        rating,
+        ratingTitle,
+        solvedCount,
+        badges: badgesWithStatus,
+        unlockedBadgesCount: userBadges.length,
+        dailyQuests
+      }
+    });
+  } catch (error) {
+    console.error("Gamification status error:", error);
+    res.status(500).json({ message: "Failed to fetch gamification snapshot" });
+  }
+});
+router6.get("/leaderboard", optionalAuth, async (req, res) => {
+  try {
+    const users = await User.find({}).select("fullName username profilePicture xp rating ratingTitle solved college branch badges streakDays").sort({ xp: -1, rating: -1 }).limit(50).lean();
+    const leaderboard = users.map((u, idx) => {
+      const xp = u.xp || 0;
+      const { levelNumber, levelTitle } = computeLevel(xp);
+      return {
+        rank: idx + 1,
+        id: u._id.toString(),
+        fullName: u.fullName || "Anonymous Engineer",
+        username: u.username || u.fullName?.toLowerCase().replace(/\s+/g, "_") || "coder",
+        profilePicture: u.profilePicture || "",
+        college: u.college || "PrepX Engineering Academy",
+        xp,
+        levelNumber,
+        levelTitle,
+        rating: u.rating || 1200,
+        ratingTitle: u.ratingTitle || "Candidate",
+        solvedCount: u.solved ? u.solved.length : 0,
+        streakDays: u.streakDays || 1,
+        badgesCount: u.badges ? u.badges.length : 0
+      };
+    });
+    res.json({
+      success: true,
+      leaderboard
+    });
+  } catch (error) {
+    console.error("Gamification leaderboard error:", error);
+    res.status(500).json({ message: "Failed to load global leaderboard" });
+  }
+});
+router6.post("/award", protect, async (req, res) => {
+  try {
+    const userId = req.user?._id?.toString();
+    if (!userId) {
+      res.status(401).json({ message: "Not authenticated" });
+      return;
+    }
+    const { amount = 50, activityName = "Platform Activity", badge } = req.body;
+    const result = await awardActivityXP(userId, Number(amount) || 50, String(activityName), badge);
+    res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    console.error("Award XP error:", error);
+    res.status(500).json({ message: "Failed to award activity XP" });
+  }
+});
+var gamificationRoutes_default = router6;
+
 // src/services/gd/gdWebSocketService.ts
 import { WebSocketServer, WebSocket } from "ws";
 function initGDWebSocketServer(server) {
@@ -10445,9 +17922,7 @@ dotenv2.config();
 var app = express();
 var PORT = process.env.PORT || 3001;
 if (!process.env.VERCEL) {
-  connectDB().then(() => {
-    seedCodingProblems();
-  }).catch((err) => {
+  connectDB().catch((err) => {
     console.warn("MongoDB initial connection notice:", err.message);
   });
 }
@@ -10485,7 +17960,10 @@ app.use("/api/auth", authRoutes_default);
 app.use("/api/v1", interviewRoutes_default);
 app.use("/api/v1/resume-analysis", resumeAnalysisRoutes_default);
 app.use("/api/v1/coding", codingRoutes_default);
+app.use("/api", codingRoutes_default);
 app.use("/api/v1/gd", gdRoutes_default);
+app.use("/api/v1/gamification", gamificationRoutes_default);
+app.use("/api/gamification", gamificationRoutes_default);
 app.get(["/", "/api"], (req, res) => {
   res.json({
     status: "ok",

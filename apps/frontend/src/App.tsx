@@ -3,6 +3,9 @@ import "./index.css";
 import { BrowserRouter, Routes, Route } from "react-router";
 
 import { AuthProvider } from "./context/AuthContext";
+import { GamificationProvider } from "./context/GamificationContext";
+import { CelebrationModal } from "./components/gamification/CelebrationModal";
+import { GamificationHubModal } from "./components/gamification/GamificationHubModal";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -30,9 +33,7 @@ import { SkeletonPage } from "./components/ui/skeleton";
 import { ResumeAnalyzerPage } from "./pages/ResumeAnalyzerPage";
 
 import { BookmarksPage } from "./pages/BookmarksPage";
-import { CodingProblemsPage } from "./pages/coding/CodingProblemsPage";
-import { CodingSolvePage } from "./pages/coding/CodingSolvePage";
-import { CodingLeaderboardPage } from "./pages/coding/CodingLeaderboardPage";
+import { CodingPlatformPage } from "./pages/coding/CodingPlatformPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { VerifyEmailPendingPage } from "./pages/VerifyEmailPendingPage";
 import { GDHubPage } from "./pages/gd/GDHubPage";
@@ -56,9 +57,10 @@ export function App() {
 
   const appContent = (
     <AuthProvider>
-      <BrowserRouter>
-        <ScrollToTop />
-        <div className="min-h-screen bg-background text-foreground flex flex-col antialiased">
+      <GamificationProvider>
+        <BrowserRouter>
+          <ScrollToTop />
+          <div className="min-h-screen bg-background text-foreground flex flex-col antialiased">
 
             <Navbar />
             <div className="flex-1">
@@ -119,31 +121,15 @@ export function App() {
                     path="/coding"
                     element={
                       <ProtectedRoute>
-                        <CodingProblemsPage />
+                        <CodingPlatformPage />
                       </ProtectedRoute>
                     }
                   />
                   <Route
-                    path="/coding/problems"
+                    path="/coding/*"
                     element={
                       <ProtectedRoute>
-                        <CodingProblemsPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/coding/problem/:slug"
-                    element={
-                      <ProtectedRoute>
-                        <CodingSolvePage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/coding/leaderboard"
-                    element={
-                      <ProtectedRoute>
-                        <CodingLeaderboardPage />
+                        <CodingPlatformPage />
                       </ProtectedRoute>
                     }
                   />
@@ -151,7 +137,15 @@ export function App() {
                     path="/:userId/coding"
                     element={
                       <ProtectedRoute>
-                        <CodingProblemsPage />
+                        <CodingPlatformPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/:userId/coding/*"
+                    element={
+                      <ProtectedRoute>
+                        <CodingPlatformPage />
                       </ProtectedRoute>
                     }
                   />
@@ -251,9 +245,12 @@ export function App() {
               pauseOnHover
               theme="dark"
             />
+            <CelebrationModal />
+            <GamificationHubModal />
           </div>
         </BrowserRouter>
-      </AuthProvider>
+      </GamificationProvider>
+    </AuthProvider>
   );
 
 
