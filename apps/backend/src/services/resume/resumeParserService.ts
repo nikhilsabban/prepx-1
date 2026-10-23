@@ -146,7 +146,7 @@ function extractTextFromPdfBuffer(buffer: Buffer): string {
         rawData += "~>";
       }
 
-      let streamBuf = Buffer.from(rawData, "binary");
+      let streamBuf: any = Buffer.from(rawData, "binary");
 
       // Check for ASCII85 encoding
       const isAscii85 = streamHeader.includes("ASCII85Decode") || rawData.includes("~>");
