@@ -50,12 +50,16 @@ export async function uploadAndParseResume(req: AuthRequest, res: Response): Pro
     );
 
     console.log(`[ResumeParser] File: ${req.file.originalname}, Extracted Text Length: ${extractedText.length} characters`);
-    if (extractedText.length > 0) {
-      console.log(`[ResumeParser] Text Preview: "${extractedText.slice(0, 150)}..."`);
-    } else {
+    if (!extractedText || extractedText.trim().length === 0) {
       console.warn(`[ResumeParser] WARNING: No text extracted from file ${req.file.originalname}. PDF may be scanned/image-only.`);
-      throw new Error("Could not extract readable text from this PDF. If this is a scanned image/photo PDF, please use a text-based PDF or DOCX file.");
+      res.status(400).json({
+        success: false,
+        message: "Could not extract readable text from this PDF. If this is a scanned image/photo PDF, please use a text-based PDF or DOCX file.",
+      });
+      return;
     }
+
+    console.log(`[ResumeParser] Text Preview: "${extractedText.slice(0, 150)}..."`);
 
     const { structuredData } = parseStructuredResume(extractedText);
 

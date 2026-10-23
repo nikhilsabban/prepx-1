@@ -228,7 +228,12 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  const lastFetchedUserRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const currentKey = user?._id ? String(user._id) : isAuthenticated ? "authed" : "guest";
+    if (lastFetchedUserRef.current === currentKey) return;
+    lastFetchedUserRef.current = currentKey;
     fetchStatus();
     fetchLeaderboard();
   }, [fetchStatus, fetchLeaderboard, isAuthenticated, user?._id]);

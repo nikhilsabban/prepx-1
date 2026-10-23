@@ -73,7 +73,15 @@ export async function extractTextFromBuffer(
           }
         }
       }
-      if (typeof pdfParsePkg === "function") {
+      const ParserClass = pdfParsePkg?.PDFParse || pdfParsePkg?.default?.PDFParse;
+      if (ParserClass) {
+        const instance = new ParserClass({ data: buffer });
+        const parsed = await instance.getText();
+        rawText = typeof parsed === "string" ? parsed : parsed?.text || "";
+        if (typeof instance.destroy === "function") {
+          try { await instance.destroy(); } catch {}
+        }
+      } else if (typeof pdfParsePkg === "function") {
         const parsed = await pdfParsePkg(buffer);
         rawText = parsed?.text || "";
       } else if (pdfParsePkg?.default && typeof pdfParsePkg.default === "function") {
