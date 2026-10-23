@@ -425,7 +425,7 @@ export const strings: SeedProblem[] = [
         i++;
       }
       let num = 0;
-      while (i < s.length && s[i] >= "0" && s[i] <= "9") {
+      while (i < s.length && s[i]! >= "0" && s[i]! <= "9") {
         num = num * 10 + (s.charCodeAt(i) - 48);
         if (sign === 1 && num > 2147483647) return "2147483647";
         if (sign === -1 && num > 2147483648) return "-2147483648";
@@ -531,8 +531,8 @@ export const strings: SeedProblem[] = [
       const fwd = new Map<string, string>();
       const bwd = new Map<string, string>();
       for (let i = 0; i < s.length; i++) {
-        const a = s[i];
-        const b = t[i];
+        const a = s[i]!;
+        const b = t[i]!;
         if (fwd.has(a) && fwd.get(a) !== b) return boolOut(false);
         if (bwd.has(b) && bwd.get(b) !== a) return boolOut(false);
         fwd.set(a, b);
