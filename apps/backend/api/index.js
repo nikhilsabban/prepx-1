@@ -2833,67 +2833,50 @@ var ResumeAnalysis = mongoose7.model(
 );
 
 // src/services/resume/resumeParserService.ts
-import { createRequire } from "module";
 import mammoth from "mammoth";
-var require2 = createRequire(import.meta.url);
-var pdfParsePkg = null;
+function extractTextFromPdfBuffer(buffer) {
+  try {
+    const raw = buffer.toString("binary");
+    const tjPattern = /\(([^()\\]*(?:\\.[^()\\]*)*)\)\s*T[jJ]/g;
+    const words2 = [];
+    let m;
+    while ((m = tjPattern.exec(raw)) !== null) {
+      const decoded = (m[1] ?? "").replace(/\\n/g, " ").replace(/\\r/g, " ").replace(/\\t/g, " ").replace(/\\(.)/g, "$1").replace(/[^\x20-\x7E]/g, " ").trim();
+      if (decoded.length > 0) words2.push(decoded);
+    }
+    if (words2.length > 10) {
+      return words2.join(" ");
+    }
+    const tokenPattern = /[A-Za-z0-9@._+\-/]{3,}/g;
+    const tokens = raw.match(tokenPattern) ?? [];
+    if (tokens.length > 20) {
+      return tokens.join(" ");
+    }
+    return buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ").trim();
+  } catch {
+    return buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ").trim();
+  }
+}
 async function extractTextFromBuffer(buffer, fileType, originalFileName) {
   const isPdf = fileType.includes("pdf") || originalFileName.toLowerCase().endsWith(".pdf");
   const isDocx = fileType.includes("officedocument") || fileType.includes("docx") || originalFileName.toLowerCase().endsWith(".docx");
   let rawText = "";
   if (isPdf) {
+    let parsedViaPdfParse = false;
     try {
-      if (!pdfParsePkg) {
-        try {
-          pdfParsePkg = require2("pdf-parse/lib/pdf-parse.js");
-        } catch {
-          try {
-            pdfParsePkg = require2("pdf-parse");
-          } catch (e) {
-            console.warn("Could not lazily load pdf-parse:", e?.message);
-          }
+      const mod = await import("pdf-parse").catch(() => null);
+      const pdfParseFn = mod?.default ?? mod;
+      if (typeof pdfParseFn === "function") {
+        const result = await pdfParseFn(buffer);
+        if (result?.text && result.text.trim().length > 10) {
+          rawText = result.text;
+          parsedViaPdfParse = true;
         }
       }
-      const ParserClass = pdfParsePkg?.PDFParse || pdfParsePkg?.default?.PDFParse;
-      const pdfData = Buffer.isBuffer(buffer) ? new Uint8Array(buffer) : buffer;
-      if (ParserClass) {
-        const instance = new ParserClass({ data: pdfData });
-        const parsed = await instance.getText();
-        rawText = typeof parsed === "string" ? parsed : parsed?.text || "";
-        if (typeof instance.destroy === "function") {
-          try {
-            await instance.destroy();
-          } catch {
-          }
-        }
-      } else if (typeof pdfParsePkg === "function") {
-        const parsed = await pdfParsePkg(buffer);
-        rawText = parsed?.text || "";
-      } else if (pdfParsePkg?.default && typeof pdfParsePkg.default === "function") {
-        const parsed = await pdfParsePkg.default(buffer);
-        rawText = parsed?.text || "";
-      }
-    } catch (err) {
-      console.warn("Primary PDF parse error, attempting stream fallback:", err?.message);
+    } catch {
     }
-    if (!rawText || rawText.trim().length === 0) {
-      try {
-        const bufferStr = buffer.toString("binary");
-        const tjMatches = bufferStr.match(/\(([^()]+)\)\s*T[jJ]/g);
-        if (tjMatches && tjMatches.length > 0) {
-          rawText = tjMatches.map((m) => m.replace(/\s*T[jJ]$/, "").replace(/^\(/, "").replace(/\)$/, "")).join(" ");
-        } else {
-          const words2 = bufferStr.match(/[A-Za-z0-9@.\-_/]{3,}/g);
-          if (words2 && words2.length > 20) {
-            rawText = words2.join(" ");
-          }
-        }
-      } catch (streamErr) {
-        console.warn("Stream fallback error:", streamErr);
-      }
-    }
-    if (!rawText || rawText.trim().length === 0) {
-      rawText = buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r]/g, " ").trim();
+    if (!parsedViaPdfParse) {
+      rawText = extractTextFromPdfBuffer(buffer);
     }
   } else if (isDocx) {
     try {
@@ -2913,7 +2896,7 @@ function sanitizeExtractedText(text) {
 }
 function parseStructuredResume(rawText) {
   const emailMatch = rawText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
-  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/);
+  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\ s]?\d{3}[-.\s]?\d{4}\b/);
   const linkedinMatch = rawText.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9_-]+/i);
   const githubMatch = rawText.match(/https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_-]+/i);
   const portfolioMatch = rawText.match(/https?:\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/\S*)?/i);

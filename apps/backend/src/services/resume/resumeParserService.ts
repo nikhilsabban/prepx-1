@@ -1,9 +1,4 @@
-import { createRequire } from "module";
 import mammoth from "mammoth";
-
-const require = createRequire(import.meta.url);
-let pdfParsePkg: any = null;
-let PDFParse: any = null;
 
 export interface ParsedResumeData {
 
@@ -44,7 +39,49 @@ export interface ParsedResumeData {
 }
 
 /**
- * Extract raw text from PDF or DOCX file buffers
+ * Extract raw text from PDF binary using pure Node.js — no native modules.
+ * Handles PDF text operators (Tj / TJ) and falls back to printable ASCII extraction.
+ */
+function extractTextFromPdfBuffer(buffer: Buffer): string {
+  try {
+    const raw = buffer.toString("binary");
+
+    // Method 1: Extract parenthesised text operator content  (text)Tj or [(text)]TJ
+    const tjPattern = /\(([^()\\]*(?:\\.[^()\\]*)*)\)\s*T[jJ]/g;
+    const words: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = tjPattern.exec(raw)) !== null) {
+      const decoded = (m[1] ?? "")
+        .replace(/\\n/g, " ")
+        .replace(/\\r/g, " ")
+        .replace(/\\t/g, " ")
+        .replace(/\\(.)/g, "$1") // unescape backslash sequences
+        .replace(/[^\x20-\x7E]/g, " ")
+        .trim();
+      if (decoded.length > 0) words.push(decoded);
+    }
+
+    if (words.length > 10) {
+      return words.join(" ");
+    }
+
+    // Method 2: Extract all printable ASCII tokens >= 3 chars
+    const tokenPattern = /[A-Za-z0-9@._+\-/]{3,}/g;
+    const tokens = raw.match(tokenPattern) ?? [];
+    if (tokens.length > 20) {
+      return tokens.join(" ");
+    }
+
+    // Method 3: UTF-8 with non-printable stripped
+    return buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ").trim();
+  } catch {
+    return buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ").trim();
+  }
+}
+
+/**
+ * Extract raw text from PDF or DOCX file buffers.
+ * Uses pure-JS extraction for PDFs (no native pdf-parse dependency) and mammoth for DOCX.
  */
 export async function extractTextFromBuffer(
   buffer: Buffer,
@@ -60,64 +97,26 @@ export async function extractTextFromBuffer(
   let rawText = "";
 
   if (isPdf) {
+    // Try dynamic pdf-parse import first (if available in the Vercel environment)
+    let parsedViaPdfParse = false;
     try {
-      if (!pdfParsePkg) {
-        try {
-          // Direct lib import bypasses debug file check (./test/data/05-versions-space.pdf) in serverless/esbuild
-          pdfParsePkg = require("pdf-parse/lib/pdf-parse.js");
-        } catch {
-          try {
-            pdfParsePkg = require("pdf-parse");
-          } catch (e: any) {
-            console.warn("Could not lazily load pdf-parse:", e?.message);
-          }
+      // Dynamic import avoids esbuild/ESM issues with CJS modules
+      // @ts-ignore — dynamic require for optional pdf-parse support
+      const mod = await import("pdf-parse").catch(() => null);
+      const pdfParseFn = mod?.default ?? mod;
+      if (typeof pdfParseFn === "function") {
+        const result = await pdfParseFn(buffer);
+        if (result?.text && result.text.trim().length > 10) {
+          rawText = result.text;
+          parsedViaPdfParse = true;
         }
       }
-      const ParserClass = pdfParsePkg?.PDFParse || pdfParsePkg?.default?.PDFParse;
-      const pdfData = Buffer.isBuffer(buffer) ? new Uint8Array(buffer) : buffer;
-      if (ParserClass) {
-        const instance = new ParserClass({ data: pdfData });
-        const parsed = await instance.getText();
-        rawText = typeof parsed === "string" ? parsed : parsed?.text || "";
-        if (typeof instance.destroy === "function") {
-          try { await instance.destroy(); } catch {}
-        }
-      } else if (typeof pdfParsePkg === "function") {
-        const parsed = await pdfParsePkg(buffer);
-        rawText = parsed?.text || "";
-      } else if (pdfParsePkg?.default && typeof pdfParsePkg.default === "function") {
-        const parsed = await pdfParsePkg.default(buffer);
-        rawText = parsed?.text || "";
-      }
-    } catch (err: any) {
-      console.warn("Primary PDF parse error, attempting stream fallback:", err?.message);
+    } catch {
+      // Fall through to pure-JS extraction
     }
 
-    // High-resilience fallback: extract readable text from PDF streams if pdf-parse failed
-    if (!rawText || rawText.trim().length === 0) {
-      try {
-        const bufferStr = buffer.toString("binary");
-        // Match standard PDF text operators (text)Tj or [(text)]TJ
-        const tjMatches = bufferStr.match(/\(([^()]+)\)\s*T[jJ]/g);
-        if (tjMatches && tjMatches.length > 0) {
-          rawText = tjMatches
-            .map((m) => m.replace(/\s*T[jJ]$/, "").replace(/^\(/, "").replace(/\)$/, ""))
-            .join(" ");
-        } else {
-          // Extract printable ASCII words
-          const words = bufferStr.match(/[A-Za-z0-9@.\-_/]{3,}/g);
-          if (words && words.length > 20) {
-            rawText = words.join(" ");
-          }
-        }
-      } catch (streamErr) {
-        console.warn("Stream fallback error:", streamErr);
-      }
-    }
-
-    if (!rawText || rawText.trim().length === 0) {
-      // Final fallback to clean string so upload succeeds
-      rawText = buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r]/g, " ").trim();
+    if (!parsedViaPdfParse) {
+      rawText = extractTextFromPdfBuffer(buffer);
     }
   } else if (isDocx) {
     try {
@@ -128,7 +127,7 @@ export async function extractTextFromBuffer(
       throw new Error("Could not extract text from DOCX resume.");
     }
   } else {
-    // Fallback: try plain text
+    // Plain text fallback
     rawText = buffer.toString("utf-8");
   }
 
@@ -150,7 +149,7 @@ function sanitizeExtractedText(text: string): string {
  */
 export function parseStructuredResume(rawText: string): ParsedResumeData {
   const emailMatch = rawText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
-  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/);
+  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\ s]?\d{3}[-.\s]?\d{4}\b/);
   const linkedinMatch = rawText.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9_-]+/i);
   const githubMatch = rawText.match(/https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_-]+/i);
   const portfolioMatch = rawText.match(/https?:\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/\S*)?/i);
@@ -164,7 +163,7 @@ export function parseStructuredResume(rawText: string): ParsedResumeData {
     // Languages & Database
     "JavaScript", "TypeScript", "Python", "Java", "C++", "C#", "SQL", "PostgreSQL", "MySQL", "MongoDB",
     "Redis", "Elasticsearch", "HTML", "CSS", "R", "Go", "Rust", "PHP", "Scala",
-    
+
     // Frameworks & Libraries
     "React", "Node.js", "Express", "Tailwind", "Next.js", "Vue.js", "Angular", "Django", "Flask", "FastAPI",
     "Spring Boot", "ASP.NET", "Pandas", "NumPy", "PyTorch", "TensorFlow", "Scikit-learn", "Redux", "Zustand",
