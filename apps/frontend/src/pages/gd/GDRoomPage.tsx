@@ -557,7 +557,7 @@ export function GDRoomPage() {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
+      recognition.maxAlternatives = 3;
 
       const expectedLang = (sessionRef.current?.expectedLanguage || "").toLowerCase();
       recognition.lang = expectedLang.includes("hindi") ? "hi-IN" : "en-US";
@@ -566,60 +566,67 @@ export function GDRoomPage() {
         isSpeechActiveRef.current = true;
       };
 
-      let accumulatedFinalText = "";
-      let latestInterimText = "";
-      let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+      // Only used for trailing partial text when speech session ends mid-word
+      let pendingInterimText = "";
+      let interimDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-      const flushTranscript = () => {
-        if (debounceTimer) {
-          clearTimeout(debounceTimer);
-          debounceTimer = null;
+      const flushInterim = () => {
+        if (interimDebounceTimer) {
+          clearTimeout(interimDebounceTimer);
+          interimDebounceTimer = null;
         }
-
-        const candidateText = (accumulatedFinalText.trim() || latestInterimText.trim());
-        if (candidateText.length >= 2) {
-          accumulatedFinalText = "";
-          latestInterimText = "";
-          setLiveTranscriptPreview("");
-          dispatchTranscriptSegment(candidateText);
-        } else {
-          setLiveTranscriptPreview("");
+        const t = pendingInterimText.trim();
+        pendingInterimText = "";
+        setLiveTranscriptPreview("");
+        if (t.length >= 2) {
+          dispatchTranscriptSegment(t);
         }
       };
 
       recognition.onresult = (event: any) => {
         if (!isMicOnRef.current) return;
 
-        let newFinalChunk = "";
+        // Cancel any pending interim flush when new results arrive
+        if (interimDebounceTimer) {
+          clearTimeout(interimDebounceTimer);
+          interimDebounceTimer = null;
+        }
+
         let newInterimChunk = "";
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const item = event.results[i];
           if (!item || !item[0]) continue;
-          const transcriptStr = item[0].transcript || "";
+
+          // Pick the best alternative (highest confidence)
+          let bestTranscript = item[0].transcript || "";
+          let bestConfidence = item[0].confidence || 0;
+          for (let alt = 1; alt < item.length; alt++) {
+            if (item[alt] && item[alt].confidence > bestConfidence) {
+              bestConfidence = item[alt].confidence;
+              bestTranscript = item[alt].transcript;
+            }
+          }
+
           if (item.isFinal) {
-            newFinalChunk += " " + transcriptStr;
+            // Final results: dispatch immediately, clear pending interim
+            const finalText = bestTranscript.trim();
+            pendingInterimText = "";
+            setLiveTranscriptPreview("");
+            if (finalText.length >= 2) {
+              dispatchTranscriptSegment(finalText);
+            }
           } else {
-            newInterimChunk += " " + transcriptStr;
+            // Interim: accumulate for live preview
+            newInterimChunk += " " + bestTranscript;
           }
         }
 
-        if (newFinalChunk.trim()) {
-          accumulatedFinalText += " " + newFinalChunk.trim();
-        }
         if (newInterimChunk.trim()) {
-          latestInterimText = newInterimChunk.trim();
-          setLiveTranscriptPreview(latestInterimText);
-        }
-
-        if (debounceTimer) clearTimeout(debounceTimer);
-
-        // If user finished a substantive phrase or sentence, flush quickly
-        if (accumulatedFinalText.trim().length >= 8) {
-          flushTranscript();
-        } else {
-          // Pause debounce: if user speaks and pauses, commit candidate text
-          debounceTimer = setTimeout(flushTranscript, 1200);
+          pendingInterimText = newInterimChunk.trim();
+          setLiveTranscriptPreview(pendingInterimText);
+          // Short debounce: if no new result arrives in 400ms, commit interim as final
+          interimDebounceTimer = setTimeout(flushInterim, 400);
         }
       };
 
@@ -646,11 +653,12 @@ export function GDRoomPage() {
 
       recognition.onend = () => {
         isSpeechActiveRef.current = false;
-        flushTranscript();
+        // Flush any trailing interim text that never got a final result
+        flushInterim();
 
         if (hasFatalPermissionError || !isMicOnRef.current) return;
 
-        // Clean cross-browser restart with 600ms backoff
+        // Restart quickly to minimize gap in continuous recognition
         if (speechRestartTimeoutRef.current) {
           clearTimeout(speechRestartTimeoutRef.current);
         }
@@ -658,7 +666,7 @@ export function GDRoomPage() {
           if (isMicOnRef.current && !isSpeechActiveRef.current) {
             startSpeechRecognition();
           }
-        }, 600);
+        }, 200);
       };
 
       try {
