@@ -2834,27 +2834,69 @@ var ResumeAnalysis = mongoose7.model(
 
 // src/services/resume/resumeParserService.ts
 import mammoth from "mammoth";
+import zlib from "zlib";
 function extractTextFromPdfBuffer(buffer) {
   try {
-    const raw = buffer.toString("binary");
-    const tjPattern = /\(([^()\\]*(?:\\.[^()\\]*)*)\)\s*T[jJ]/g;
-    const words2 = [];
-    let m;
-    while ((m = tjPattern.exec(raw)) !== null) {
-      const decoded = (m[1] ?? "").replace(/\\n/g, " ").replace(/\\r/g, " ").replace(/\\t/g, " ").replace(/\\(.)/g, "$1").replace(/[^\x20-\x7E]/g, " ").trim();
-      if (decoded.length > 0) words2.push(decoded);
+    const binary = buffer.toString("binary");
+    const extractedWords = [];
+    const decodePdfString = (str) => {
+      return str.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ").replace(/\\b/g, "").replace(/\\f/g, "").replace(/\\\(/g, "(").replace(/\\\)/g, ")").replace(/\\\\/g, "\\").replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8))).replace(/[^\x20-\x7E\n]/g, " ").trim();
+    };
+    const extractFromStream = (streamText) => {
+      const tjRegex = /\(([^()\\]*(?:\\.[^()\\]*)*)\)\s*(?:Tj|'|")/g;
+      let m;
+      while ((m = tjRegex.exec(streamText)) !== null) {
+        const decoded = decodePdfString(m[1] ?? "");
+        if (decoded.length > 0) extractedWords.push(decoded);
+      }
+      const tjArrayRegex = /\[([^\]]+)\]\s*TJ/g;
+      while ((m = tjArrayRegex.exec(streamText)) !== null) {
+        const inner = m[1];
+        const innerStrings = inner.match(/\(([^()\\]*(?:\\.[^()\\]*)*)\)/g);
+        if (innerStrings) {
+          const combined = innerStrings.map((s) => decodePdfString(s.slice(1, -1))).filter(Boolean).join("");
+          if (combined.length > 0) extractedWords.push(combined);
+        }
+      }
+      const hexTjRegex = /<([0-9A-Fa-f]{2,})>\s*T[jJ]/g;
+      while ((m = hexTjRegex.exec(streamText)) !== null) {
+        const hex = m[1];
+        let str = "";
+        for (let i = 0; i < hex.length; i += 2) {
+          str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+        }
+        const decoded = decodePdfString(str);
+        if (decoded.length > 0) extractedWords.push(decoded);
+      }
+    };
+    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let sMatch;
+    while ((sMatch = streamRegex.exec(binary)) !== null) {
+      const rawStream = Buffer.from(sMatch[1], "binary");
+      let decompressed = "";
+      try {
+        decompressed = zlib.inflateSync(rawStream).toString("binary");
+      } catch {
+        try {
+          decompressed = zlib.inflateRawSync(rawStream).toString("binary");
+        } catch {
+          decompressed = rawStream.toString("binary");
+        }
+      }
+      if (decompressed) {
+        extractFromStream(decompressed);
+      }
     }
-    if (words2.length > 10) {
-      return words2.join(" ");
+    if (extractedWords.length < 5) {
+      extractFromStream(binary);
     }
-    const tokenPattern = /[A-Za-z0-9@._+\-/]{3,}/g;
-    const tokens = raw.match(tokenPattern) ?? [];
-    if (tokens.length > 20) {
-      return tokens.join(" ");
+    if (extractedWords.length > 0) {
+      return extractedWords.join(" ");
     }
-    return buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ").trim();
-  } catch {
-    return buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ").trim();
+    return "";
+  } catch (err) {
+    console.error("[ResumeParser] Error in fallback extractTextFromPdfBuffer:", err);
+    return "";
   }
 }
 async function extractTextFromBuffer(buffer, fileType, originalFileName) {
@@ -2864,16 +2906,29 @@ async function extractTextFromBuffer(buffer, fileType, originalFileName) {
   if (isPdf) {
     let parsedViaPdfParse = false;
     try {
-      const mod = await import("pdf-parse").catch(() => null);
-      const pdfParseFn = mod?.default ?? mod;
-      if (typeof pdfParseFn === "function") {
-        const result = await pdfParseFn(buffer);
-        if (result?.text && result.text.trim().length > 10) {
-          rawText = result.text;
-          parsedViaPdfParse = true;
+      const pdfModule = await import("pdf-parse").catch(() => null);
+      if (pdfModule) {
+        if (typeof pdfModule.PDFParse === "function") {
+          const parser = new pdfModule.PDFParse({ data: buffer });
+          const result = await parser.getText();
+          if (result?.text && result.text.trim().length > 10) {
+            rawText = result.text;
+            parsedViaPdfParse = true;
+          }
+        }
+        if (!parsedViaPdfParse) {
+          const pdfParseFn = typeof pdfModule === "function" ? pdfModule : typeof pdfModule.default === "function" ? pdfModule.default : null;
+          if (pdfParseFn) {
+            const result = await pdfParseFn(buffer);
+            if (result?.text && result.text.trim().length > 10) {
+              rawText = result.text;
+              parsedViaPdfParse = true;
+            }
+          }
         }
       }
-    } catch {
+    } catch (err) {
+      console.warn("[ResumeParser] pdf-parse library failed, falling back to stream extractor:", err);
     }
     if (!parsedViaPdfParse) {
       rawText = extractTextFromPdfBuffer(buffer);
@@ -2892,63 +2947,122 @@ async function extractTextFromBuffer(buffer, fileType, originalFileName) {
   return sanitizeExtractedText(rawText);
 }
 function sanitizeExtractedText(text) {
-  return (text || "").replace(/\u0000/g, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ").replace(/\r\n/g, "\n").replace(/\t/g, " ").replace(/ +/g, " ").trim();
+  return (text || "").replace(/\u0000/g, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ").replace(/^-- \d+ of \d+ --\s*$/gm, "").replace(/\r\n/g, "\n").replace(/\t/g, " ").replace(/[ \u00A0]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
 function parseStructuredResume(rawText) {
   const emailMatch = rawText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
-  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\ s]?\d{3}[-.\s]?\d{4}\b/);
-  const linkedinMatch = rawText.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9_-]+/i);
-  const githubMatch = rawText.match(/https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_-]+/i);
-  const portfolioMatch = rawText.match(/https?:\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/\S*)?/i);
+  const phoneMatch = rawText.match(/(?:(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\b\d{10}\b))/);
+  const linkedinMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|pub)\/[A-Za-z0-9_.-]+/i);
+  const githubMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_.-]+/i);
+  const portfolioMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?[A-Za-z0-9.-]+\.(?:com|org|io|dev|me|net|tech|app)(?:\/[^\s]*)?/i);
+  const emailDomain = emailMatch ? emailMatch[0].split("@")[1]?.toLowerCase() : "";
+  const portfolioRaw = portfolioMatch ? portfolioMatch[0] : "";
+  const isEmailDomain = emailDomain && portfolioRaw.toLowerCase().includes(emailDomain);
+  const isValidPortfolio = portfolioRaw && !isEmailDomain && !portfolioRaw.toLowerCase().includes("linkedin") && !portfolioRaw.toLowerCase().includes("github");
   const lines2 = rawText.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
-  const candidateName = lines2[0] && lines2[0].length < 40 ? lines2[0] : "";
+  const headerRegex = /^(resume|curriculum vitae|cv|page \d+|profile|contact|about me)$/i;
+  let candidateName = "";
+  for (const line of lines2.slice(0, 5)) {
+    if (!headerRegex.test(line) && !line.includes("@") && !line.includes("http") && !line.includes("www.") && !line.includes(".com") && !/\d{5,}/.test(line) && line.length >= 2 && line.length <= 50) {
+      candidateName = line;
+      break;
+    }
+  }
   const skillKeywords = [
-    // Languages & Database
+    // Programming Languages
     "JavaScript",
     "TypeScript",
     "Python",
     "Java",
     "C++",
     "C#",
+    "C",
+    "Go",
+    "Golang",
+    "Rust",
+    "PHP",
+    "Ruby",
+    "Swift",
+    "Kotlin",
+    "R",
+    "Scala",
+    "Dart",
+    "Shell",
+    "Bash",
+    // Databases & Cache
     "SQL",
     "PostgreSQL",
     "MySQL",
     "MongoDB",
     "Redis",
     "Elasticsearch",
-    "HTML",
-    "CSS",
-    "R",
-    "Go",
-    "Rust",
-    "PHP",
-    "Scala",
-    // Frameworks & Libraries
+    "Cassandra",
+    "DynamoDB",
+    "SQLite",
+    "Firebase",
+    "Supabase",
+    "Prisma",
+    "Mongoose",
+    // Frontend Frameworks & Web
     "React",
-    "Node.js",
-    "Express",
-    "Tailwind",
     "Next.js",
     "Vue.js",
     "Angular",
-    "Django",
-    "Flask",
-    "FastAPI",
-    "Spring Boot",
-    "ASP.NET",
-    "Pandas",
-    "NumPy",
-    "PyTorch",
-    "TensorFlow",
-    "Scikit-learn",
+    "Svelte",
     "Redux",
     "Zustand",
-    // Data Engineering & Analytics
+    "HTML",
+    "HTML5",
+    "CSS",
+    "CSS3",
+    "Tailwind",
+    "TailwindCSS",
+    "Bootstrap",
+    "Sass",
+    "Material UI",
+    "Vite",
+    "Webpack",
+    // Backend Frameworks & APIs
+    "Node.js",
+    "NodeJS",
+    "Express",
+    "Express.js",
+    "NestJS",
+    "FastAPI",
+    "Django",
+    "Flask",
+    "Spring Boot",
+    "Spring",
+    "ASP.NET",
+    ".NET",
+    "GraphQL",
+    "REST API",
+    "gRPC",
+    // Cloud, DevOps & Infrastructure
+    "AWS",
+    "Azure",
+    "GCP",
+    "Docker",
+    "Kubernetes",
+    "K8s",
+    "CI/CD",
+    "GitHub Actions",
+    "Jenkins",
+    "GitLab CI",
+    "Terraform",
+    "Ansible",
+    "Linux",
+    "Nginx",
+    "Serverless",
+    "Microservices",
+    "System Design",
+    // Data Engineering, Big Data & Analytics
     "ETL",
     "Data Pipelines",
     "Power BI",
     "Tableau",
     "Apache Spark",
+    "PySpark",
     "Airflow",
     "Snowflake",
     "BigQuery",
@@ -2958,45 +3072,81 @@ function parseStructuredResume(rawText) {
     "Kafka",
     "Data Modeling",
     "Databricks",
-    // Cloud, DevOps & Tools
-    "AWS",
-    "Azure",
-    "GCP",
-    "Docker",
-    "Kubernetes",
+    // Machine Learning & AI
+    "Machine Learning",
+    "Deep Learning",
+    "Pandas",
+    "NumPy",
+    "PyTorch",
+    "TensorFlow",
+    "Scikit-learn",
+    "NLP",
+    "Computer Vision",
+    "LLM",
+    "Generative AI",
+    "LangChain",
+    "OpenAI",
+    // Testing & Quality Assurance
+    "Jest",
+    "Pytest",
+    "Mocha",
+    "Cypress",
+    "Playwright",
+    "Selenium",
+    "Unit Testing",
+    "Integration Testing",
+    // Tools, Methodologies & Soft Skills
     "Git",
     "GitHub",
-    "CI/CD",
-    "GitHub Actions",
-    "Jenkins",
-    "Terraform",
-    "Linux",
-    "REST API",
-    "GraphQL",
-    "Microservices",
-    "System Design",
-    // Practices & Methodologies
+    "GitLab",
+    "Bitbucket",
     "OOP",
-    "Object Oriented Programming",
     "Agile",
     "Scrum",
+    "Kanban",
     "Data Structures",
     "Algorithms",
-    "Unit Testing",
-    "Pytest",
-    "Jest",
     "Design Patterns",
     "Communication",
     "Leadership",
     "Problem Solving"
   ];
+  function matchesSkill(skill, text) {
+    const escaped = skill.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+    const bStart = /^[a-zA-Z0-9_]/.test(skill) ? "(?:^|[^a-zA-Z0-9_])" : "";
+    const bEnd = "(?=$|[^a-zA-Z0-9_#+])";
+    return new RegExp(bStart + escaped + bEnd, "i").test(text);
+  }
   const extractedSkills = [];
   skillKeywords.forEach((skill) => {
-    const regex = new RegExp(`\\b${skill.replace(/\+/g, "\\+")}\\b`, "i");
-    if (regex.test(rawText)) {
+    if (matchesSkill(skill, rawText) && !extractedSkills.includes(skill)) {
       extractedSkills.push(skill);
     }
   });
+  const sectionKeywords = ["summary", "experience", "work experience", "education", "projects", "certifications", "skills"];
+  const secRegex = new RegExp("(^|\\n)(" + sectionKeywords.join("|") + ")\\b", "gi");
+  let sMatch;
+  const indices = [];
+  while ((sMatch = secRegex.exec(rawText)) !== null) {
+    indices.push({ header: sMatch[2].toLowerCase(), index: sMatch.index + sMatch[1].length });
+  }
+  const detectedSections = {};
+  for (let i = 0; i < indices.length; i++) {
+    const cur = indices[i];
+    const next = indices[i + 1];
+    const content = rawText.slice(cur.index, next ? next.index : void 0);
+    detectedSections[cur.header] = content.split("\n").slice(1).join("\n").trim();
+  }
+  const experienceText = detectedSections["experience"] || detectedSections["work experience"] || "";
+  const educationText = detectedSections["education"] || "";
+  const projectsText = detectedSections["projects"] || "";
+  const summaryText = detectedSections["summary"] || "";
+  const expBullets = experienceText.split("\n").map((l) => l.trim().replace(/^[-*•]\s*/, "")).filter((l) => l.length > 15);
+  const parsedExperience = expBullets.length > 0 ? [{ company: "", role: "Professional Experience", bulletPoints: expBullets.slice(0, 8) }] : [];
+  const eduLines = educationText.split("\n").map((l) => l.trim().replace(/^[-*•]\s*/, "")).filter((l) => l.length > 5);
+  const parsedEducation = eduLines.length > 0 ? eduLines.slice(0, 3).map((line) => ({ institution: line })) : [];
+  const projLines = projectsText.split("\n").map((l) => l.trim().replace(/^[-*•]\s*/, "")).filter((l) => l.length > 10);
+  const parsedProjects = projLines.length > 0 ? projLines.slice(0, 5).map((line) => ({ description: line })) : [];
   return {
     extractedText: rawText,
     structuredData: {
@@ -3006,12 +3156,13 @@ function parseStructuredResume(rawText) {
         phone: phoneMatch ? phoneMatch[0] : "",
         linkedin: linkedinMatch ? linkedinMatch[0] : "",
         github: githubMatch ? githubMatch[0] : "",
-        portfolio: portfolioMatch && !portfolioMatch[0].includes("linkedin") && !portfolioMatch[0].includes("github") ? portfolioMatch[0] : ""
+        portfolio: isValidPortfolio ? portfolioRaw : ""
       },
+      summary: summaryText.slice(0, 300),
       skills: extractedSkills,
-      education: [],
-      experience: [],
-      projects: [],
+      education: parsedEducation,
+      experience: parsedExperience,
+      projects: parsedProjects,
       certifications: [],
       achievements: [],
       languages: []
