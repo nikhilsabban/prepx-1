@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import api from "../services/api";
 import { useAuth } from "./AuthContext";
 import { toast } from "react-toastify";
@@ -228,7 +228,7 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
-  const lastFetchedUserRef = useRef<string | null>(null);
+  const lastFetchedUserRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     const currentKey = user?._id ? String(user._id) : isAuthenticated ? "authed" : "guest";
