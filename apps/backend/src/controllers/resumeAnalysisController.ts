@@ -50,11 +50,12 @@ export async function uploadAndParseResume(req: AuthRequest, res: Response): Pro
     );
 
     console.log(`[ResumeParser] File: ${req.file.originalname}, Extracted Text Length: ${extractedText.length} characters`);
-    if (!extractedText || extractedText.trim().length === 0) {
-      console.warn(`[ResumeParser] WARNING: No text extracted from file ${req.file.originalname}. PDF may be scanned/image-only.`);
+    const printableRatio = extractedText.replace(/[^A-Za-z0-9]/g, "").length / Math.max(extractedText.length, 1);
+    if (!extractedText || extractedText.trim().length < 40 || printableRatio < 0.2) {
+      console.warn(`[ResumeParser] WARNING: No readable text extracted from file ${req.file.originalname}.`);
       res.status(400).json({
         success: false,
-        message: "Could not extract readable text from this PDF. If this is a scanned image/photo PDF, please use a text-based PDF or DOCX file.",
+        message: "Could not extract readable text from this file. If this is a scanned image/photo PDF, please use a text-based PDF or DOCX file.",
       });
       return;
     }

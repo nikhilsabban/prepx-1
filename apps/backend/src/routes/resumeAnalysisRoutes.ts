@@ -11,7 +11,23 @@ import {
 
 const router = Router();
 
-router.post("/upload", protect as any, uploadResumeFile.single("resume") as any, uploadAndParseResume as any);
+router.post(
+  "/upload",
+  protect as any,
+  (req, res, next) => {
+    uploadResumeFile.single("resume")(req, res, (err: any) => {
+      if (err) {
+        res.status(400).json({
+          success: false,
+          message: err.message || "Resume upload failed. Use a PDF or DOCX under 10MB.",
+        });
+        return;
+      }
+      next();
+    });
+  },
+  uploadAndParseResume as any
+);
 router.post("/analyze", protect as any, analyzeResume as any);
 router.post("/generate-jd", protect as any, generateJobDescriptionEndpoint as any);
 router.get("/history", protect as any, getAnalysisHistory as any);

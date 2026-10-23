@@ -8,12 +8,25 @@ export const api = axios.create({
   },
 });
 
+function isFormData(data: unknown): boolean {
+  return typeof FormData !== "undefined" && data instanceof FormData;
+}
+
 // Request interceptor to automatically attach JWT token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // Let the browser set multipart/form-data with the correct boundary.
+    if (isFormData(config.data) && config.headers) {
+      if (typeof (config.headers as any).delete === "function") {
+        (config.headers as any).delete("Content-Type");
+      } else {
+        delete (config.headers as any)["Content-Type"];
+        delete (config.headers as any)["content-type"];
+      }
     }
     return config;
   },

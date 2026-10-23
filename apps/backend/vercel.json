@@ -15,6 +15,18 @@
     {
       "source": "/api/(.*)",
       "destination": "/api"
+    },
+    {
+      "source": "/v1/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/gamification/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/resume-analysis/(.*)",
+      "destination": "/api"
     }
   ]
 }

@@ -74,8 +74,9 @@ export async function extractTextFromBuffer(
         }
       }
       const ParserClass = pdfParsePkg?.PDFParse || pdfParsePkg?.default?.PDFParse;
+      const pdfData = Buffer.isBuffer(buffer) ? new Uint8Array(buffer) : buffer;
       if (ParserClass) {
-        const instance = new ParserClass({ data: buffer });
+        const instance = new ParserClass({ data: pdfData });
         const parsed = await instance.getText();
         rawText = typeof parsed === "string" ? parsed : parsed?.text || "";
         if (typeof instance.destroy === "function") {
@@ -131,8 +132,13 @@ export async function extractTextFromBuffer(
     rawText = buffer.toString("utf-8");
   }
 
-  // Normalize text whitespace
-  return rawText
+  return sanitizeExtractedText(rawText);
+}
+
+function sanitizeExtractedText(text: string): string {
+  return (text || "")
+    .replace(/\u0000/g, "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ")
     .replace(/\r\n/g, "\n")
     .replace(/\t/g, " ")
     .replace(/ +/g, " ")

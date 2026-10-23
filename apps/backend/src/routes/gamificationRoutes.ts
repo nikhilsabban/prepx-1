@@ -140,7 +140,7 @@ export function computeLevel(xp: number = 0) {
  * GET /status (or /profile)
  * Returns the current authenticated or guest user's centralized gamification snapshot
  */
-router.get("/status", optionalAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get(["/status", "/profile", "/"], optionalAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     let user = req.user;
     if (user && user._id) {

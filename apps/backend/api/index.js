@@ -2855,8 +2855,9 @@ async function extractTextFromBuffer(buffer, fileType, originalFileName) {
         }
       }
       const ParserClass = pdfParsePkg?.PDFParse || pdfParsePkg?.default?.PDFParse;
+      const pdfData = Buffer.isBuffer(buffer) ? new Uint8Array(buffer) : buffer;
       if (ParserClass) {
-        const instance = new ParserClass({ data: buffer });
+        const instance = new ParserClass({ data: pdfData });
         const parsed = await instance.getText();
         rawText = typeof parsed === "string" ? parsed : parsed?.text || "";
         if (typeof instance.destroy === "function") {
@@ -2905,7 +2906,10 @@ async function extractTextFromBuffer(buffer, fileType, originalFileName) {
   } else {
     rawText = buffer.toString("utf-8");
   }
-  return rawText.replace(/\r\n/g, "\n").replace(/\t/g, " ").replace(/ +/g, " ").trim();
+  return sanitizeExtractedText(rawText);
+}
+function sanitizeExtractedText(text) {
+  return (text || "").replace(/\u0000/g, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ").replace(/\r\n/g, "\n").replace(/\t/g, " ").replace(/ +/g, " ").trim();
 }
 function parseStructuredResume(rawText) {
   const emailMatch = rawText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
@@ -3351,11 +3355,12 @@ async function uploadAndParseResume(req, res) {
       req.file.originalname
     );
     console.log(`[ResumeParser] File: ${req.file.originalname}, Extracted Text Length: ${extractedText.length} characters`);
-    if (!extractedText || extractedText.trim().length === 0) {
-      console.warn(`[ResumeParser] WARNING: No text extracted from file ${req.file.originalname}. PDF may be scanned/image-only.`);
+    const printableRatio = extractedText.replace(/[^A-Za-z0-9]/g, "").length / Math.max(extractedText.length, 1);
+    if (!extractedText || extractedText.trim().length < 40 || printableRatio < 0.2) {
+      console.warn(`[ResumeParser] WARNING: No readable text extracted from file ${req.file.originalname}.`);
       res.status(400).json({
         success: false,
-        message: "Could not extract readable text from this PDF. If this is a scanned image/photo PDF, please use a text-based PDF or DOCX file."
+        message: "Could not extract readable text from this file. If this is a scanned image/photo PDF, please use a text-based PDF or DOCX file."
       });
       return;
     }
@@ -3603,7 +3608,23 @@ ${resumeText ? `Candidate Resume Context: ${resumeText.slice(0, 1e3)}` : ""}`;
 
 // src/routes/resumeAnalysisRoutes.ts
 var router3 = Router3();
-router3.post("/upload", protect, uploadResumeFile.single("resume"), uploadAndParseResume);
+router3.post(
+  "/upload",
+  protect,
+  (req, res, next) => {
+    uploadResumeFile.single("resume")(req, res, (err) => {
+      if (err) {
+        res.status(400).json({
+          success: false,
+          message: err.message || "Resume upload failed. Use a PDF or DOCX under 10MB."
+        });
+        return;
+      }
+      next();
+    });
+  },
+  uploadAndParseResume
+);
 router3.post("/analyze", protect, analyzeResume);
 router3.post("/generate-jd", protect, generateJobDescriptionEndpoint);
 router3.get("/history", protect, getAnalysisHistory);
@@ -17396,7 +17417,7 @@ function computeLevel(xp = 0) {
     progressPct
   };
 }
-router6.get("/status", optionalAuth, async (req, res) => {
+router6.get(["/status", "/profile", "/"], optionalAuth, async (req, res) => {
   try {
     let user = req.user;
     if (user && user._id) {
@@ -17956,6 +17977,11 @@ function initGDWebSocketServer(server) {
 dotenv2.config();
 var app = express();
 var PORT = process.env.PORT || 3001;
+var config = {
+  api: {
+    bodyParser: false
+  }
+};
 if (!process.env.VERCEL) {
   connectDB().catch((err) => {
     console.warn("MongoDB initial connection notice:", err.message);
@@ -17993,6 +18019,10 @@ app.use(express.urlencoded({ limit: "20mb", extended: true }));
 app.use(express.text({ type: ["application/sdp", "text/plain"], limit: "10mb" }));
 app.use("/api/auth", authRoutes_default);
 app.use("/auth", authRoutes_default);
+app.use("/api/v1/gamification", gamificationRoutes_default);
+app.use("/v1/gamification", gamificationRoutes_default);
+app.use("/api/gamification", gamificationRoutes_default);
+app.use("/gamification", gamificationRoutes_default);
 app.use("/api/v1/resume-analysis", resumeAnalysisRoutes_default);
 app.use("/v1/resume-analysis", resumeAnalysisRoutes_default);
 app.use("/resume-analysis", resumeAnalysisRoutes_default);
@@ -18000,17 +18030,13 @@ app.use("/api/v1/coding", codingRoutes_default);
 app.use("/v1/coding", codingRoutes_default);
 app.use("/api/coding", codingRoutes_default);
 app.use("/coding", codingRoutes_default);
-app.use("/api", codingRoutes_default);
 app.use("/api/v1/gd", gdRoutes_default);
 app.use("/v1/gd", gdRoutes_default);
 app.use("/gd", gdRoutes_default);
-app.use("/api/v1/gamification", gamificationRoutes_default);
-app.use("/v1/gamification", gamificationRoutes_default);
-app.use("/api/gamification", gamificationRoutes_default);
-app.use("/gamification", gamificationRoutes_default);
 app.use("/api/v1", interviewRoutes_default);
 app.use("/v1", interviewRoutes_default);
-app.get(["/", "/api"], (req, res) => {
+app.use("/api", codingRoutes_default);
+app.get(["/", "/api"], (_req, res) => {
   res.json({
     status: "ok",
     message: "PrepX AI Placement & Coding Backend is running",
@@ -18022,6 +18048,15 @@ app.get(["/", "/api"], (req, res) => {
       gd: "/api/v1/gd",
       gamification: "/api/v1/gamification"
     }
+  });
+});
+app.use((err, _req, res, _next) => {
+  console.error("Unhandled API error:", err);
+  if (res.headersSent) return;
+  const status = Number(err.status || err.statusCode) || 500;
+  res.status(status).json({
+    success: false,
+    message: err.message || "Internal server error"
   });
 });
 if (!process.env.VERCEL) {
@@ -18043,5 +18078,6 @@ if (!process.env.VERCEL) {
 }
 var index_default = app;
 export {
+  config,
   index_default as default
 };

@@ -15,6 +15,13 @@ import { initGDWebSocketServer } from "./services/gd/gdWebSocketService";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Vercel Node serverless otherwise consumes the raw body, which breaks multer uploads.
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 // Connect to MongoDB (for standalone server)
 if (!process.env.VERCEL) {
   connectDB().catch((err) => {
@@ -63,6 +70,11 @@ app.use(express.text({ type: ["application/sdp", "text/plain"], limit: "10mb" })
 app.use("/api/auth", authRoutes);
 app.use("/auth", authRoutes);
 
+app.use("/api/v1/gamification", gamificationRoutes);
+app.use("/v1/gamification", gamificationRoutes);
+app.use("/api/gamification", gamificationRoutes);
+app.use("/gamification", gamificationRoutes);
+
 app.use("/api/v1/resume-analysis", resumeAnalysisRoutes);
 app.use("/v1/resume-analysis", resumeAnalysisRoutes);
 app.use("/resume-analysis", resumeAnalysisRoutes);
@@ -71,21 +83,18 @@ app.use("/api/v1/coding", codingRoutes);
 app.use("/v1/coding", codingRoutes);
 app.use("/api/coding", codingRoutes);
 app.use("/coding", codingRoutes);
-app.use("/api", codingRoutes);
 
 app.use("/api/v1/gd", gdRoutes);
 app.use("/v1/gd", gdRoutes);
 app.use("/gd", gdRoutes);
 
-app.use("/api/v1/gamification", gamificationRoutes);
-app.use("/v1/gamification", gamificationRoutes);
-app.use("/api/gamification", gamificationRoutes);
-app.use("/gamification", gamificationRoutes);
-
 app.use("/api/v1", interviewRoutes);
 app.use("/v1", interviewRoutes);
 
-app.get(["/", "/api"], (req, res) => {
+// Keep last so /api/problems still works without stealing /api/v1/* feature routes
+app.use("/api", codingRoutes);
+
+app.get(["/", "/api"], (_req, res) => {
   res.json({
     status: "ok",
     message: "PrepX AI Placement & Coding Backend is running",
@@ -97,6 +106,16 @@ app.get(["/", "/api"], (req, res) => {
       gd: "/api/v1/gd",
       gamification: "/api/v1/gamification",
     },
+  });
+});
+
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("Unhandled API error:", err);
+  if (res.headersSent) return;
+  const status = Number(err.status || err.statusCode) || 500;
+  res.status(status).json({
+    success: false,
+    message: err.message || "Internal server error",
   });
 });
 

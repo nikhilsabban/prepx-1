@@ -137,9 +137,10 @@ export async function verifyEmailOtp(email: string, otp: string): Promise<AuthRe
 export async function uploadAvatar(file: File): Promise<{ success: boolean; url: string; user: UserProfile }> {
   const formData = new FormData();
   formData.append("avatar", file);
-  const response = await api.post<{ success: boolean; url: string; user: UserProfile }>("/api/auth/upload-avatar", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const response = await api.post<{ success: boolean; url: string; user: UserProfile }>(
+    "/api/auth/upload-avatar",
+    formData
+  );
   return response.data;
 }
 
