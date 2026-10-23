@@ -5,16 +5,20 @@ export interface ChatMessage {
   message: string;
 }
 
-export function getGroqClient(): Groq | null {
+export function getGroqKeys(): string[] {
   const rawKeys = process.env.GROQ_API_KEY;
   if (!rawKeys || !rawKeys.trim()) {
-    return null;
+    return [];
   }
-  const keys = rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
+  return rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
+}
+
+export function getGroqClient(): Groq | null {
+  const keys = getGroqKeys();
   if (keys.length === 0) {
     return null;
   }
-  // Select a random key from the comma-separated key pool to avoid rate limiting
+  // Select a random key from the comma-separated key pool to distribute concurrent load
   const selectedKey = keys[Math.floor(Math.random() * keys.length)];
   return new Groq({ apiKey: selectedKey });
 }
@@ -65,10 +69,10 @@ export async function generateInterviewerResponse(
   latestUserMessage?: string,
   difficulty: string = "Medium"
 ): Promise<string> {
-  const groq = getGroqClient();
+  const keys = getGroqKeys();
 
-  // If Groq API key is not configured, generate context-aware smart fallback technical questions
-  if (!groq) {
+  // If no Groq API key is configured, generate context-aware smart fallback technical questions
+  if (keys.length === 0) {
     const userMessageCount = conversationHistory.filter((m) => m.type === "User").length + (latestUserMessage ? 1 : 0);
     return generateSmartFallbackQuestion(userMessageCount, latestUserMessage || "");
   }
@@ -123,21 +127,27 @@ ${modeContext}`,
     });
   }
 
-  try {
-    const response = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
-      messages,
-      temperature: 0.7,
-      max_tokens: 250,
-    });
+  const startIdx = Math.floor(Math.random() * keys.length);
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const key = keys[(startIdx + attempt) % keys.length];
+    try {
+      const groq = new Groq({ apiKey: key });
+      const response = await groq.chat.completions.create({
+        model: "openai/gpt-oss-120b",
+        messages,
+        temperature: 0.7,
+        max_tokens: 250,
+      });
 
-    const reply = response.choices[0]?.message?.content?.trim();
-    return reply || "That sounds interesting! Could you elaborate on how you structured the architecture for that?";
-  } catch (error) {
-    console.error("Groq response generation error:", error);
-    const userMessageCount = conversationHistory.length;
-    return generateSmartFallbackQuestion(userMessageCount, latestUserMessage || "");
+      const reply = response.choices[0]?.message?.content?.trim();
+      if (reply) return reply;
+    } catch (error: any) {
+      console.warn(`Groq question generation attempt ${attempt + 1}/${keys.length} failed with key:`, error?.message || error);
+    }
   }
+
+  const userMessageCount = conversationHistory.length;
+  return generateSmartFallbackQuestion(userMessageCount, latestUserMessage || "");
 }
 
 /**
@@ -146,14 +156,14 @@ ${modeContext}`,
 export async function evaluateInterviewWithGroq(
   conversationHistory: { type: "User" | "Assistant"; message: string; createdAt?: Date }[]
 ): Promise<any> {
-  const groq = getGroqClient();
-  if (!groq) {
+  const keys = getGroqKeys();
+  if (keys.length === 0) {
     const userAnswers = conversationHistory.filter((c) => c.type === "User");
     const count = userAnswers.length;
     const score = Math.min(9, 6 + Math.floor(count * 0.8));
     return {
       overallScore: score,
-      overallFeedback: `Candidate completed ${count} response turns during the interview session. Demonstrated solid communication and technical background. (Tip: Set GROQ_API_KEY in apps/backend/.env for live Llama 3.1 AI evaluation).`,
+      overallFeedback: `Candidate completed ${count} response turns during the interview session. Demonstrated solid communication and technical background.`,
       improvementAreas: ["Set GROQ_API_KEY for real feedback"],
       ratings: { speaking: score, grammar: score, technicalKnowledge: score },
       speechMetrics: {
@@ -205,34 +215,39 @@ Ensure the perQuestionAnalysis array captures every major Q&A pair from the tran
 Transcript:
 ${transcript}`;
 
-  try {
-    const completion = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-    });
+  const startIdx = Math.floor(Math.random() * keys.length);
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const key = keys[(startIdx + attempt) % keys.length];
+    try {
+      const groq = new Groq({ apiKey: key });
+      const completion = await groq.chat.completions.create({
+        model: "openai/gpt-oss-120b",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0.3,
+      });
 
-    const text = completion.choices[0]?.message?.content || "{}";
-    const parsed = JSON.parse(text);
-
-    return parsed;
-  } catch (error) {
-    console.error("Groq evaluation error:", error);
-    return {
-      overallScore: 7,
-      overallFeedback: "Demonstrated solid technical reasoning during the voice interview session.",
-      improvementAreas: ["Unable to generate detailed feedback due to an API error."],
-      ratings: { speaking: 7, grammar: 7, technicalKnowledge: 7 },
-      speechMetrics: {
-        speechClarity: "8/10",
-        fillerWords: 12,
-        mumbling: "Low",
-        speakingPace: "Good"
-      },
-      perQuestionAnalysis: []
-    };
+      const text = completion.choices[0]?.message?.content || "{}";
+      const parsed = JSON.parse(text);
+      return parsed;
+    } catch (error: any) {
+      console.warn(`Groq evaluation attempt ${attempt + 1}/${keys.length} failed with key:`, error?.message || error);
+    }
   }
+
+  return {
+    overallScore: 7,
+    overallFeedback: "Demonstrated solid technical reasoning during the voice interview session.",
+    improvementAreas: ["Unable to generate detailed feedback due to an API error."],
+    ratings: { speaking: 7, grammar: 7, technicalKnowledge: 7 },
+    speechMetrics: {
+      speechClarity: "8/10",
+      fillerWords: 12,
+      mumbling: "Low",
+      speakingPace: "Good"
+    },
+    perQuestionAnalysis: []
+  };
 }
 
 export async function callGroqWithFallback<T = any>(

@@ -120,4 +120,9 @@ CodingProblemSchema.pre('save', function(next) {
   next();
 });
 
+// Explicit indexes for high-concurrency problem browsing and solving
+CodingProblemSchema.index({ slug: 1 });
+CodingProblemSchema.index({ hidden: 1, difficulty: 1, number: 1 });
+CodingProblemSchema.index({ number: 1 });
+
 export const CodingProblem = mongoose.model<ICodingProblem>('CodingProblem', CodingProblemSchema);

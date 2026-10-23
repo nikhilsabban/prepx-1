@@ -118,7 +118,7 @@ export async function initiateInterview(req: AuthRequest, res: Response): Promis
     await interview.save();
 
     // Check existing messages
-    const existingMessages = await Message.find({ interviewId }).sort({ createdAt: 1 });
+    const existingMessages = await Message.find({ interviewId }).sort({ createdAt: 1 }).lean();
     if (existingMessages.length > 0) {
       const lastAiMessage = existingMessages.filter((m) => m.type === "Assistant").pop();
       const text = lastAiMessage ? lastAiMessage.message : "Welcome to your interview! Tell me about your background.";

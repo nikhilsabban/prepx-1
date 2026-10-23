@@ -19,7 +19,8 @@ export const getProblems = async (req: AuthRequest, res: Response): Promise<void
     const problems = await CodingProblem.find(query)
       .select("-testCases -starter -hints")
       .sort({ number: 1 })
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
     res.json({ problems: problems || [], total: (problems || []).length, page: Number(page) });
   } catch (error: any) {
@@ -30,7 +31,7 @@ export const getProblems = async (req: AuthRequest, res: Response): Promise<void
 export const getProblemBySlug = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { slug } = req.params;
-    const problem = await CodingProblem.findOne({ slug, hidden: false });
+    const problem = await CodingProblem.findOne({ slug, hidden: false }).lean();
 
     if (!problem) {
       res.status(404).json({ message: "Problem not found" });

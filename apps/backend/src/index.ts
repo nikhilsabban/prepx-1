@@ -1,9 +1,16 @@
-import dotenv from "dotenv";
-dotenv.config();
+// Register process error shields early so an unexpected error never crashes the server for concurrent users
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ Caught uncaughtException (crash shield active):", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("⚠️ Caught unhandledRejection at:", promise, "reason:", reason);
+});
 
 import express from "express";
 import cors from "cors";
 import { connectDB } from "./config/db";
+import { createRateLimiter } from "./middleware/rateLimiter";
 import authRoutes from "./routes/authRoutes";
 import interviewRoutes from "./routes/interviewRoutes";
 import resumeAnalysisRoutes from "./routes/resumeAnalysisRoutes";
@@ -14,6 +21,14 @@ import { initGDWebSocketServer } from "./services/gd/gdWebSocketService";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// General API rate limiter: 240 requests/min per IP (smooth protection against burst abuse)
+const generalRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 240,
+  message: "Too many requests. Please wait a moment before trying again.",
+});
+app.use(generalRateLimiter);
 
 // Vercel Node serverless otherwise consumes the raw body, which breaks multer uploads.
 export const config = {
@@ -133,6 +148,10 @@ if (!process.env.VERCEL) {
     console.log(`⚡ Groq LLM Engine: ${hasGroq ? "✅ Live API Connected (openai/gpt-oss-120b)" : "✅ Active (Smart Fallback Mode)"}`);
     console.log(`🎙️  Deepgram Voice Engine: ${hasDeepgram ? "✅ Live Aura Speech Connected" : "✅ Active (Web Speech Fallback Mode)"}`);
   });
+
+  // Optimize HTTP keep-alive timeouts to prevent connection drops across proxies and load balancers
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
 
   server.on("error", (error: any) => {
     if (error.code === "EADDRINUSE") {

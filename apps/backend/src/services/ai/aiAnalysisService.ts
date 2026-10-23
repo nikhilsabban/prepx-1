@@ -131,9 +131,10 @@ ${req.resumeText.slice(0, 4000)}
   const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   let lastError: any = null;
 
-  // Try each key in the key pool until one succeeds
+  // Distribute concurrent requests evenly across keys with random starting offset
+  const startIdx = Math.floor(Math.random() * keys.length);
   for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
+    const key = keys[(startIdx + i) % keys.length];
     try {
       const groq = new Groq({ apiKey: key });
 

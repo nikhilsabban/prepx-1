@@ -280,15 +280,19 @@ __export(groqService_exports, {
   callGroqWithFallback: () => callGroqWithFallback,
   evaluateInterviewWithGroq: () => evaluateInterviewWithGroq,
   generateInterviewerResponse: () => generateInterviewerResponse,
-  getGroqClient: () => getGroqClient
+  getGroqClient: () => getGroqClient,
+  getGroqKeys: () => getGroqKeys
 });
 import Groq from "groq-sdk";
-function getGroqClient() {
+function getGroqKeys() {
   const rawKeys = process.env.GROQ_API_KEY;
   if (!rawKeys || !rawKeys.trim()) {
-    return null;
+    return [];
   }
-  const keys = rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
+  return rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
+}
+function getGroqClient() {
+  const keys = getGroqKeys();
   if (keys.length === 0) {
     return null;
   }
@@ -313,10 +317,10 @@ function generateSmartFallbackQuestion(userMessageCount, candidateAnswer = "") {
   return FALLBACK_INTERVIEW_QUESTIONS[index];
 }
 async function generateInterviewerResponse(githubMetadata, conversationHistory, latestUserMessage, difficulty = "Medium") {
-  const groq = getGroqClient();
-  if (!groq) {
-    const userMessageCount = conversationHistory.filter((m) => m.type === "User").length + (latestUserMessage ? 1 : 0);
-    return generateSmartFallbackQuestion(userMessageCount, latestUserMessage || "");
+  const keys = getGroqKeys();
+  if (keys.length === 0) {
+    const userMessageCount2 = conversationHistory.filter((m) => m.type === "User").length + (latestUserMessage ? 1 : 0);
+    return generateSmartFallbackQuestion(userMessageCount2, latestUserMessage || "");
   }
   const githubSummary = typeof githubMetadata === "string" ? githubMetadata : JSON.stringify(githubMetadata || {});
   let modeContext = "";
@@ -364,30 +368,35 @@ ${modeContext}`
       content: latestUserMessage
     });
   }
-  try {
-    const response = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
-      messages,
-      temperature: 0.7,
-      max_tokens: 250
-    });
-    const reply = response.choices[0]?.message?.content?.trim();
-    return reply || "That sounds interesting! Could you elaborate on how you structured the architecture for that?";
-  } catch (error) {
-    console.error("Groq response generation error:", error);
-    const userMessageCount = conversationHistory.length;
-    return generateSmartFallbackQuestion(userMessageCount, latestUserMessage || "");
+  const startIdx = Math.floor(Math.random() * keys.length);
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const key = keys[(startIdx + attempt) % keys.length];
+    try {
+      const groq = new Groq({ apiKey: key });
+      const response = await groq.chat.completions.create({
+        model: "openai/gpt-oss-120b",
+        messages,
+        temperature: 0.7,
+        max_tokens: 250
+      });
+      const reply = response.choices[0]?.message?.content?.trim();
+      if (reply) return reply;
+    } catch (error) {
+      console.warn(`Groq question generation attempt ${attempt + 1}/${keys.length} failed with key:`, error?.message || error);
+    }
   }
+  const userMessageCount = conversationHistory.length;
+  return generateSmartFallbackQuestion(userMessageCount, latestUserMessage || "");
 }
 async function evaluateInterviewWithGroq(conversationHistory) {
-  const groq = getGroqClient();
-  if (!groq) {
+  const keys = getGroqKeys();
+  if (keys.length === 0) {
     const userAnswers = conversationHistory.filter((c) => c.type === "User");
     const count = userAnswers.length;
     const score = Math.min(9, 6 + Math.floor(count * 0.8));
     return {
       overallScore: score,
-      overallFeedback: `Candidate completed ${count} response turns during the interview session. Demonstrated solid communication and technical background. (Tip: Set GROQ_API_KEY in apps/backend/.env for live Llama 3.1 AI evaluation).`,
+      overallFeedback: `Candidate completed ${count} response turns during the interview session. Demonstrated solid communication and technical background.`,
       improvementAreas: ["Set GROQ_API_KEY for real feedback"],
       ratings: { speaking: score, grammar: score, technicalKnowledge: score },
       speechMetrics: {
@@ -434,32 +443,37 @@ Ensure the perQuestionAnalysis array captures every major Q&A pair from the tran
 
 Transcript:
 ${transcript}`;
-  try {
-    const completion = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.3
-    });
-    const text = completion.choices[0]?.message?.content || "{}";
-    const parsed = JSON.parse(text);
-    return parsed;
-  } catch (error) {
-    console.error("Groq evaluation error:", error);
-    return {
-      overallScore: 7,
-      overallFeedback: "Demonstrated solid technical reasoning during the voice interview session.",
-      improvementAreas: ["Unable to generate detailed feedback due to an API error."],
-      ratings: { speaking: 7, grammar: 7, technicalKnowledge: 7 },
-      speechMetrics: {
-        speechClarity: "8/10",
-        fillerWords: 12,
-        mumbling: "Low",
-        speakingPace: "Good"
-      },
-      perQuestionAnalysis: []
-    };
+  const startIdx = Math.floor(Math.random() * keys.length);
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const key = keys[(startIdx + attempt) % keys.length];
+    try {
+      const groq = new Groq({ apiKey: key });
+      const completion = await groq.chat.completions.create({
+        model: "openai/gpt-oss-120b",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0.3
+      });
+      const text = completion.choices[0]?.message?.content || "{}";
+      const parsed = JSON.parse(text);
+      return parsed;
+    } catch (error) {
+      console.warn(`Groq evaluation attempt ${attempt + 1}/${keys.length} failed with key:`, error?.message || error);
+    }
   }
+  return {
+    overallScore: 7,
+    overallFeedback: "Demonstrated solid technical reasoning during the voice interview session.",
+    improvementAreas: ["Unable to generate detailed feedback due to an API error."],
+    ratings: { speaking: 7, grammar: 7, technicalKnowledge: 7 },
+    speechMetrics: {
+      speechClarity: "8/10",
+      fillerWords: 12,
+      mumbling: "Low",
+      speakingPace: "Good"
+    },
+    perQuestionAnalysis: []
+  };
 }
 async function callGroqWithFallback(fn) {
   const client = getGroqClient();
@@ -494,7 +508,6 @@ var init_groqService = __esm({
 });
 
 // src/index.ts
-import dotenv2 from "dotenv";
 import express from "express";
 import cors from "cors";
 
@@ -503,38 +516,87 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 dotenv.config();
 var cachedConn = null;
+var connectionPromise = null;
 var DEFAULT_MONGO_URI = "mongodb+srv://nikhilsabban56:ekbVqEywwnVnhhZg@cluster0.xxqun.mongodb.net/test?retryWrites=true&w=majority";
+var MONGO_POOL_OPTIONS = {
+  maxPoolSize: 50,
+  // Support up to 50 concurrent database operations
+  minPoolSize: 5,
+  // Maintain ready warm connections
+  serverSelectionTimeoutMS: 8e3,
+  socketTimeoutMS: 45e3,
+  heartbeatFrequencyMS: 1e4
+};
 async function connectDB() {
   if (cachedConn && mongoose.connection.readyState === 1) {
     return cachedConn;
   }
-  const primaryUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
-  const URIs = [
-    primaryUri,
-    !process.env.VERCEL ? "mongodb://127.0.0.1:27017/ai-interviewer" : null,
-    !process.env.VERCEL ? "mongodb://localhost:27017/ai-interviewer" : null
-  ].filter(Boolean);
-  for (const uri of URIs) {
-    try {
-      const conn = await mongoose.connect(uri, { serverSelectionTimeoutMS: 5e3 });
-      console.log(`\u2705 MongoDB Connected: ${conn.connection.host}`);
-      cachedConn = conn;
+  if (connectionPromise) {
+    return connectionPromise;
+  }
+  connectionPromise = (async () => {
+    const primaryUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
+    const URIs = [
+      primaryUri,
+      !process.env.VERCEL ? "mongodb://127.0.0.1:27017/ai-interviewer" : null,
+      !process.env.VERCEL ? "mongodb://localhost:27017/ai-interviewer" : null
+    ].filter(Boolean);
+    for (const uri of URIs) {
       try {
-        await mongoose.connection.collection("interviews").dropIndexes();
-        await mongoose.connection.collection("messages").dropIndexes();
-        await mongoose.connection.collection("users").dropIndexes();
-      } catch (e) {
+        const conn = await mongoose.connect(uri, MONGO_POOL_OPTIONS);
+        console.log(`\u2705 MongoDB Connected with High-Concurrency Pool (${conn.connection.host})`);
+        cachedConn = conn;
+        return conn;
+      } catch (error) {
+        console.warn(`\u26A0\uFE0F MongoDB connection attempt failed (${uri.split("@").pop()}): ${error.message}`);
       }
-      return conn;
-    } catch (error) {
-      console.warn(`\u26A0\uFE0F MongoDB connection attempt failed (${uri.split("@").pop()}): ${error.message}`);
     }
-  }
-  console.warn("\u26A0\uFE0F Could not connect to any MongoDB instance.");
-  if (!process.env.VERCEL) {
-    process.exit(1);
-  }
-  return mongoose;
+    console.warn("\u26A0\uFE0F Could not connect to any MongoDB instance.");
+    return mongoose;
+  })().finally(() => {
+    connectionPromise = null;
+  });
+  return connectionPromise;
+}
+
+// src/middleware/rateLimiter.ts
+function createRateLimiter(options) {
+  const ipMap = /* @__PURE__ */ new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of ipMap.entries()) {
+      if (now > record.resetTime) {
+        ipMap.delete(key);
+      }
+    }
+  }, 6e4).unref();
+  return (req, res, next) => {
+    const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown-client";
+    const now = Date.now();
+    const record = ipMap.get(ip);
+    if (!record || now > record.resetTime) {
+      ipMap.set(ip, {
+        count: 1,
+        resetTime: now + options.windowMs
+      });
+      res.setHeader("X-RateLimit-Limit", options.maxRequests);
+      res.setHeader("X-RateLimit-Remaining", options.maxRequests - 1);
+      return next();
+    }
+    if (record.count >= options.maxRequests) {
+      const retryAfterSec = Math.ceil((record.resetTime - now) / 1e3);
+      res.setHeader("Retry-After", retryAfterSec);
+      res.status(429).json({
+        success: false,
+        message: options.message || `Too many requests from this client. Please slow down and try again in ${retryAfterSec} seconds.`
+      });
+      return;
+    }
+    record.count++;
+    res.setHeader("X-RateLimit-Limit", options.maxRequests);
+    res.setHeader("X-RateLimit-Remaining", options.maxRequests - record.count);
+    next();
+  };
 }
 
 // src/routes/authRoutes.ts
@@ -2252,6 +2314,7 @@ var MessageSchema = new Schema3(
     }
   }
 );
+MessageSchema.index({ interviewId: 1, createdAt: 1 });
 var Message = mongoose4.model("Message", MessageSchema);
 
 // src/services/resultService.ts
@@ -2370,7 +2433,7 @@ async function initiateInterview(req, res) {
     }
     interview.status = "InProgress";
     await interview.save();
-    const existingMessages = await Message.find({ interviewId }).sort({ createdAt: 1 });
+    const existingMessages = await Message.find({ interviewId }).sort({ createdAt: 1 }).lean();
     if (existingMessages.length > 0) {
       const lastAiMessage = existingMessages.filter((m) => m.type === "Assistant").pop();
       const text = lastAiMessage ? lastAiMessage.message : "Welcome to your interview! Tell me about your background.";
@@ -3452,8 +3515,9 @@ ${req.resumeText.slice(0, 4e3)}
 </candidate_resume>`;
   const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   let lastError = null;
+  const startIdx = Math.floor(Math.random() * keys.length);
   for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
+    const key = keys[(startIdx + i) % keys.length];
     try {
       const groq = new Groq2({ apiKey: key });
       const completion = await groq.chat.completions.create({
@@ -3939,6 +4003,9 @@ CodingProblemSchema.pre("save", function(next) {
   }
   next();
 });
+CodingProblemSchema.index({ slug: 1 });
+CodingProblemSchema.index({ hidden: 1, difficulty: 1, number: 1 });
+CodingProblemSchema.index({ number: 1 });
 var CodingProblem = mongoose8.model("CodingProblem", CodingProblemSchema);
 
 // src/models/CodingSubmission.ts
@@ -14350,7 +14417,7 @@ var getProblems = async (req, res) => {
     if (difficulty && difficulty !== "all") query.difficulty = difficulty;
     if (tag && tag !== "all") query.tags = { $in: [new RegExp(String(tag), "i")] };
     if (search) query.title = { $regex: String(search), $options: "i" };
-    const problems2 = await CodingProblem.find(query).select("-testCases -starter -hints").sort({ number: 1 }).limit(Number(limit));
+    const problems2 = await CodingProblem.find(query).select("-testCases -starter -hints").sort({ number: 1 }).limit(Number(limit)).lean();
     res.json({ problems: problems2 || [], total: (problems2 || []).length, page: Number(page) });
   } catch (error) {
     res.json({ problems: [], total: 0, page: 1 });
@@ -14359,7 +14426,7 @@ var getProblems = async (req, res) => {
 var getProblemBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const problem = await CodingProblem.findOne({ slug, hidden: false });
+    const problem = await CodingProblem.findOne({ slug, hidden: false }).lean();
     if (!problem) {
       res.status(404).json({ message: "Problem not found" });
       return;
@@ -18241,9 +18308,20 @@ function initGDWebSocketServer(server) {
 }
 
 // src/index.ts
-dotenv2.config();
+process.on("uncaughtException", (err) => {
+  console.error("\u26A0\uFE0F Caught uncaughtException (crash shield active):", err);
+});
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("\u26A0\uFE0F Caught unhandledRejection at:", promise, "reason:", reason);
+});
 var app = express();
 var PORT = process.env.PORT || 3001;
+var generalRateLimiter = createRateLimiter({
+  windowMs: 60 * 1e3,
+  maxRequests: 240,
+  message: "Too many requests. Please wait a moment before trying again."
+});
+app.use(generalRateLimiter);
 var config = {
   api: {
     bodyParser: false
@@ -18335,6 +18413,8 @@ if (!process.env.VERCEL) {
     console.log(`\u26A1 Groq LLM Engine: ${hasGroq ? "\u2705 Live API Connected (openai/gpt-oss-120b)" : "\u2705 Active (Smart Fallback Mode)"}`);
     console.log(`\u{1F399}\uFE0F  Deepgram Voice Engine: ${hasDeepgram ? "\u2705 Live Aura Speech Connected" : "\u2705 Active (Web Speech Fallback Mode)"}`);
   });
+  server.keepAliveTimeout = 65e3;
+  server.headersTimeout = 66e3;
   server.on("error", (error) => {
     if (error.code === "EADDRINUSE") {
       console.error(`\u274C Port ${PORT} is already in use. Please free port ${PORT} or kill the running process.`);

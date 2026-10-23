@@ -33,4 +33,7 @@ const MessageSchema = new Schema<IMessage>(
   }
 );
 
+// High-concurrency compound index for instantaneous interview history lookups
+MessageSchema.index({ interviewId: 1, createdAt: 1 });
+
 export const Message = mongoose.model<IMessage>("Message", MessageSchema);
