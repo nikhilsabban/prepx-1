@@ -2,8 +2,16 @@
 // server components and passed as props, so the full problem catalog (test
 // cases included) never reaches the client bundle.
 
-import { problems } from "./dsa";
-import type { DailyCatalogEntry } from "@/components/marketing/daily-problem";
+import { problems, type Difficulty } from "./dsa";
+
+export type DailyCatalogEntry = {
+  slug: string;
+  title: string;
+  difficulty: Difficulty;
+  topicName: string;
+  tags: string[];
+  hasEditorial: boolean;
+};
 
 export const dailyCatalog: DailyCatalogEntry[] = problems.map((p) => ({
   slug: p.slug,

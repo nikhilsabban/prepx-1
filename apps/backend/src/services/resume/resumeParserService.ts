@@ -102,7 +102,7 @@ export async function extractTextFromBuffer(
     try {
       // Dynamic import avoids esbuild/ESM issues with CJS modules
       // @ts-ignore — dynamic require for optional pdf-parse support
-      const mod = await import("pdf-parse").catch(() => null);
+      const mod: any = await import("pdf-parse").catch(() => null);
       const pdfParseFn = mod?.default ?? mod;
       if (typeof pdfParseFn === "function") {
         const result = await pdfParseFn(buffer);
