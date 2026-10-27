@@ -920,6 +920,15 @@ export function GDRoomPage() {
           return;
         }
 
+        if (err.error === "audio-capture") {
+          speechNetworkErrorCountRef.current = Math.max(speechNetworkErrorCountRef.current + 1, 3);
+          if (!speechNoticeLoggedRef.current) {
+            console.info("Speech recognition notice (Microphone audio-capture active in room). Manual input is active.");
+            speechNoticeLoggedRef.current = true;
+          }
+          return;
+        }
+
         if (err.error === "not-allowed" || err.error === "service-not-allowed") {
           hasFatalPermissionError = true;
           console.warn("Speech recognition microphone permission denied by browser.");
@@ -1530,6 +1539,8 @@ export function GDRoomPage() {
 
       // Resume AudioContext & restart speech recognition if unmuting
       if (audioTrack.enabled) {
+        speechNetworkErrorCountRef.current = 0;
+        speechNoticeLoggedRef.current = false;
         if (audioContextRef.current?.state === "suspended") {
           audioContextRef.current.resume().catch(() => { });
         }
