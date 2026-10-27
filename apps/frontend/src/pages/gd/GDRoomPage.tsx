@@ -329,6 +329,13 @@ export function GDRoomPage() {
     try {
       // Join room in backend (enforces accepted invitation and 5 student cap)
       const joinRes = await joinGDRoom(sessionId!);
+
+      if (joinRes.session?.status === "completed") {
+        toast.info("This discussion has ended. Loading report...");
+        navigate(`/group-discussion/result/${sessionId}`, { replace: true });
+        return;
+      }
+
       setSession(joinRes.session);
       setCurrentParticipant(joinRes.participant);
       currentParticipantRef.current = joinRes.participant;
