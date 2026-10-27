@@ -412,7 +412,19 @@ export async function fetchGDModeratorSpeech(
   audioBase64: string | null;
   contentType?: string;
 }> {
-  const res = await api.post(`/api/v1/gd/rooms/${roomId}/moderator-speech`, { textOverride });
-  return res.data;
+  try {
+    const res = await api.post(`/api/v1/gd/rooms/${roomId}/moderator-speech`, { textOverride });
+    return res.data;
+  } catch (err: any) {
+    console.info("Murf AI audio endpoint notice, using local moderator briefing fallback:", err?.response?.status || err?.message);
+    return {
+      success: true,
+      moderatorText:
+        textOverride ||
+        "Welcome to today's Group Discussion. Each participant will have dedicated speaking turns to share their perspective. Please maintain constructive dialogue and professional decorum. Let us begin.",
+      audioBase64: null,
+      contentType: "audio/mp3",
+    };
+  }
 }
 

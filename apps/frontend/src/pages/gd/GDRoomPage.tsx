@@ -153,6 +153,8 @@ export function GDRoomPage() {
   const isVideoOnRef = useRef<boolean>(true);
   const isSpeechActiveRef = useRef<boolean>(false);
   const speechRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speechNetworkErrorCountRef = useRef<number>(0);
+  const speechNoticeLoggedRef = useRef<boolean>(false);
 
   // Keep refs synchronized with React state
   useEffect(() => {
@@ -824,6 +826,10 @@ export function GDRoomPage() {
       recognition.onresult = (event: any) => {
         if (!isMicOnRef.current) return;
 
+        // Reset network retry count on active speech recognition
+        speechNetworkErrorCountRef.current = 0;
+        speechNoticeLoggedRef.current = false;
+
         // Cancel any pending interim flush when new results arrive
         if (interimDebounceTimer) {
           clearTimeout(interimDebounceTimer);
@@ -906,7 +912,11 @@ export function GDRoomPage() {
         }
 
         if (err.error === "network") {
-          console.warn("Speech recognition network notice (Cloud speech recognition unavailable). Manual input is active.");
+          speechNetworkErrorCountRef.current += 1;
+          if (!speechNoticeLoggedRef.current) {
+            console.info("Speech recognition notice (Cloud speech recognition reconnecting in background). Manual input is active.");
+            speechNoticeLoggedRef.current = true;
+          }
           return;
         }
 
@@ -926,6 +936,11 @@ export function GDRoomPage() {
 
         if (hasFatalPermissionError || !isMicOnRef.current) return;
 
+        // Apply progressive backoff if network error occurred, otherwise standard 200ms restart
+        const delay = speechNetworkErrorCountRef.current > 0
+          ? Math.min(1000 * Math.pow(1.5, speechNetworkErrorCountRef.current), 6000)
+          : 200;
+
         // Restart quickly to minimize gap in continuous recognition
         if (speechRestartTimeoutRef.current) {
           clearTimeout(speechRestartTimeoutRef.current);
@@ -934,7 +949,7 @@ export function GDRoomPage() {
           if (isMicOnRef.current && !isSpeechActiveRef.current) {
             startMurfOrNativeSTT();
           }
-        }, 200);
+        }, delay);
       };
 
       try {
