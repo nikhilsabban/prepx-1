@@ -1,0 +1,221 @@
+import mongoose, { Document, Schema } from "mongoose";
+
+export interface IUser extends Document {
+  username?: string;
+  fullName: string;
+  email: string;
+  password: string;
+  college?: string;
+  branch?: string;
+  degree?: string;
+  graduationYear?: string;
+  cgpa?: string;
+  profilePicture?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  phoneNumber?: string;
+  xp?: number;
+  streakDays?: number;
+  lastActiveDate?: Date;
+  badges?: string[];
+  mobileSessionToken?: string;
+  desktopSessionToken?: string;
+  authProvider?: string;
+  providerId?: string;
+  resetPasswordToken?: string;
+  resetPasswordExpire?: Date;
+  emailOtpToken?: string;
+  emailOtpExpire?: Date;
+  rating?: number;
+  ratingTitle?: string;
+  solved?: mongoose.Types.ObjectId[];
+  attempted?: mongoose.Types.ObjectId[];
+  bookmarks?: mongoose.Types.ObjectId[];
+  gdBookmarks?: mongoose.Types.ObjectId[];
+  codingStreak?: number;
+  codingStreakLast?: string;
+  plan?: string;
+  isAdmin?: boolean;
+  isVerified?: boolean;
+  verificationToken?: string;
+  verificationTokenExpire?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const UserSchema = new Schema<IUser>(
+  {
+    username: {
+      type: String,
+      unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      minlength: [3, "Username must be at least 3 characters long"],
+      match: [/^[a-zA-Z0-9_.-]+$/, "Username can only contain letters, numbers, underscores, dots, and hyphens"],
+    },
+    fullName: {
+      type: String,
+      required: [true, "Full name is required"],
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: [true, "Email is required"],
+      unique: true,
+      lowercase: true,
+      trim: true,
+      match: [
+        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/,
+        "Please enter a valid email address",
+      ],
+    },
+    password: {
+      type: String,
+      minlength: [6, "Password must be at least 6 characters long"],
+    },
+    authProvider: {
+      type: String,
+      enum: ["local", "google", "github", "linkedin"],
+      default: "local",
+    },
+    providerId: {
+      type: String,
+      default: "",
+    },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
+    emailOtpToken: String,
+    emailOtpExpire: Date,
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    verificationToken: String,
+    verificationTokenExpire: Date,
+    college: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    branch: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    degree: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    graduationYear: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    cgpa: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    profilePicture: {
+      type: String,
+      default: "",
+    },
+    linkedinUrl: {
+      type: String,
+      default: "",
+    },
+    githubUrl: {
+      type: String,
+      default: "",
+    },
+    phoneNumber: {
+      type: String,
+      default: "",
+    },
+    xp: {
+      type: Number,
+      default: 0,
+    },
+    streakDays: {
+      type: Number,
+      default: 1,
+    },
+    lastActiveDate: {
+      type: Date,
+      default: Date.now,
+    },
+    badges: {
+      type: [String],
+      default: ["On Fire!"],
+    },
+    mobileSessionToken: {
+      type: String,
+      default: "",
+    },
+    desktopSessionToken: {
+      type: String,
+      default: "",
+    },
+    rating: {
+      type: Number,
+      default: 0,
+    },
+    ratingTitle: {
+      type: String,
+      default: "Beginner",
+    },
+    solved: [{
+      type: Schema.Types.ObjectId,
+      ref: "CodingProblem",
+    }],
+    attempted: [{
+      type: Schema.Types.ObjectId,
+      ref: "CodingProblem",
+    }],
+    bookmarks: [{
+      type: Schema.Types.ObjectId,
+      ref: "CodingProblem",
+    }],
+    gdBookmarks: [{
+      type: Schema.Types.ObjectId,
+      ref: "GroupDiscussion",
+    }],
+    codingStreak: {
+      type: Number,
+      default: 0,
+    },
+    codingStreakLast: {
+      type: String,
+      default: "",
+    },
+    plan: {
+      type: String,
+      default: "free",
+    },
+    isAdmin: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// High-performance indexes for leaderboards, profile lookups, auth, and verification
+UserSchema.index({ xp: -1 });
+UserSchema.index({ rating: -1 });
+UserSchema.index({ createdAt: -1 });
+UserSchema.index({ verificationToken: 1 }, { sparse: true });
+UserSchema.index({ resetPasswordToken: 1 }, { sparse: true });
+
+// Method to return user info without password
+UserSchema.methods.toJSON = function () {
+  const user = this.toObject();
+  delete user.password;
+  return user;
+};
+
+export const User = mongoose.model<IUser>("User", UserSchema);

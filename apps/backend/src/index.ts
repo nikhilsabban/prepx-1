@@ -1,0 +1,174 @@
+// Register process error shields early so an unexpected error never crashes the server for concurrent users
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ Caught uncaughtException (crash shield active):", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("⚠️ Caught unhandledRejection at:", promise, "reason:", reason);
+});
+
+import express from "express";
+import cors from "cors";
+import mongoose from "mongoose";
+import { connectDB } from "./config/db";
+import { createRateLimiter } from "./middleware/rateLimiter";
+import authRoutes from "./routes/authRoutes";
+import interviewRoutes from "./routes/interviewRoutes";
+import resumeAnalysisRoutes from "./routes/resumeAnalysisRoutes";
+import codingRoutes from "./routes/codingRoutes";
+import gdRoutes from "./routes/gdRoutes";
+import gamificationRoutes from "./routes/gamificationRoutes";
+import { initGDWebSocketServer } from "./services/gd/gdWebSocketService";
+import { initSTTWebSocketServer } from "./services/sttProxyService";
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// General API rate limiter: 240 requests/min per IP (smooth protection against burst abuse)
+const generalRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 240,
+  message: "Too many requests. Please wait a moment before trying again.",
+});
+app.use(generalRateLimiter);
+
+// Vercel Node serverless otherwise consumes the raw body, which breaks multer uploads.
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+// Connect to MongoDB (for standalone server)
+if (!process.env.VERCEL) {
+  connectDB().catch((err) => {
+    console.warn("MongoDB initial connection notice:", err.message);
+  });
+}
+
+// Explicit CORS and preflight handling (crucial for Vercel Serverless Functions)
+app.use((req, res, next) => {
+  const origin = req.headers.origin || "*";
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  })
+);
+
+// Fast non-blocking DB connection check for serverless & local environments
+app.use((_req, _res, next) => {
+  if (mongoose.connection.readyState === 1) {
+    return next();
+  }
+  connectDB()
+    .then(() => next())
+    .catch((err: any) => {
+      console.warn("MongoDB connection warning in request middleware:", err.message);
+      next();
+    });
+});
+
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ limit: "20mb", extended: true }));
+app.use(express.text({ type: ["application/sdp", "text/plain"], limit: "10mb" }));
+
+// Routes - Dual mounted so both local /api and stripped Vercel serverless paths route seamlessly
+app.use("/api/auth", authRoutes);
+app.use("/auth", authRoutes);
+
+app.use("/api/v1/gamification", gamificationRoutes);
+app.use("/v1/gamification", gamificationRoutes);
+app.use("/api/gamification", gamificationRoutes);
+app.use("/gamification", gamificationRoutes);
+
+app.use("/api/v1/resume-analysis", resumeAnalysisRoutes);
+app.use("/v1/resume-analysis", resumeAnalysisRoutes);
+app.use("/resume-analysis", resumeAnalysisRoutes);
+
+app.use("/api/v1/coding", codingRoutes);
+app.use("/v1/coding", codingRoutes);
+app.use("/api/coding", codingRoutes);
+app.use("/coding", codingRoutes);
+
+app.use("/api/v1/gd", gdRoutes);
+app.use("/v1/gd", gdRoutes);
+app.use("/gd", gdRoutes);
+
+app.use("/api/v1", interviewRoutes);
+app.use("/v1", interviewRoutes);
+
+// Keep last so /api/problems still works without stealing /api/v1/* feature routes
+app.use("/api", codingRoutes);
+
+app.get(["/", "/api"], (_req, res) => {
+  res.json({
+    status: "ok",
+    message: "PrepX AI Placement & Coding Backend is running",
+    endpoints: {
+      auth: "/api/auth",
+      interview: "/api/v1",
+      resumeAnalysis: "/api/v1/resume-analysis",
+      coding: "/api/v1/coding",
+      gd: "/api/v1/gd",
+      gamification: "/api/v1/gamification",
+    },
+  });
+});
+
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("Unhandled API error:", err);
+  if (res.headersSent) return;
+  const status = Number(err.status || err.statusCode) || 500;
+  res.status(status).json({
+    success: false,
+    message: err.message || "Internal server error",
+  });
+});
+
+
+if (!process.env.VERCEL) {
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    
+    // Attach Group Discussion real-time WebSocket server
+    initGDWebSocketServer(server);
+
+    // Attach Secure STT Streaming WebSocket server
+    initSTTWebSocketServer(server);
+
+    const hasGroq = !!process.env.GROQ_API_KEY?.trim();
+    const hasMurf = !!process.env.MURF_API_KEY?.trim();
+
+    console.log(`⚡ Groq LLM Engine: ${hasGroq ? "✅ Live API Connected (openai/gpt-oss-120b)" : "✅ Active (Smart Fallback Mode)"}`);
+    console.log(`🎙️  Murf AI Voice Engine: ${hasMurf ? "✅ Live Murf Speech & TTS Connected" : "✅ Active (Web Speech Fallback Mode)"}`);
+  });
+
+  // Optimize HTTP keep-alive timeouts to prevent connection drops across proxies and load balancers
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
+
+  server.on("error", (error: any) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`❌ Port ${PORT} is already in use. Please free port ${PORT} or kill the running process.`);
+    } else {
+      console.error("❌ Server error:", error);
+    }
+  });
+}
+
+export default app;
