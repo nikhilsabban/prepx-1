@@ -176,6 +176,7 @@ var init_User = __esm({
     );
     UserSchema.index({ xp: -1 });
     UserSchema.index({ rating: -1 });
+    UserSchema.index({ xp: -1, rating: -1 });
     UserSchema.index({ createdAt: -1 });
     UserSchema.index({ verificationToken: 1 }, { sparse: true });
     UserSchema.index({ resetPasswordToken: 1 }, { sparse: true });
@@ -18175,7 +18176,7 @@ router6.get(["/status", "/profile", "/"], optionalAuth, async (req, res) => {
   try {
     let user = req.user;
     if (user && user._id) {
-      const fresh = await User.findById(user._id);
+      const fresh = await User.findById(user._id).select("xp streakDays codingStreak rating ratingTitle badges solved").lean();
       if (fresh) user = fresh;
     }
     const currentXp = user?.xp || 0;

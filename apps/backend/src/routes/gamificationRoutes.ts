@@ -144,9 +144,11 @@ router.get(["/status", "/profile", "/"], optionalAuth, async (req: AuthRequest, 
   try {
     let user = req.user;
     if (user && user._id) {
-      // Re-fetch fresh user
-      const fresh = await User.findById(user._id);
-      if (fresh) user = fresh;
+      // Re-fetch fresh user (lean with field projection for high throughput)
+      const fresh = await User.findById(user._id)
+        .select("xp streakDays codingStreak rating ratingTitle badges solved")
+        .lean();
+      if (fresh) user = fresh as any;
     }
 
     const currentXp = user?.xp || 0;

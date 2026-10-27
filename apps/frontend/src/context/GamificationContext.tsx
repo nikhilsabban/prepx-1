@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api from "../services/api";
 import { useAuth } from "./AuthContext";
 import { toast } from "react-toastify";
@@ -325,34 +325,59 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
     await Promise.all([fetchStatus(), fetchLeaderboard()]);
   }, [fetchStatus, fetchLeaderboard]);
 
-  const unlockedBadgesCount = badges.filter((b) => b.unlocked).length;
+  const unlockedBadgesCount = useMemo(() => badges.filter((b) => b.unlocked).length, [badges]);
+
+  const gamificationValue = useMemo(
+    () => ({
+      xp,
+      ...levelStats,
+      streakDays,
+      rating,
+      ratingTitle,
+      solvedCount,
+      badges,
+      unlockedBadgesCount,
+      dailyQuests,
+      leaderboard,
+      isLoading,
+      isHubOpen,
+      hubActiveTab,
+      celebration,
+      openHub,
+      closeHub,
+      triggerCelebration,
+      closeCelebration,
+      awardXP,
+      claimQuest,
+      refreshGamification,
+    }),
+    [
+      xp,
+      levelStats,
+      streakDays,
+      rating,
+      ratingTitle,
+      solvedCount,
+      badges,
+      unlockedBadgesCount,
+      dailyQuests,
+      leaderboard,
+      isLoading,
+      isHubOpen,
+      hubActiveTab,
+      celebration,
+      openHub,
+      closeHub,
+      triggerCelebration,
+      closeCelebration,
+      awardXP,
+      claimQuest,
+      refreshGamification,
+    ]
+  );
 
   return (
-    <GamificationContext.Provider
-      value={{
-        xp,
-        ...levelStats,
-        streakDays,
-        rating,
-        ratingTitle,
-        solvedCount,
-        badges,
-        unlockedBadgesCount,
-        dailyQuests,
-        leaderboard,
-        isLoading,
-        isHubOpen,
-        hubActiveTab,
-        celebration,
-        openHub,
-        closeHub,
-        triggerCelebration,
-        closeCelebration,
-        awardXP,
-        claimQuest,
-        refreshGamification,
-      }}
-    >
+    <GamificationContext.Provider value={gamificationValue}>
       {children}
     </GamificationContext.Provider>
   );

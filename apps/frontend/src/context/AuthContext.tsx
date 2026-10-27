@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadUser();
   }, []);
 
-  async function login(data: LoginData) {
+  const login = React.useCallback(async (data: LoginData) => {
     setIsLoading(true);
     try {
       const response = await loginUser(data);
@@ -85,9 +85,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
-  async function googleLogin(credential: string, clientId?: string) {
+  const googleLogin = React.useCallback(async (credential: string, clientId?: string) => {
     setIsLoading(true);
     try {
       const response = await googleLoginApi(credential, clientId);
@@ -101,9 +101,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
-  async function githubLogin(code: string) {
+  const githubLogin = React.useCallback(async (code: string) => {
     setIsLoading(true);
     try {
       const response = await githubLoginApi(code);
@@ -117,9 +117,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
-  async function linkedinLogin(code: string, redirectUri: string) {
+  const linkedinLogin = React.useCallback(async (code: string, redirectUri: string) => {
     setIsLoading(true);
     try {
       const response = await linkedinLoginApi(code, redirectUri);
@@ -133,13 +133,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
-  async function sendEmailOtp(email: string) {
+  const sendEmailOtp = React.useCallback(async (email: string) => {
     return await sendEmailOtpApi(email);
-  }
+  }, []);
 
-  async function verifyEmailOtp(email: string, otp: string) {
+  const verifyEmailOtp = React.useCallback(async (email: string, otp: string) => {
     setIsLoading(true);
     try {
       const response = await verifyEmailOtpApi(email, otp);
@@ -153,9 +153,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
-  async function signup(data: SignupData) {
+  const signup = React.useCallback(async (data: SignupData) => {
     setIsLoading(true);
     try {
       const response = await signupUser(data);
@@ -164,9 +164,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
 
-  async function logout() {
+  const logout = React.useCallback(async () => {
     try {
       await logoutUser();
     } catch {
@@ -177,49 +177,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(null);
       setUser(null);
     }
-  }
+  }, []);
 
-  async function updateUser(data: UpdateProfileData) {
+  const updateUser = React.useCallback(async (data: UpdateProfileData) => {
     const response = await updateProfileApi(data);
     if (response.success && response.user) {
       setUser(response.user);
       localStorage.setItem("user", JSON.stringify(response.user));
     }
-  }
+  }, []);
 
-  async function changePassword(data: ChangePasswordData) {
+  const changePassword = React.useCallback(async (data: ChangePasswordData) => {
     await changePasswordApi(data);
-  }
+  }, []);
 
-  async function refreshProfile() {
-    if (!token) return;
+  const refreshProfile = React.useCallback(async () => {
+    const storedToken = localStorage.getItem("token");
+    if (!storedToken) return;
     const res = await fetchProfile();
     if (res.success && res.user) {
       setUser(res.user);
       localStorage.setItem("user", JSON.stringify(res.user));
     }
-  }
+  }, []);
+
+  const authContextValue = React.useMemo<AuthContextType>(
+    () => ({
+      user,
+      token,
+      isAuthenticated: !!token,
+      isLoading,
+      login,
+      googleLogin,
+      githubLogin,
+      linkedinLogin,
+      sendEmailOtp,
+      verifyEmailOtp,
+      signup,
+      logout,
+      updateUser,
+      changePassword,
+      refreshProfile,
+    }),
+    [
+      user,
+      token,
+      isLoading,
+      login,
+      googleLogin,
+      githubLogin,
+      linkedinLogin,
+      sendEmailOtp,
+      verifyEmailOtp,
+      signup,
+      logout,
+      updateUser,
+      changePassword,
+      refreshProfile,
+    ]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isAuthenticated: !!token,
-        isLoading,
-        login,
-        googleLogin,
-        githubLogin,
-        linkedinLogin,
-        sendEmailOtp,
-        verifyEmailOtp,
-        signup,
-        logout,
-        updateUser,
-        changePassword,
-        refreshProfile,
-      }}
-    >
+    <AuthContext.Provider value={authContextValue}>
       {children}
     </AuthContext.Provider>
   );

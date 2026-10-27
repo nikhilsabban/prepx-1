@@ -10,34 +10,34 @@ import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Form } from "./components/Form";
-import { Interview } from "./components/Interview";
-import { Result } from "./components/Result";
 import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
-import { Profile } from "./pages/Profile";
-import { Dashboard } from "./pages/Dashboard";
-import { FeaturePlaceholder } from "./pages/FeaturePlaceholder";
-import { AuthCallback } from "./pages/AuthCallback";
-import { ForgotPassword } from "./pages/ForgotPassword";
-import { ResetPassword } from "./pages/ResetPassword";
-import { PrivacyPolicy } from "./pages/PrivacyPolicy";
-import { TermsAndConditions } from "./pages/TermsAndConditions";
-import { AIInterview } from "./pages/AIInterview";
+import { SkeletonPage } from "./components/ui/skeleton";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-import { HistoryPage } from "./pages/HistoryPage";
-import { AboutUs } from "./pages/AboutUs";
-import { SkeletonPage } from "./components/ui/skeleton";
-import { ResumeAnalyzerPage } from "./pages/ResumeAnalyzerPage";
-
-import { BookmarksPage } from "./pages/BookmarksPage";
-import { CodingPlatformPage } from "./pages/coding/CodingPlatformPage";
-import { VerifyEmailPage } from "./pages/VerifyEmailPage";
-import { VerifyEmailPendingPage } from "./pages/VerifyEmailPendingPage";
-import { GDHubPage } from "./pages/gd/GDHubPage";
-import { GDRoomPage } from "./pages/gd/GDRoomPage";
-import { GDResultPage } from "./pages/gd/GDResultPage";
+// Route-level code splitting to optimize initial bundle size & rendering speed
+const Dashboard = React.lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
+const Profile = React.lazy(() => import("./pages/Profile").then((m) => ({ default: m.Profile })));
+const AIInterview = React.lazy(() => import("./pages/AIInterview").then((m) => ({ default: m.AIInterview })));
+const Interview = React.lazy(() => import("./components/Interview").then((m) => ({ default: m.Interview })));
+const Result = React.lazy(() => import("./components/Result").then((m) => ({ default: m.Result })));
+const HistoryPage = React.lazy(() => import("./pages/HistoryPage").then((m) => ({ default: m.HistoryPage })));
+const BookmarksPage = React.lazy(() => import("./pages/BookmarksPage").then((m) => ({ default: m.BookmarksPage })));
+const ResumeAnalyzerPage = React.lazy(() => import("./pages/ResumeAnalyzerPage").then((m) => ({ default: m.ResumeAnalyzerPage })));
+const CodingPlatformPage = React.lazy(() => import("./pages/coding/CodingPlatformPage").then((m) => ({ default: m.CodingPlatformPage })));
+const GDHubPage = React.lazy(() => import("./pages/gd/GDHubPage").then((m) => ({ default: m.GDHubPage })));
+const GDRoomPage = React.lazy(() => import("./pages/gd/GDRoomPage").then((m) => ({ default: m.GDRoomPage })));
+const GDResultPage = React.lazy(() => import("./pages/gd/GDResultPage").then((m) => ({ default: m.GDResultPage })));
+const AboutUs = React.lazy(() => import("./pages/AboutUs").then((m) => ({ default: m.AboutUs })));
+const PrivacyPolicy = React.lazy(() => import("./pages/PrivacyPolicy").then((m) => ({ default: m.PrivacyPolicy })));
+const TermsAndConditions = React.lazy(() => import("./pages/TermsAndConditions").then((m) => ({ default: m.TermsAndConditions })));
+const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword").then((m) => ({ default: m.ForgotPassword })));
+const ResetPassword = React.lazy(() => import("./pages/ResetPassword").then((m) => ({ default: m.ResetPassword })));
+const VerifyEmailPage = React.lazy(() => import("./pages/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage })));
+const VerifyEmailPendingPage = React.lazy(() => import("./pages/VerifyEmailPendingPage").then((m) => ({ default: m.VerifyEmailPendingPage })));
+const AuthCallback = React.lazy(() => import("./pages/AuthCallback").then((m) => ({ default: m.AuthCallback })));
+const FeaturePlaceholder = React.lazy(() => import("./pages/FeaturePlaceholder").then((m) => ({ default: m.FeaturePlaceholder })));
 
 import { useLocation } from "react-router";
 

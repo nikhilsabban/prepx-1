@@ -207,6 +207,7 @@ const UserSchema = new Schema<IUser>(
 // High-performance indexes for leaderboards, profile lookups, auth, and verification
 UserSchema.index({ xp: -1 });
 UserSchema.index({ rating: -1 });
+UserSchema.index({ xp: -1, rating: -1 });
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ verificationToken: 1 }, { sparse: true });
 UserSchema.index({ resetPasswordToken: 1 }, { sparse: true });

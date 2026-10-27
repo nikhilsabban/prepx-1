@@ -31,47 +31,46 @@ export function Dashboard() {
 
 
   useEffect(() => {
-    async function loadRecent() {
-      try {
-        const data = await fetchMyInterviews();
-        const list = data.interviews || [];
+    let isMounted = true;
+
+    async function loadDashboardData() {
+      const [interviewsRes, bookmarksRes, leaderboardRes] = await Promise.allSettled([
+        fetchMyInterviews(),
+        fetchBookmarksApi(),
+        fetchLeaderboardApi(),
+      ]);
+
+      if (!isMounted) return;
+
+      if (interviewsRes.status === "fulfilled" && interviewsRes.value?.interviews) {
+        const list = interviewsRes.value.interviews;
         setAllInterviews(list);
         setRecentInterviews(list.slice(0, 3));
-      } catch (err) {
-        console.error("Failed to load recent interviews:", err);
-      } finally {
-        setFetchingHistory(false);
       }
-    }
-    async function loadBookmarks() {
-      try {
-        const data = await fetchBookmarksApi();
-        setBookmarkedInterviews((data.bookmarks || []).slice(0, 3));
-      } catch (err) {
-        console.error("Failed to load bookmarks:", err);
-      } finally {
-        setFetchingBookmarks(false);
-      }
-    }
-    async function loadLeaderboard() {
-      try {
-        const data = await fetchLeaderboardApi();
-        if (data.success && data.leaderboard) {
-          setLeaderboard(data.leaderboard);
-        }
-      } catch (err) {
-        console.error("Failed to load leaderboard:", err);
-      } finally {
-        setFetchingLeaderboard(false);
-      }
-    }
-    loadRecent();
-    loadBookmarks();
-    loadLeaderboard();
+      setFetchingHistory(false);
 
+      if (bookmarksRes.status === "fulfilled" && bookmarksRes.value?.bookmarks) {
+        setBookmarkedInterviews((bookmarksRes.value.bookmarks || []).slice(0, 3));
+      }
+      setFetchingBookmarks(false);
+
+      if (leaderboardRes.status === "fulfilled" && leaderboardRes.value?.leaderboard) {
+        setLeaderboard(leaderboardRes.value.leaderboard);
+      }
+      setFetchingLeaderboard(false);
+    }
+
+    loadDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const firstName = user?.fullName?.split(" ")[0] || "Developer";
+  const firstName = React.useMemo(
+    () => user?.fullName?.split(" ")[0] || "Developer",
+    [user?.fullName]
+  );
 
   const handleStartQuickInterview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +94,7 @@ export function Dashboard() {
     }
   };
 
-  const navItems = [
+  const navItems = React.useMemo(() => [
     { icon: Home, label: "Dashboard", href: `/${userId}` },
     { icon: GraduationCap, label: "Mock Interview", href: `/ai-interview` },
     { icon: Users, label: "Group Discussion", href: `/group-discussion` },
@@ -103,7 +102,7 @@ export function Dashboard() {
     { icon: FileText, label: "Resume Review", href: `/${userId}/resume` },
     { icon: History, label: "History", href: `/${userId}/history` },
     { icon: Bookmark, label: "Saved Items", href: `/${userId}/bookmarks` },
-  ];
+  ], [userId]);
 
   return (
     <div className="min-h-screen bg-[#050507] text-white flex font-sans">
