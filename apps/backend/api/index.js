@@ -20212,7 +20212,7 @@ function initSTTWebSocketServer(server) {
       });
     }
   });
-  wss.on("connection", async (client) => {
+  wss.on("connection", (client) => {
     client.isAlive = true;
     client.audioQueue = [];
     client.on("pong", () => {
@@ -20234,11 +20234,60 @@ function initSTTWebSocketServer(server) {
       }
       return;
     }
-    try {
-      client.keyterms = await getDynamicInterviewKeyterms(client.interviewId);
-    } catch {
-      client.keyterms = [];
-    }
+    client.on("message", (data, isBinary) => {
+      const upstream = client.upstreamSocket;
+      if (isBinary) {
+        const chunk = Buffer.from(data);
+        if (upstream && upstream.readyState === WebSocket2.OPEN) {
+          upstream.send(chunk);
+        } else {
+          if (client.audioQueue && client.audioQueue.length < 250) {
+            client.audioQueue.push(chunk);
+          }
+        }
+      } else {
+        try {
+          const str = data.toString();
+          const parsed = JSON.parse(str);
+          if (parsed.type === "ping") {
+            client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+          } else if (parsed.type === "Finalize" || parsed.type === "finalize") {
+            if (upstream && upstream.readyState === WebSocket2.OPEN) {
+              upstream.send(JSON.stringify({ type: "Finalize" }));
+            }
+          } else if (upstream && upstream.readyState === WebSocket2.OPEN) {
+            upstream.send(str);
+          }
+        } catch {
+          if (upstream && upstream.readyState === WebSocket2.OPEN) {
+            upstream.send(data.toString());
+          }
+        }
+      }
+    });
+    client.on("close", () => {
+      client.audioQueue = [];
+      const upstream = client.upstreamSocket;
+      if (upstream) {
+        try {
+          if (upstream.readyState === WebSocket2.OPEN) {
+            upstream.send(JSON.stringify({ type: client.provider === "murf" ? "Finalize" : "CloseStream" }));
+          }
+          upstream.close();
+        } catch {
+        }
+        client.upstreamSocket = null;
+      }
+    });
+    client.on("error", () => {
+      const upstream = client.upstreamSocket;
+      if (upstream) {
+        try {
+          upstream.close();
+        } catch {
+        }
+      }
+    });
     function connectUpstream(provider2) {
       client.provider = provider2;
       let upstreamSocket = null;
@@ -20430,65 +20479,14 @@ function initSTTWebSocketServer(server) {
         }
       });
     }
-    connectUpstream(hasDeepgram ? "deepgram" : hasMurf ? "murf" : "deepgram");
-    client.on("message", (data, isBinary) => {
-      const upstream = client.upstreamSocket;
-      if (isBinary) {
-        const chunk = Buffer.from(data);
-        if (upstream && upstream.readyState === WebSocket2.OPEN) {
-          upstream.send(chunk);
-        } else if (upstream && upstream.readyState === WebSocket2.CONNECTING) {
-          if (client.audioQueue && client.audioQueue.length < 100) {
-            client.audioQueue.push(chunk);
-          }
-        }
-      } else {
-        try {
-          const str = data.toString();
-          const parsed = JSON.parse(str);
-          if (parsed.type === "ping") {
-            client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
-          } else if (parsed.type === "Finalize" || parsed.type === "finalize") {
-            if (upstream && upstream.readyState === WebSocket2.OPEN) {
-              if (client.provider === "murf") {
-                upstream.send(JSON.stringify({ type: "Finalize" }));
-              } else {
-                upstream.send(JSON.stringify({ type: "Finalize" }));
-              }
-            }
-          } else if (upstream && upstream.readyState === WebSocket2.OPEN) {
-            upstream.send(str);
-          }
-        } catch {
-          if (upstream && upstream.readyState === WebSocket2.OPEN) {
-            upstream.send(data.toString());
-          }
-        }
+    (async () => {
+      try {
+        client.keyterms = await getDynamicInterviewKeyterms(client.interviewId);
+      } catch {
+        client.keyterms = [];
       }
-    });
-    client.on("close", () => {
-      client.audioQueue = [];
-      const upstream = client.upstreamSocket;
-      if (upstream) {
-        try {
-          if (upstream.readyState === WebSocket2.OPEN) {
-            upstream.send(JSON.stringify({ type: client.provider === "murf" ? "Finalize" : "CloseStream" }));
-          }
-          upstream.close();
-        } catch {
-        }
-        client.upstreamSocket = null;
-      }
-    });
-    client.on("error", () => {
-      const upstream = client.upstreamSocket;
-      if (upstream) {
-        try {
-          upstream.close();
-        } catch {
-        }
-      }
-    });
+      connectUpstream(hasDeepgram ? "deepgram" : hasMurf ? "murf" : "deepgram");
+    })();
   });
   const heartbeatInterval = setInterval(() => {
     for (const client of wss.clients) {

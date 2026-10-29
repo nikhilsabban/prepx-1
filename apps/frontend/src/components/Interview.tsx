@@ -236,6 +236,55 @@ export function Interview() {
     };
   }, []);
 
+  function startTurnMediaRecorder() {
+    if (!userStreamRef.current || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
+    if (recorderRef.current && recorderRef.current.state === "recording") return;
+
+    try {
+      const selectedMime = getOptimalAudioMimeType();
+      diagnosticsRef.current.mimeType = selectedMime;
+
+      const mediaRecorder = new MediaRecorder(
+        userStreamRef.current,
+        selectedMime ? { mimeType: selectedMime } : undefined
+      );
+      recorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        // Drop outgoing chunks if AI is speaking or mic is muted to prevent speaker echo bleed
+        if (isAiSpeakingRef.current || !isListeningRef.current) {
+          diagnosticsRef.current.chunksDropped++;
+          return;
+        }
+        if (event.data && event.data.size > 0) {
+          // Buffer for turn-level acoustic verification
+          turnAudioChunksRef.current.push(event.data);
+          if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+            diagnosticsRef.current.chunksSent++;
+            socketRef.current.send(event.data);
+          }
+        }
+      };
+
+      mediaRecorder.start(200);
+      diagnosticsRef.current.startTime = Date.now();
+    } catch (recErr) {
+      console.warn("MediaRecorder start notice, using native speech recognition:", recErr);
+      startNativeSpeechRecognition();
+    }
+  }
+
+  function stopTurnMediaRecorder() {
+    if (recorderRef.current) {
+      try {
+        if (recorderRef.current.state !== "inactive") {
+          recorderRef.current.stop();
+        }
+      } catch {}
+      recorderRef.current = null;
+    }
+  }
+
   function startNativeSpeechRecognition() {
     if (hasDeepgramRef.current) return; // Strict mutual exclusion: never run simultaneously with Deepgram
     if (typeof window === "undefined") return;
@@ -398,40 +447,16 @@ export function Interview() {
               diagnosticsRef.current.language = creds.defaultLanguage || "en-IN";
               diagnosticsRef.current.startTime = Date.now();
 
-              const selectedMime = getOptimalAudioMimeType();
-              diagnosticsRef.current.mimeType = selectedMime;
-
-              const mediaRecorder = new MediaRecorder(
-                userStreamRef.current!,
-                selectedMime ? { mimeType: selectedMime } : undefined
-              );
-              recorderRef.current = mediaRecorder;
-
-              // 200ms chunk intervals for optimal Opus audio containerization without packet thrashing
-              mediaRecorder.start(200);
-
-              mediaRecorder.addEventListener("dataavailable", (event) => {
-                // Drop outgoing chunks if AI is speaking or mic is muted to prevent speaker echo bleed
-                if (isAiSpeakingRef.current || !isListeningRef.current) {
-                  diagnosticsRef.current.chunksDropped++;
-                  return;
-                }
-                if (event.data.size > 0) {
-                  // Buffer for turn-level acoustic verification
-                  turnAudioChunksRef.current.push(event.data);
-                  if (socket.readyState === WebSocket.OPEN) {
-                    diagnosticsRef.current.chunksSent++;
-                    socket.send(event.data);
-                  }
-                }
-              });
+              // Start streaming candidate audio only if it is already candidate's speaking turn
+              if (isListeningRef.current && !isAiSpeakingRef.current) {
+                startTurnMediaRecorder();
+              }
 
               if (import.meta.env.DEV) {
                 console.info("🎙️ [STT Streaming Gateway Online]", {
                   engine: creds.provider === "murf" ? "Murf AI Real-time Streaming" : "Deepgram Nova-3 Streaming",
                   model: creds.recommendedModel || (creds.provider === "murf" ? "murf-stt" : "nova-3"),
                   locale: creds.defaultLanguage || "en-IN",
-                  mimeType: selectedMime,
                   chunkInterval: "200ms",
                 });
               }
@@ -444,6 +469,9 @@ export function Interview() {
                 const received = JSON.parse(message.data);
                 if (received.type === "ready") {
                   setSttStatus("listening");
+                  if (isListeningRef.current && !isAiSpeakingRef.current) {
+                    startTurnMediaRecorder();
+                  }
                   return;
                 }
                 if (received.type === "status") {
@@ -547,6 +575,7 @@ export function Interview() {
       isListeningRef.current = false;
       setIsMicActive(false);
       setSttStatus("paused");
+      stopTurnMediaRecorder();
       // Mute audio track so MediaRecorder receives silence
       if (userStreamRef.current) {
         userStreamRef.current.getAudioTracks().forEach((track) => {
@@ -569,7 +598,9 @@ export function Interview() {
           track.enabled = true;
         });
       }
-      if (!hasDeepgramRef.current) {
+      if (hasDeepgramRef.current && !isAiSpeakingRef.current) {
+        startTurnMediaRecorder();
+      } else if (!hasDeepgramRef.current) {
         startNativeSpeechRecognition();
       }
       toast.success("Microphone active.");
@@ -607,6 +638,7 @@ export function Interview() {
   function pauseRecognitionForAiSpeech() {
     isAiSpeakingRef.current = true;
     setSttStatus("processing");
+    stopTurnMediaRecorder();
     // Mute candidate mic audio tracks so laptop speaker playback cannot bleed into STT buffer
     if (userStreamRef.current) {
       userStreamRef.current.getAudioTracks().forEach((track) => {
@@ -632,8 +664,10 @@ export function Interview() {
           track.enabled = true;
         });
       }
-      // Restart native recognition after AI finishes speaking (only if mic is active and Deepgram is not active)
-      if (isListeningRef.current && !hasDeepgramRef.current) {
+      // Start STT stream for candidate's speaking turn (starts fresh MediaRecorder with valid WebM header)
+      if (isListeningRef.current && hasDeepgramRef.current) {
+        startTurnMediaRecorder();
+      } else if (isListeningRef.current) {
         startNativeSpeechRecognition();
       }
     }, 350);
@@ -679,12 +713,41 @@ export function Interview() {
         }, 120);
       };
 
-      utterance.onend = utterance.onerror = () => {
+      // Workaround for Chromium 15s pause bug: keep pings alive and set watchdog
+      const words = text.split(/\s+/).length;
+      const expectedDurationMs = Math.max((words / 2.0) * 1000 + 4000, 6000);
+
+      let finished = false;
+      let watchdogTimer: any = null;
+      let resumeInterval: any = null;
+
+      const finishAiSpeech = () => {
+        if (finished) return;
+        finished = true;
+        if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
+        if (resumeInterval) { clearInterval(resumeInterval); resumeInterval = null; }
         stopAllAudio();
         resumeRecognitionAfterAiSpeech();
       };
 
+      resumeInterval = setInterval(() => {
+        if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        }
+      }, 4000);
+
+      watchdogTimer = setTimeout(() => {
+        finishAiSpeech();
+      }, expectedDurationMs);
+
+      utterance.onend = () => finishAiSpeech();
+      utterance.onerror = () => finishAiSpeech();
+
       window.speechSynthesis.speak(utterance);
+    } else {
+      // If no speech synthesis support, immediately resume candidate turn
+      resumeRecognitionAfterAiSpeech();
     }
   }
 
@@ -702,45 +765,53 @@ export function Interview() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      audioCtxRef.current.decodeAudioData(bytes.buffer, (buffer) => {
-        if (activeAudioSourceRef.current) {
-          try {
-            activeAudioSourceRef.current.stop();
-          } catch {}
-        }
-
-        const source = audioCtxRef.current!.createBufferSource();
-        source.buffer = buffer;
-
-        const aiAnalyser = audioCtxRef.current!.createAnalyser();
-        aiAnalyser.fftSize = 256;
-        source.connect(aiAnalyser);
-        aiAnalyser.connect(audioCtxRef.current!.destination);
-
-        const dataArray = new Uint8Array(aiAnalyser.frequencyBinCount);
-        const updateAiOrb = () => {
-          if (activeAudioSourceRef.current === source) {
-            aiAnalyser.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i]!;
-            const avg = sum / dataArray.length / 255;
-            setAiLevel(avg);
-            requestAnimationFrame(updateAiOrb);
-          } else {
-            setAiLevel(0);
+      audioCtxRef.current.decodeAudioData(
+        bytes.buffer,
+        (buffer) => {
+          if (activeAudioSourceRef.current) {
+            try {
+              activeAudioSourceRef.current.stop();
+            } catch {}
           }
-        };
 
-        source.onended = () => {
+          const source = audioCtxRef.current!.createBufferSource();
+          source.buffer = buffer;
+
+          const aiAnalyser = audioCtxRef.current!.createAnalyser();
+          aiAnalyser.fftSize = 256;
+          source.connect(aiAnalyser);
+          aiAnalyser.connect(audioCtxRef.current!.destination);
+
+          const dataArray = new Uint8Array(aiAnalyser.frequencyBinCount);
+          const updateAiOrb = () => {
+            if (activeAudioSourceRef.current === source) {
+              aiAnalyser.getByteFrequencyData(dataArray);
+              let sum = 0;
+              for (let i = 0; i < dataArray.length; i++) sum += dataArray[i]!;
+              const avg = sum / dataArray.length / 255;
+              setAiLevel(avg);
+              requestAnimationFrame(updateAiOrb);
+            } else {
+              setAiLevel(0);
+            }
+          };
+
+          source.onended = () => {
+            resumeRecognitionAfterAiSpeech();
+          };
+
+          activeAudioSourceRef.current = source;
+          source.start(0);
+          updateAiOrb();
+        },
+        (decodeErr) => {
+          console.warn("Audio buffer decode notice, resuming candidate turn:", decodeErr);
           resumeRecognitionAfterAiSpeech();
-        };
-
-        activeAudioSourceRef.current = source;
-        source.start(0);
-        updateAiOrb();
-      });
+        }
+      );
     } catch (e) {
       console.error("Audio playback error:", e);
+      resumeRecognitionAfterAiSpeech();
     }
   }
 
@@ -838,6 +909,7 @@ export function Interview() {
   function cleanup() {
     isListeningRef.current = false;
     stopAllAudio();
+    stopTurnMediaRecorder();
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (recognitionRef.current) {
       try {
@@ -845,7 +917,6 @@ export function Interview() {
       } catch {}
       recognitionRef.current = null;
     }
-    recorderRef.current?.state !== "inactive" && recorderRef.current?.stop();
     socketRef.current?.close();
     userStreamRef.current?.getTracks().forEach((t) => t.stop());
     audioCtxRef.current?.close().catch(() => {});

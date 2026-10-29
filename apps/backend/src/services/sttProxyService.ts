@@ -79,7 +79,7 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
     }
   });
 
-  wss.on("connection", async (client: STTClient) => {
+  wss.on("connection", (client: STTClient) => {
     client.isAlive = true;
     client.audioQueue = [];
 
@@ -105,12 +105,66 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
       return;
     }
 
-    // Pre-fetch dynamic interview context keyterms for Nova-3
-    try {
-      client.keyterms = await getDynamicInterviewKeyterms(client.interviewId);
-    } catch {
-      client.keyterms = [];
-    }
+    // Register incoming message and lifecycle handlers synchronously immediately
+    // to ensure NO audio chunks or WebM container headers are dropped during setup
+    client.on("message", (data: WebSocket.RawData, isBinary: boolean) => {
+      const upstream = client.upstreamSocket;
+
+      if (isBinary) {
+        const chunk = Buffer.from(data as any);
+        if (upstream && upstream.readyState === WebSocket.OPEN) {
+          upstream.send(chunk);
+        } else {
+          // Buffer audio frames while upstream connection is establishing (up to 250 chunks ~50s)
+          if (client.audioQueue && client.audioQueue.length < 250) {
+            client.audioQueue.push(chunk);
+          }
+        }
+      } else {
+        // Control message (e.g. ping, Finalize, or speech pause)
+        try {
+          const str = data.toString();
+          const parsed = JSON.parse(str);
+
+          if (parsed.type === "ping") {
+            client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+          } else if (parsed.type === "Finalize" || parsed.type === "finalize") {
+            if (upstream && upstream.readyState === WebSocket.OPEN) {
+              upstream.send(JSON.stringify({ type: "Finalize" }));
+            }
+          } else if (upstream && upstream.readyState === WebSocket.OPEN) {
+            upstream.send(str);
+          }
+        } catch {
+          if (upstream && upstream.readyState === WebSocket.OPEN) {
+            upstream.send(data.toString());
+          }
+        }
+      }
+    });
+
+    client.on("close", () => {
+      client.audioQueue = [];
+      const upstream = client.upstreamSocket;
+      if (upstream) {
+        try {
+          if (upstream.readyState === WebSocket.OPEN) {
+            upstream.send(JSON.stringify({ type: client.provider === "murf" ? "Finalize" : "CloseStream" }));
+          }
+          upstream.close();
+        } catch {}
+        client.upstreamSocket = null;
+      }
+    });
+
+    client.on("error", () => {
+      const upstream = client.upstreamSocket;
+      if (upstream) {
+        try {
+          upstream.close();
+        } catch {}
+      }
+    });
 
     function connectUpstream(provider: "murf" | "deepgram") {
       client.provider = provider;
@@ -342,74 +396,15 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
       });
     }
 
-    // Connect to primary provider (Deepgram Nova-3 preferred, otherwise Murf)
-    connectUpstream(hasDeepgram ? "deepgram" : (hasMurf ? "murf" : "deepgram"));
-
-    // Client incoming message handlers
-    client.on("message", (data: WebSocket.RawData, isBinary: boolean) => {
-      const upstream = client.upstreamSocket;
-
-      if (isBinary) {
-        // Binary Opus / WebM audio frame
-        const chunk = Buffer.from(data as any);
-        if (upstream && upstream.readyState === WebSocket.OPEN) {
-          upstream.send(chunk);
-        } else if (upstream && upstream.readyState === WebSocket.CONNECTING) {
-          // Keep up to 100 recent chunks (~20s audio) in queue during initial connection
-          if (client.audioQueue && client.audioQueue.length < 100) {
-            client.audioQueue.push(chunk);
-          }
-        }
-      } else {
-        // Control message (e.g. ping, Finalize, or speech pause)
-        try {
-          const str = data.toString();
-          const parsed = JSON.parse(str);
-
-          if (parsed.type === "ping") {
-            client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
-          } else if (parsed.type === "Finalize" || parsed.type === "finalize") {
-            if (upstream && upstream.readyState === WebSocket.OPEN) {
-              if (client.provider === "murf") {
-                upstream.send(JSON.stringify({ type: "Finalize" }));
-              } else {
-                // Deepgram finalize signal
-                upstream.send(JSON.stringify({ type: "Finalize" }));
-              }
-            }
-          } else if (upstream && upstream.readyState === WebSocket.OPEN) {
-            upstream.send(str);
-          }
-        } catch {
-          if (upstream && upstream.readyState === WebSocket.OPEN) {
-            upstream.send(data.toString());
-          }
-        }
+    // Pre-fetch dynamic interview context keyterms and connect upstream
+    (async () => {
+      try {
+        client.keyterms = await getDynamicInterviewKeyterms(client.interviewId);
+      } catch {
+        client.keyterms = [];
       }
-    });
-
-    client.on("close", () => {
-      client.audioQueue = [];
-      const upstream = client.upstreamSocket;
-      if (upstream) {
-        try {
-          if (upstream.readyState === WebSocket.OPEN) {
-            upstream.send(JSON.stringify({ type: client.provider === "murf" ? "Finalize" : "CloseStream" }));
-          }
-          upstream.close();
-        } catch {}
-        client.upstreamSocket = null;
-      }
-    });
-
-    client.on("error", () => {
-      const upstream = client.upstreamSocket;
-      if (upstream) {
-        try {
-          upstream.close();
-        } catch {}
-      }
-    });
+      connectUpstream(hasDeepgram ? "deepgram" : (hasMurf ? "murf" : "deepgram"));
+    })();
   });
 
   // Heartbeat keep-alive check every 30 seconds
