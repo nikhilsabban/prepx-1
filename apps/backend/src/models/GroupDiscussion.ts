@@ -412,8 +412,8 @@ const GDEvaluationSchema = new Schema<IGDEvaluation>(
 
 const GroupDiscussionSchema = new Schema<IGroupDiscussion>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", index: true },
-    adminId: { type: Schema.Types.ObjectId, ref: "User", index: true, required: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User" },
+    adminId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     adminUsername: { type: String, required: true, lowercase: true, trim: true },
     adminFullName: { type: String, default: "" },
     expectedLanguage: { type: String, default: "English" },
@@ -455,12 +455,13 @@ const GroupDiscussionSchema = new Schema<IGroupDiscussion>(
   }
 );
 
-// Indexes
+// High-performance compound indexes for GD room discovery, invitation inbox, and turns
 GroupDiscussionSchema.index({ adminId: 1, createdAt: -1 });
+GroupDiscussionSchema.index({ userId: 1, createdAt: -1 }, { sparse: true });
 GroupDiscussionSchema.index({ "invitations.username": 1, "invitations.status": 1 });
 GroupDiscussionSchema.index({ "invitations.username": 1, status: 1, createdAt: -1 });
-GroupDiscussionSchema.index({ status: 1 });
-GroupDiscussionSchema.index({ "participants.username": 1 });
+GroupDiscussionSchema.index({ status: 1, createdAt: -1 });
+GroupDiscussionSchema.index({ "participants.username": 1, status: 1 });
 
 export const GroupDiscussion = mongoose.model<IGroupDiscussion>(
   "GroupDiscussion",

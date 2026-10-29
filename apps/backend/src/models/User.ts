@@ -211,6 +211,7 @@ UserSchema.index({ xp: -1, rating: -1 });
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ verificationToken: 1 }, { sparse: true });
 UserSchema.index({ resetPasswordToken: 1 }, { sparse: true });
+UserSchema.index({ emailOtpToken: 1 }, { sparse: true });
 
 // Method to return user info without password
 UserSchema.methods.toJSON = function () {

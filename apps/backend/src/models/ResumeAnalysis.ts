@@ -49,18 +49,15 @@ const ResumeAnalysisSchema = new Schema<IResumeAnalysis>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     resumeId: {
       type: Schema.Types.ObjectId,
       ref: "Resume",
       required: true,
-      index: true,
     },
     jobDescriptionId: {
       type: Schema.Types.ObjectId,
       ref: "JobDescription",
-      index: true,
     },
     atsScore: {
       type: Number,
@@ -119,6 +116,9 @@ const ResumeAnalysisSchema = new Schema<IResumeAnalysis>(
 );
 
 ResumeAnalysisSchema.index({ userId: 1, createdAt: -1 });
+ResumeAnalysisSchema.index({ resumeId: 1, createdAt: -1 });
+ResumeAnalysisSchema.index({ userId: 1, resumeId: 1 });
+ResumeAnalysisSchema.index({ jobDescriptionId: 1 }, { sparse: true });
 
 export const ResumeAnalysis = mongoose.model<IResumeAnalysis>(
   "ResumeAnalysis",

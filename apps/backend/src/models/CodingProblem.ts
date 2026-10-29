@@ -104,7 +104,6 @@ const CodingProblemSchema = new Schema<ICodingProblem>({
   createdBy:   { type: String, default: 'admin' },
 }, {
   timestamps: true,
-  autoIndex: false,
 });
 
 CodingProblemSchema.pre('save', function(next) {
@@ -120,7 +119,8 @@ CodingProblemSchema.pre('save', function(next) {
   next();
 });
 
-// Compound index for high-concurrency problem browsing and filtering
+// High-performance indexes for problem browsing and filtering
 CodingProblemSchema.index({ hidden: 1, difficulty: 1, number: 1 });
+CodingProblemSchema.index({ hidden: 1, tags: 1 });
 
 export const CodingProblem = mongoose.model<ICodingProblem>('CodingProblem', CodingProblemSchema);

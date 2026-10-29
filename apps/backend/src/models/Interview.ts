@@ -89,7 +89,8 @@ const InterviewSchema = new Schema<IInterview>(
 
 // High-performance compound indexes for user history, filtering, and bookmark lookups
 InterviewSchema.index({ userId: 1, createdAt: -1 });
-InterviewSchema.index({ userId: 1, isBookmarked: 1 });
-InterviewSchema.index({ status: 1 });
+InterviewSchema.index({ userId: 1, isBookmarked: 1, createdAt: -1 });
+InterviewSchema.index({ userId: 1, status: 1 });
+InterviewSchema.index({ status: 1, createdAt: -1 });
 
 export const Interview = mongoose.model<IInterview>("Interview", InterviewSchema);

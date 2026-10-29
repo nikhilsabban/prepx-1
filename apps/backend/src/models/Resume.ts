@@ -50,7 +50,6 @@ const ResumeSchema = new Schema<IResume>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     originalFileName: {
       type: String,

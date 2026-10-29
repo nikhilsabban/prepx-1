@@ -24,7 +24,6 @@ const JobDescriptionSchema = new Schema<IJobDescription>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     title: {
       type: String,

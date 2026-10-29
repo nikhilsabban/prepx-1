@@ -1,0 +1,6 @@
+# Local backups
+backup/
+
+# Environment files
+.env*
+node_modules/

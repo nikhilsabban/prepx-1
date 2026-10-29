@@ -180,6 +180,7 @@ var init_User = __esm({
     UserSchema.index({ createdAt: -1 });
     UserSchema.index({ verificationToken: 1 }, { sparse: true });
     UserSchema.index({ resetPasswordToken: 1 }, { sparse: true });
+    UserSchema.index({ emailOtpToken: 1 }, { sparse: true });
     UserSchema.methods.toJSON = function() {
       const user = this.toObject();
       delete user.password;
@@ -632,8 +633,9 @@ var init_Interview = __esm({
       }
     );
     InterviewSchema.index({ userId: 1, createdAt: -1 });
-    InterviewSchema.index({ userId: 1, isBookmarked: 1 });
-    InterviewSchema.index({ status: 1 });
+    InterviewSchema.index({ userId: 1, isBookmarked: 1, createdAt: -1 });
+    InterviewSchema.index({ userId: 1, status: 1 });
+    InterviewSchema.index({ status: 1, createdAt: -1 });
     Interview = mongoose3.model("Interview", InterviewSchema);
   }
 });
@@ -649,8 +651,7 @@ var init_Message = __esm({
         interviewId: {
           type: Schema3.Types.ObjectId,
           ref: "Interview",
-          required: true,
-          index: true
+          required: true
         },
         type: {
           type: String,
@@ -1140,28 +1141,48 @@ import mongoose14 from "mongoose";
 // src/config/db.ts
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-dotenv.config();
+import path from "path";
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+if (!process.env.MONGO_URI) {
+  dotenv.config({ path: path.resolve(process.cwd(), "backend/.env") });
+}
 var cachedConn = null;
 var connectionPromise = null;
 var DEFAULT_MONGO_URI = "mongodb+srv://nikhilsabban56:ekbVqEywwnVnhhZg@cluster0.xxqun.mongodb.net/test?retryWrites=true&w=majority";
+var MONGO_POOL_OPTIONS = {
+  maxPoolSize: 50,
+  // Scale up to 50 concurrent operations
+  minPoolSize: 5,
+  // Maintain warm pool for instantaneous handshakes
+  serverSelectionTimeoutMS: 5e3,
+  socketTimeoutMS: 45e3,
+  heartbeatFrequencyMS: 1e4,
+  autoIndex: process.env.NODE_ENV !== "production"
+  // Enable index creation in dev/staging
+};
+var listenersAttached = false;
+function attachConnectionListeners() {
+  if (listenersAttached) return;
+  listenersAttached = true;
+  mongoose.connection.on("connected", () => {
+    console.log("\u2705 MongoDB Connection Established (Pool Ready)");
+  });
+  mongoose.connection.on("error", (err) => {
+    console.error("\u274C MongoDB Connection Error:", err.message);
+  });
+  mongoose.connection.on("disconnected", () => {
+    console.warn("\u26A0\uFE0F MongoDB Disconnected. Auto-reconnect triggered.");
+    cachedConn = null;
+  });
+}
 async function connectDB() {
-  if (mongoose.connection.readyState === 1) {
-    return mongoose;
+  if (mongoose.connection.readyState === 1 && cachedConn) {
+    return cachedConn;
   }
   if (connectionPromise) {
     return connectionPromise;
   }
-  const MONGO_POOL_OPTIONS = {
-    maxPoolSize: 50,
-    // Scale up to 50 concurrent operations
-    minPoolSize: 2,
-    // Instant initial SSL handshake (reduces connection lag from ~9s to <2s)
-    serverSelectionTimeoutMS: 5e3,
-    socketTimeoutMS: 3e4,
-    heartbeatFrequencyMS: 1e4,
-    autoIndex: true
-    // Background index creation
-  };
+  attachConnectionListeners();
   connectionPromise = (async () => {
     const primaryUri = process.env.MONGO_URI || DEFAULT_MONGO_URI;
     const URIs = [
@@ -1172,7 +1193,7 @@ async function connectDB() {
     for (const uri of URIs) {
       try {
         const conn = await mongoose.connect(uri, MONGO_POOL_OPTIONS);
-        console.log(`\u2705 MongoDB Connected with Optimized Connection Pool (${conn.connection.host})`);
+        console.log(`\u2705 MongoDB Connected with Optimized Connection Pool (${conn.connection.host}/${conn.connection.name})`);
         cachedConn = conn;
         return conn;
       } catch (error) {
@@ -3558,8 +3579,7 @@ var ResumeSchema = new Schema4(
     userId: {
       type: Schema4.Types.ObjectId,
       ref: "User",
-      required: true,
-      index: true
+      required: true
     },
     originalFileName: {
       type: String,
@@ -3600,8 +3620,7 @@ var JobDescriptionSchema = new Schema5(
     userId: {
       type: Schema5.Types.ObjectId,
       ref: "User",
-      required: true,
-      index: true
+      required: true
     },
     title: {
       type: String,
@@ -3637,19 +3656,16 @@ var ResumeAnalysisSchema = new Schema6(
     userId: {
       type: Schema6.Types.ObjectId,
       ref: "User",
-      required: true,
-      index: true
+      required: true
     },
     resumeId: {
       type: Schema6.Types.ObjectId,
       ref: "Resume",
-      required: true,
-      index: true
+      required: true
     },
     jobDescriptionId: {
       type: Schema6.Types.ObjectId,
-      ref: "JobDescription",
-      index: true
+      ref: "JobDescription"
     },
     atsScore: {
       type: Number,
@@ -3707,6 +3723,9 @@ var ResumeAnalysisSchema = new Schema6(
   }
 );
 ResumeAnalysisSchema.index({ userId: 1, createdAt: -1 });
+ResumeAnalysisSchema.index({ resumeId: 1, createdAt: -1 });
+ResumeAnalysisSchema.index({ userId: 1, resumeId: 1 });
+ResumeAnalysisSchema.index({ jobDescriptionId: 1 }, { sparse: true });
 var ResumeAnalysis = mongoose7.model(
   "ResumeAnalysis",
   ResumeAnalysisSchema
@@ -5508,8 +5527,7 @@ var CodingProblemSchema = new Schema7({
   aiContext: { type: String, default: "" },
   createdBy: { type: String, default: "admin" }
 }, {
-  timestamps: true,
-  autoIndex: false
+  timestamps: true
 });
 CodingProblemSchema.pre("save", function(next) {
   if (this.isModified("title") && !this.slug) {
@@ -5524,6 +5542,7 @@ CodingProblemSchema.pre("save", function(next) {
   next();
 });
 CodingProblemSchema.index({ hidden: 1, difficulty: 1, number: 1 });
+CodingProblemSchema.index({ hidden: 1, tags: 1 });
 var CodingProblem = mongoose8.model("CodingProblem", CodingProblemSchema);
 
 // src/models/CodingSubmission.ts
@@ -5542,7 +5561,7 @@ var CodingSubmissionSchema = new Schema8({
   stderr: { type: String, default: "" }
 }, { timestamps: true });
 CodingSubmissionSchema.index({ user: 1, createdAt: -1 });
-CodingSubmissionSchema.index({ user: 1, problem: 1 });
+CodingSubmissionSchema.index({ user: 1, problem: 1, createdAt: -1 });
 CodingSubmissionSchema.index({ problem: 1, createdAt: -1 });
 CodingSubmissionSchema.index({ verdict: 1 });
 var CodingSubmission = mongoose9.model("CodingSubmission", CodingSubmissionSchema);
@@ -9972,9 +9991,9 @@ var stacksQueues = [
     tags: ["stack", "string"],
     starterCode: buildStarter("string", "string", "simplifyPath"),
     reference: (input) => {
-      const path = lines(input)[0] ?? "";
+      const path2 = lines(input)[0] ?? "";
       const st = [];
-      for (const seg of path.split("/")) {
+      for (const seg of path2.split("/")) {
         if (seg === "" || seg === ".") continue;
         if (seg === "..") st.pop();
         else st.push(seg);
@@ -12346,13 +12365,13 @@ var backtracking = [
     reference: (input) => {
       const nums = first8(input).sort((a, b) => a - b);
       const rows = [];
-      const path = [];
+      const path2 = [];
       const dfs = (i) => {
-        rows.push([...path]);
+        rows.push([...path2]);
         for (let j = i; j < nums.length; j++) {
-          path.push(nums[j]);
+          path2.push(nums[j]);
           dfs(j + 1);
-          path.pop();
+          path2.pop();
         }
       };
       dfs(0);
@@ -12393,18 +12412,18 @@ var backtracking = [
       const nums = first8(input);
       const rows = [];
       const used = new Array(nums.length).fill(false);
-      const path = [];
+      const path2 = [];
       const dfs = () => {
-        if (path.length === nums.length) {
-          rows.push([...path]);
+        if (path2.length === nums.length) {
+          rows.push([...path2]);
           return;
         }
         for (let i = 0; i < nums.length; i++) {
           if (used[i]) continue;
           used[i] = true;
-          path.push(nums[i]);
+          path2.push(nums[i]);
           dfs();
-          path.pop();
+          path2.pop();
           used[i] = false;
         }
       };
@@ -12453,17 +12472,17 @@ var backtracking = [
       const cands = ints(l0).sort((a, b) => a - b);
       const target = int(l1);
       const rows = [];
-      const path = [];
+      const path2 = [];
       const dfs = (start, rem) => {
         if (rem === 0) {
-          rows.push([...path]);
+          rows.push([...path2]);
           return;
         }
         for (let i = start; i < cands.length; i++) {
           if (cands[i] > rem) break;
-          path.push(cands[i]);
+          path2.push(cands[i]);
           dfs(i, rem - cands[i]);
-          path.pop();
+          path2.pop();
         }
       };
       dfs(0, target);
@@ -12511,18 +12530,18 @@ var backtracking = [
       const cands = ints(l0).sort((a, b) => a - b);
       const target = int(l1);
       const rows = [];
-      const path = [];
+      const path2 = [];
       const dfs = (start, rem) => {
         if (rem === 0) {
-          rows.push([...path]);
+          rows.push([...path2]);
           return;
         }
         for (let i = start; i < cands.length; i++) {
           if (i > start && cands[i] === cands[i - 1]) continue;
           if (cands[i] > rem) break;
-          path.push(cands[i]);
+          path2.push(cands[i]);
           dfs(i + 1, rem - cands[i]);
-          path.pop();
+          path2.pop();
         }
       };
       dfs(0, target);
@@ -12660,7 +12679,7 @@ var backtracking = [
     reference: (input) => {
       const s = (lines(input)[0] ?? "").trim();
       const res = [];
-      const path = [];
+      const path2 = [];
       const isPal = (a, b) => {
         while (a < b) {
           if (s[a] !== s[b]) return false;
@@ -12671,14 +12690,14 @@ var backtracking = [
       };
       const dfs = (i) => {
         if (i === s.length) {
-          res.push(path.join(" "));
+          res.push(path2.join(" "));
           return;
         }
         for (let j = i; j < s.length; j++) {
           if (isPal(i, j)) {
-            path.push(s.slice(i, j + 1));
+            path2.push(s.slice(i, j + 1));
             dfs(j + 1);
-            path.pop();
+            path2.pop();
           }
         }
       };
@@ -12791,14 +12810,14 @@ var backtracking = [
     reference: (input) => {
       const nums = first8(input).sort((a, b) => a - b);
       const rows = [];
-      const path = [];
+      const path2 = [];
       const dfs = (i) => {
-        rows.push([...path]);
+        rows.push([...path2]);
         for (let j = i; j < nums.length; j++) {
           if (j > i && nums[j] === nums[j - 1]) continue;
-          path.push(nums[j]);
+          path2.push(nums[j]);
           dfs(j + 1);
-          path.pop();
+          path2.pop();
         }
       };
       dfs(0);
@@ -17480,8 +17499,8 @@ var GDEvaluationSchema = new Schema9(
 );
 var GroupDiscussionSchema = new Schema9(
   {
-    userId: { type: Schema9.Types.ObjectId, ref: "User", index: true },
-    adminId: { type: Schema9.Types.ObjectId, ref: "User", index: true, required: true },
+    userId: { type: Schema9.Types.ObjectId, ref: "User" },
+    adminId: { type: Schema9.Types.ObjectId, ref: "User", required: true },
     adminUsername: { type: String, required: true, lowercase: true, trim: true },
     adminFullName: { type: String, default: "" },
     expectedLanguage: { type: String, default: "English" },
@@ -17522,10 +17541,11 @@ var GroupDiscussionSchema = new Schema9(
   }
 );
 GroupDiscussionSchema.index({ adminId: 1, createdAt: -1 });
+GroupDiscussionSchema.index({ userId: 1, createdAt: -1 }, { sparse: true });
 GroupDiscussionSchema.index({ "invitations.username": 1, "invitations.status": 1 });
 GroupDiscussionSchema.index({ "invitations.username": 1, status: 1, createdAt: -1 });
-GroupDiscussionSchema.index({ status: 1 });
-GroupDiscussionSchema.index({ "participants.username": 1 });
+GroupDiscussionSchema.index({ status: 1, createdAt: -1 });
+GroupDiscussionSchema.index({ "participants.username": 1, status: 1 });
 var GroupDiscussion = mongoose11.model(
   "GroupDiscussion",
   GroupDiscussionSchema

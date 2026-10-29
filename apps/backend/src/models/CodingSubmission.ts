@@ -32,7 +32,7 @@ const CodingSubmissionSchema = new Schema<ICodingSubmission>({
 
 // High-performance compound indexes for user submission history, problem stats, and leaderboards
 CodingSubmissionSchema.index({ user: 1, createdAt: -1 });
-CodingSubmissionSchema.index({ user: 1, problem: 1 });
+CodingSubmissionSchema.index({ user: 1, problem: 1, createdAt: -1 });
 CodingSubmissionSchema.index({ problem: 1, createdAt: -1 });
 CodingSubmissionSchema.index({ verdict: 1 });
 

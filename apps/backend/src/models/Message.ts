@@ -15,7 +15,6 @@ const MessageSchema = new Schema<IMessage>(
       type: Schema.Types.ObjectId,
       ref: "Interview",
       required: true,
-      index: true,
     },
     type: {
       type: String,
