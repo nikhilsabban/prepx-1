@@ -346,10 +346,29 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
           case "transcript_segment": {
             if (payload?.text && payload.text.trim()) {
+              const currentSess = await gdSessionService.getSessionById(sessionId);
+              const senderPartId = payload.participantId || ws.participantId;
+
+              // If discussion is actively in progress with an assigned speaker,
+              // prevent non-designated speakers from polluting the room transcript
+              if (
+                currentSess &&
+                currentSess.status === "in_progress" &&
+                currentSess.currentTurn &&
+                currentSess.currentTurn.participantId &&
+                senderPartId &&
+                currentSess.currentTurn.participantId !== senderPartId
+              ) {
+                console.warn(
+                  `[GD WS] Ignored transcript from non-active speaker ${senderPartId}. Active turn: ${currentSess.currentTurn.participantId}`
+                );
+                break;
+              }
+
               const updatedSession = await gdSessionService.addTranscriptSegment(
                 sessionId,
                 {
-                  participantId: payload.participantId || ws.participantId || "candidate",
+                  participantId: senderPartId || "candidate",
                   participantName: payload.participantName || ws.participantName || "Candidate",
                   username: payload.username || ws.username,
                   text: payload.text,

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { synthesizeSpeechWithDeepgram } from "./deepgramService";
 
 export interface MurfTTSOptions {
   voiceId?: string;
@@ -95,7 +96,17 @@ export async function synthesizeSpeech(
     if (murfResult) {
       return murfResult;
     }
-    console.warn("[Speech Engine] Murf synthesis failed or yielded no audio.");
+    console.warn("[Speech Engine] Murf synthesis failed or yielded no audio. Trying Deepgram Aura TTS...");
+  }
+
+  // 2. Resilient fallback: Deepgram Aura TTS (aura-orpheus-en)
+  try {
+    const deepgramResult = await synthesizeSpeechWithDeepgram(text, "aura-orpheus-en");
+    if (deepgramResult) {
+      return deepgramResult;
+    }
+  } catch (deepgramErr: any) {
+    console.warn("[Speech Engine] Deepgram fallback TTS error:", deepgramErr?.message);
   }
 
   return null;

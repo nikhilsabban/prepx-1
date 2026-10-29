@@ -317,6 +317,42 @@ export function GDRoomPage() {
   // Current logged in user ID and role
   const isAdmin = session && currentParticipant ? session.adminId === currentParticipant.id || session.adminUsername === currentParticipant.username : false;
   const isMyTurn = session?.currentTurn && currentParticipant ? session.currentTurn.participantId === currentParticipant.id : false;
+  const isMyTurnRef = useRef(isMyTurn);
+  useEffect(() => {
+    isMyTurnRef.current = isMyTurn;
+  }, [isMyTurn]);
+
+  function stopSpeechRecognition() {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+      recognitionRef.current = null;
+    }
+  }
+
+  // Turn-controlled audio and STT synchronization:
+  // When active speaker: unmute audio track & initialize STT
+  // When listening peer: mute audio track & stop local STT to prevent acoustic loop
+  useEffect(() => {
+    if (!session || session.status !== "in_progress") return;
+
+    if (isMyTurn) {
+      const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+      if (audioTrack && isMicOnRef.current) {
+        audioTrack.enabled = true;
+      }
+      startMurfOrNativeSTT();
+    } else {
+      const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = false;
+      }
+      stopMurfSTT();
+      stopSpeechRecognition();
+      setLiveTranscriptPreview("");
+    }
+  }, [isMyTurn, session?.status]);
 
   // 1. Initialize Room & Join via backend
   useEffect(() => {
@@ -559,6 +595,7 @@ export function GDRoomPage() {
 
   // 4. Murf Streaming STT with Web Speech API fallback
   function startMurfOrNativeSTT() {
+    if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
     if (!isMicOnRef.current || !localStreamRef.current) return;
 
     if (murfSocketRef.current && murfSocketRef.current.readyState === WebSocket.OPEN) {
@@ -567,6 +604,7 @@ export function GDRoomPage() {
 
     fetchSTTCredentials()
       .then((creds) => {
+        if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
         if (creds.configured && localStreamRef.current && isMicOnRef.current) {
           let wsBase = BACKEND_URL;
           if (!wsBase.startsWith("http")) wsBase = window.location.origin;
@@ -575,10 +613,11 @@ export function GDRoomPage() {
 
           const participant = currentParticipantRef.current || currentParticipant;
           const expectedLang = "en_IN";
+          const modelParam = creds.recommendedModel || (creds.provider === "murf" ? "murf-stt" : "nova-3");
 
           const wsUrl = `${wsProtocol}//${wsHost}${creds.proxyUrl}?token=${encodeURIComponent(
             creds.token || ""
-          )}&model=murf-stt&language=${encodeURIComponent(expectedLang)}&interviewId=${encodeURIComponent(sessionId || "")}&participantId=${encodeURIComponent(participant?.id || "")}&username=${encodeURIComponent(participant?.username || "")}`;
+          )}&model=${encodeURIComponent(modelParam)}&language=${encodeURIComponent(expectedLang)}&interviewId=${encodeURIComponent(sessionId || "")}&participantId=${encodeURIComponent(participant?.id || "")}&username=${encodeURIComponent(participant?.username || "")}`;
 
           const socket = new WebSocket(wsUrl);
           murfSocketRef.current = socket;
@@ -695,80 +734,128 @@ export function GDRoomPage() {
     setSttEngine("none");
   }
 
-  // AI Moderator Speech Player
+  // AI Moderator Speech Player with mobile-gesture unlock & Deepgram/browser fallback
   function playModeratorAudio(base64: string, text?: string) {
     try {
-      if (moderatorAudioRef.current) {
-        moderatorAudioRef.current.pause();
-        moderatorAudioRef.current = null;
-      }
       if (text) setModeratorText(text);
-      const audio = new Audio(`data:audio/mp3;base64,${base64}`);
-      moderatorAudioRef.current = audio;
+
+      let audio = moderatorAudioRef.current;
+      if (!audio) {
+        audio = new Audio();
+        moderatorAudioRef.current = audio;
+      } else {
+        audio.pause();
+      }
+
+      audio.src = `data:audio/mp3;base64,${base64}`;
+      audio.currentTime = 0;
       setIsModeratorPlaying(true);
+
       audio.onended = () => {
         setIsModeratorPlaying(false);
       };
-      audio.onerror = () => {
-        setIsModeratorPlaying(false);
+      audio.onerror = (e) => {
+        console.warn("Audio element playback error, trying speech synthesis fallback:", e);
+        if (text) {
+          speakBrowserFallback(text);
+        } else {
+          setIsModeratorPlaying(false);
+        }
       };
-      audio.play().catch(() => {
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn("Audio play promise rejected on mobile gesture, using browser speech synthesis:", err);
+          if (text) {
+            speakBrowserFallback(text);
+          } else {
+            setIsModeratorPlaying(false);
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("playModeratorAudio exception:", err);
+      if (text) {
+        speakBrowserFallback(text);
+      } else {
         setIsModeratorPlaying(false);
-      });
-    } catch {
+      }
+    }
+  }
+
+  function speakBrowserFallback(text: string) {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "en-US";
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.onend = () => setIsModeratorPlaying(false);
+        utterance.onerror = () => setIsModeratorPlaying(false);
+        setIsModeratorPlaying(true);
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        setIsModeratorPlaying(false);
+      }
+    } else {
       setIsModeratorPlaying(false);
     }
   }
 
   function stopModeratorAudio() {
     if (moderatorAudioRef.current) {
-      moderatorAudioRef.current.pause();
-      moderatorAudioRef.current = null;
+      try {
+        moderatorAudioRef.current.pause();
+        moderatorAudioRef.current.currentTime = 0;
+      } catch {}
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
     }
     setIsModeratorPlaying(false);
   }
 
   async function triggerModeratorSpeech() {
     if (!sessionId) return;
+
+    // Immediately prime audio during user touch/click gesture to unlock mobile audio policy
     try {
-      setIsModeratorPlaying(true);
+      if (!moderatorAudioRef.current) {
+        moderatorAudioRef.current = new Audio();
+      }
+      moderatorAudioRef.current.play().catch(() => {});
+    } catch {}
+
+    setIsModeratorPlaying(true);
+    toast.info("🎙️ Loading AI Moderator Kabir Verma's briefing...");
+
+    try {
       const res = await fetchGDModeratorSpeech(sessionId);
       if (res?.audioBase64) {
         playModeratorAudio(res.audioBase64, res.moderatorText);
-        toast.info("🎙️ Murf AI Moderator Kabir Verma is briefing the room...");
-      } else if (res?.moderatorText && typeof window !== "undefined" && "speechSynthesis" in window) {
-        // Fallback to local high-quality browser speech synthesis
-        const utterance = new SpeechSynthesisUtterance(res.moderatorText);
-        utterance.lang = "en-US";
-        utterance.rate = 1.0;
-        utterance.onend = () => setIsModeratorPlaying(false);
-        utterance.onerror = () => setIsModeratorPlaying(false);
-        window.speechSynthesis.speak(utterance);
-        toast.info("🎙️ Moderator Kabir Verma is briefing the room...");
+      } else if (res?.moderatorText) {
+        speakBrowserFallback(res.moderatorText);
       } else {
         setIsModeratorPlaying(false);
       }
     } catch (err: any) {
-      console.warn("Murf AI audio endpoint unavailable, using speech synthesis fallback:", err?.message || err);
-      if (typeof window !== "undefined" && "speechSynthesis" in window && session?.topic) {
-        const topicTitle = (session.topic as any)?.question || (session.topic as any)?.originalTitle || (session.topic as any)?.title || "Today's Discussion";
-        const topicDesc = (session.topic as any)?.description || "";
-        const fallbackText = `Welcome to today's Group Discussion on: ${topicTitle}. ${topicDesc} Each participant will have dedicated speaking turns to share their perspective. Please maintain constructive dialogue and professional decorum. Let us begin.`;
-        const utterance = new SpeechSynthesisUtterance(fallbackText);
-        utterance.lang = "en-US";
-        utterance.rate = 1.0;
-        utterance.onend = () => setIsModeratorPlaying(false);
-        utterance.onerror = () => setIsModeratorPlaying(false);
-        window.speechSynthesis.speak(utterance);
-        toast.info("🎙️ Moderator Kabir Verma is briefing the room...");
-      } else {
-        setIsModeratorPlaying(false);
-      }
+      console.warn("Failed to fetch moderator speech, falling back:", err);
+      const topicTitle =
+        (session?.topic as any)?.question ||
+        (session?.topic as any)?.originalTitle ||
+        "Today's Discussion";
+      const fallbackText = `Welcome to today's Group Discussion on ${topicTitle}. Each participant will have dedicated speaking turns to share their perspective. Please maintain constructive dialogue and professional decorum. Let us begin.`;
+      speakBrowserFallback(fallbackText);
     }
   }
 
   // 4b. Speech Recognition (Web Speech API) fallback
   function startSpeechRecognition() {
+    if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn("Web Speech API not supported in this browser. Use manual contribution input.");
@@ -965,6 +1052,7 @@ export function GDRoomPage() {
         }
         speechRestartTimeoutRef.current = setTimeout(() => {
           if (isMicOnRef.current && !isSpeechActiveRef.current) {
+            if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
             startMurfOrNativeSTT();
           }
         }, delay);
@@ -1824,6 +1912,7 @@ export function GDRoomPage() {
 
             {/* Murf AI Moderator Voice Briefing Button */}
             <button
+              type="button"
               onClick={() => {
                 if (isModeratorPlaying) {
                   stopModeratorAudio();
@@ -1831,11 +1920,12 @@ export function GDRoomPage() {
                   triggerModeratorSpeech();
                 }
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all active:scale-95 shadow-sm ${isModeratorPlaying
+              className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-xl border text-xs font-semibold cursor-pointer transition-all active:scale-95 shadow-sm touch-manipulation ${isModeratorPlaying
                   ? "border-amber-500/50 bg-amber-500/20 text-amber-300 animate-pulse shadow-amber-500/20"
                   : "border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50"
                 }`}
               title="Murf AI Moderator (Kabir Verma) Voice Briefing"
+              aria-label="Murf AI Moderator Voice Briefing"
             >
               {isModeratorPlaying ? (
                 <>
@@ -1950,11 +2040,16 @@ export function GDRoomPage() {
                   <div className="text-sm font-bold text-white flex items-center gap-2">
                     @{currentSpeaker.username} ({currentSpeakerParticipant?.name || currentSpeaker.name})
                     {isMyTurn && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500 text-white">
-                        YOUR TURN
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500 text-white animate-pulse">
+                        YOUR TURN TO SPEAK
                       </span>
                     )}
                   </div>
+                  {(currentSpeaker as any).nextParticipantName && (
+                    <div className="text-[11px] text-zinc-400 mt-0.5">
+                      Next up: <span className="text-indigo-300 font-medium">{(currentSpeaker as any).nextParticipantName}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

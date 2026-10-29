@@ -87,6 +87,19 @@ export function GDHubPage() {
       return new Set();
     }
   });
+  const declinedRoomIdsRef = React.useRef<Set<string>>(declinedRoomIds);
+
+  function markRoomDeclined(roomId: string) {
+    declinedRoomIdsRef.current.add(roomId);
+    try {
+      sessionStorage.setItem(
+        "gd_declined_invitations",
+        JSON.stringify(Array.from(declinedRoomIdsRef.current))
+      );
+    } catch {}
+    setDeclinedRoomIds(new Set(declinedRoomIdsRef.current));
+    setMyInvitations((prev) => prev.filter((i) => i.roomId !== roomId));
+  }
 
   // Create Room Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -154,7 +167,7 @@ export function GDHubPage() {
           const data = JSON.parse(event.data);
           if (data.type === "invitation_received" && data.payload) {
             const newInv = data.payload;
-            if (declinedRoomIds.has(newInv.roomId)) return;
+            if (declinedRoomIdsRef.current.has(newInv.roomId)) return;
             setMyInvitations((prev) => {
               if (prev.some((i) => i.roomId === newInv.roomId)) return prev;
               toast.info(`🔔 New GD invitation from @${newInv.adminUsername}!`);
@@ -163,6 +176,7 @@ export function GDHubPage() {
           }
           if (data.type === "invitation_removed" && data.payload?.roomId) {
             const rmId = data.payload.roomId;
+            declinedRoomIdsRef.current.add(rmId);
             setMyInvitations((prev) => prev.filter((i) => i.roomId !== rmId));
           }
         } catch {}
@@ -229,23 +243,32 @@ export function GDHubPage() {
     if (showLoading) setLoadingInvitations(true);
     try {
       const invs = await fetchMyInvitations();
-      // Filter out any invitations where status is declined, expired, or dismissed
+      // Filter out any invitations where status is not pending or room was declined
       const activeInvs = (invs || []).filter(
-        (i) => i.status !== "declined" && i.status !== "expired" && !declinedRoomIds.has(i.roomId)
+        (i) => i.status === "pending" && !declinedRoomIdsRef.current.has(i.roomId)
       );
+
+      // Deduplicate by roomId to prevent duplicate cards
+      const uniqueMap = new Map<string, typeof activeInvs[0]>();
+      for (const inv of activeInvs) {
+        if (!uniqueMap.has(inv.roomId)) {
+          uniqueMap.set(inv.roomId, inv);
+        }
+      }
+      const uniqueInvs = Array.from(uniqueMap.values());
 
       setMyInvitations((prev) => {
         // Detect newly received invitations to notify student immediately
         if (!showLoading && prev.length > 0) {
           const prevRoomIds = new Set(prev.map((i) => i.roomId));
-          const freshInvs = activeInvs.filter((i) => !prevRoomIds.has(i.roomId) && i.status === "pending");
+          const freshInvs = uniqueInvs.filter((i) => !prevRoomIds.has(i.roomId));
           freshInvs.forEach((inv) => {
             toast.info(`🔔 New GD invitation from @${inv.adminUsername}!`, {
               autoClose: 5000,
             });
           });
         }
-        return activeInvs;
+        return uniqueInvs;
       });
     } catch (err) {
       // Ignored
@@ -317,20 +340,14 @@ export function GDHubPage() {
     if (action === "decline") {
       // Optimistic Decline: immediately remove from UI (<16ms, zero delay!)
       setActionInProgress((prev) => ({ ...prev, [roomId]: "declining" }));
-
-      setDeclinedRoomIds((prev) => {
-        const next = new Set(prev).add(roomId);
-        try {
-          sessionStorage.setItem("gd_declined_invitations", JSON.stringify(Array.from(next)));
-        } catch {}
-        return next;
-      });
-
-      setMyInvitations((prev) => prev.filter((i) => i.roomId !== roomId));
+      markRoomDeclined(roomId);
       toast.info("Invitation declined");
 
       try {
-        await respondToInvitation(roomId, "decline");
+        await Promise.allSettled([
+          respondToInvitation(roomId, "decline"),
+          deleteInvitation(roomId),
+        ]);
       } catch (err: any) {
         console.warn("Decline API note:", err);
       } finally {
@@ -372,24 +389,16 @@ export function GDHubPage() {
   async function handleDeleteInvitation(roomId: string) {
     if (actionInProgress[roomId]) return;
     setActionInProgress((prev) => ({ ...prev, [roomId]: "declining" }));
-
-    setDeclinedRoomIds((prev) => {
-      const next = new Set(prev).add(roomId);
-      try {
-        sessionStorage.setItem("gd_declined_invitations", JSON.stringify(Array.from(next)));
-      } catch {}
-      return next;
-    });
-
-    setMyInvitations((prev) => prev.filter((i) => i.roomId !== roomId));
+    markRoomDeclined(roomId);
     toast.info("Invitation removed");
 
     try {
-      await deleteInvitation(roomId);
+      await Promise.allSettled([
+        deleteInvitation(roomId),
+        respondToInvitation(roomId, "decline"),
+      ]);
     } catch {
-      try {
-        await respondToInvitation(roomId, "decline");
-      } catch {}
+      // Ignored
     } finally {
       setActionInProgress((prev) => {
         const next = { ...prev };

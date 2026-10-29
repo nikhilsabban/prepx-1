@@ -354,29 +354,25 @@ class GDSessionService {
       throw new Error("Discussion room not found");
     }
 
-    const invitation = room.invitations.find((inv) => inv.username === cleanUsername);
-    if (!invitation) {
-      throw new Error("No invitation found for this user in this room");
-    }
+    const invitation = room.invitations.find(
+      (inv) => inv.username?.toLowerCase().trim() === cleanUsername
+    );
 
     if (action === "decline") {
-      // Atomic status update in MongoDB
+      // 1. Remove from invitations array case-insensitively and update status
       const updated = await GroupDiscussion.findOneAndUpdate(
-        { _id: roomId, "invitations.username": cleanUsername },
+        { _id: roomId },
         {
-          $set: {
-            "invitations.$.status": "declined",
-            "invitations.$.respondedAt": new Date(),
+          $pull: {
+            invitations: { username: { $regex: new RegExp(`^${cleanUsername}$`, "i") } },
           },
         },
         { new: true }
       );
 
-      const declinedInv = updated?.invitations.find((i) => i.username === cleanUsername) || {
-        ...invitation,
-        status: "declined",
-        respondedAt: new Date(),
-      };
+      const declinedInv = invitation
+        ? { ...invitation, status: "declined" as const, respondedAt: new Date() }
+        : { username: cleanUsername, status: "declined" as const, invitedAt: new Date(), respondedAt: new Date() };
 
       broadcastToGDRoom(roomId, {
         type: "invitation_updated",
@@ -391,27 +387,32 @@ class GDSessionService {
       return { room: updated || room, invitation: declinedInv as any };
     }
 
+    if (!invitation) {
+      throw new Error("No invitation found for this user in this room");
+    }
+
     // Acceptance: verify capacity constraint
     const acceptedCount = room.invitations.filter(
-      (i) => i.status === "accepted" && i.username !== cleanUsername
+      (i) => i.status === "accepted" && i.username?.toLowerCase().trim() !== cleanUsername
     ).length;
     const studentParticipants = room.participants.filter(
-      (p) => !p.isHost && p.role !== "admin" && p.username !== cleanUsername
+      (p) => !p.isHost && p.role !== "admin" && p.username?.toLowerCase().trim() !== cleanUsername
     ).length;
 
     const occupiedStudents = Math.max(acceptedCount, studentParticipants);
 
     if (occupiedStudents >= MAX_STUDENTS_CAPACITY) {
       await GroupDiscussion.updateOne(
-        { _id: roomId, "invitations.username": cleanUsername },
+        { _id: roomId, "invitations.username": { $regex: new RegExp(`^${cleanUsername}$`, "i") } },
         { $set: { "invitations.$.status": "expired" } }
       );
       throw new Error(`Room is already full. Maximum ${MAX_STUDENTS_CAPACITY} students reached.`);
     }
 
-    // Atomic update to accepted
+    // Atomic update to accepted using matched username
+    const matchedUsername = invitation.username || cleanUsername;
     const updated = await GroupDiscussion.findOneAndUpdate(
-      { _id: roomId, "invitations.username": cleanUsername },
+      { _id: roomId, "invitations.username": matchedUsername },
       {
         $set: {
           "invitations.$.status": "accepted",
@@ -421,7 +422,9 @@ class GDSessionService {
       { new: true }
     );
 
-    const acceptedInv = updated?.invitations.find((i) => i.username === cleanUsername) || {
+    const acceptedInv = updated?.invitations.find(
+      (i) => i.username?.toLowerCase().trim() === cleanUsername
+    ) || {
       ...invitation,
       status: "accepted",
       respondedAt: new Date(),
@@ -458,10 +461,10 @@ class GDSessionService {
       throw new Error("Unauthorized to remove this invitation");
     }
 
-    // Pull from invitations array
+    // Pull from invitations array with case-insensitive regex
     await GroupDiscussion.updateOne(
       { _id: roomId },
-      { $pull: { invitations: { username: cleanTarget } } }
+      { $pull: { invitations: { username: { $regex: new RegExp(`^${cleanTarget}$`, "i") } } } }
     );
 
     // Notify room and direct user in real-time
@@ -498,8 +501,8 @@ class GDSessionService {
     const rooms = await GroupDiscussion.find({
       invitations: {
         $elemMatch: {
-          username: cleanUsername,
-          status: { $in: ["pending", "accepted"] },
+          username: { $regex: new RegExp(`^${cleanUsername}$`, "i") },
+          status: "pending",
         },
       },
       status: { $in: ["preparing", "in_progress"] },
@@ -519,15 +522,15 @@ class GDSessionService {
       const inv = (r.invitations || []).find(
         (i: any) =>
           i.username?.toLowerCase().trim() === cleanUsername &&
-          (i.status === "pending" || i.status === "accepted")
+          i.status === "pending"
       );
       if (!inv) continue;
 
-      // If accepted, exclude if student is already in participants
+      // Exclude if student is already in participants
       const isAlreadyParticipant = (r.participants || []).some(
         (p: any) => p.username?.toLowerCase().trim() === cleanUsername
       );
-      if (inv.status === "accepted" && isAlreadyParticipant) {
+      if (isAlreadyParticipant) {
         continue;
       }
 
@@ -718,9 +721,9 @@ class GDSessionService {
       });
     }
 
-    // 2. Identify active student participants (excluding admin)
+    // 2. Identify active student participants (all human peers including host/creator)
     const activeStudents = session.participants.filter(
-      (p) => !p.isHost && p.role !== "admin" && p.isOnline !== false
+      (p) => !p.isAi && p.isOnline !== false
     );
 
     if (activeStudents.length === 0) {
@@ -773,6 +776,13 @@ class GDSessionService {
     // Pick random from top pool
     const selected = pool[Math.floor(Math.random() * pool.length)]!;
 
+    // Upcoming speaker queue
+    const remainingEligible = eligibleStudents.filter((p) => p.id !== selected.id);
+    const nextInLine =
+      remainingEligible.length > 0
+        ? remainingEligible[0]
+        : activeStudents.find((p) => p.id !== selected.id);
+
     const nextTurn: IGDCurrentTurn = {
       participantId: selected.id,
       username: selected.username || selected.name,
@@ -782,6 +792,9 @@ class GDSessionService {
       warningEmitted: false,
       round: session.round || 1,
       suggestedDurationSeconds: DEFAULT_SUGGESTED_DURATION_SEC,
+      nextParticipantId: nextInLine?.id || "",
+      nextParticipantName: nextInLine?.name || "",
+      turnQueue: remainingEligible.map((p) => p.name || p.username || p.id),
     };
 
     session.currentTurn = nextTurn;

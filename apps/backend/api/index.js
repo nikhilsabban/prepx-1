@@ -672,13 +672,46 @@ var init_Message = __esm({
   }
 });
 
+// src/services/deepgramService.ts
+import axios3 from "axios";
+async function synthesizeSpeechWithDeepgram(text, model = "aura-orpheus-en") {
+  const apiKey = process.env.DEEPGRAM_API_KEY;
+  if (!apiKey || !apiKey.trim()) {
+    return null;
+  }
+  try {
+    const response = await axios3.post(
+      `https://api.deepgram.com/v1/speak?model=${model}`,
+      { text },
+      {
+        headers: {
+          Authorization: `Token ${apiKey.trim()}`,
+          "Content-Type": "application/json"
+        },
+        responseType: "arraybuffer"
+      }
+    );
+    const buffer = Buffer.from(response.data);
+    const contentType = String(response.headers["content-type"] || "audio/mp3");
+    return { audioBuffer: buffer, contentType };
+  } catch (error) {
+    console.error("Deepgram TTS error:", error.response?.data?.toString() || error.message);
+    return null;
+  }
+}
+var init_deepgramService = __esm({
+  "src/services/deepgramService.ts"() {
+    "use strict";
+  }
+});
+
 // src/services/murfService.ts
 var murfService_exports = {};
 __export(murfService_exports, {
   synthesizeSpeech: () => synthesizeSpeech,
   synthesizeSpeechWithMurf: () => synthesizeSpeechWithMurf
 });
-import axios3 from "axios";
+import axios4 from "axios";
 async function synthesizeSpeechWithMurf(text, options) {
   const apiKey = process.env.MURF_API_KEY;
   if (!apiKey || !apiKey.trim()) {
@@ -696,7 +729,7 @@ async function synthesizeSpeechWithMurf(text, options) {
       ...options?.pitch !== void 0 ? { pitch: options.pitch } : {},
       ...options?.style ? { style: options.style } : {}
     };
-    const response = await axios3.post(
+    const response = await axios4.post(
       "https://api.murf.ai/v1/speech/generate",
       payload,
       {
@@ -715,7 +748,7 @@ async function synthesizeSpeechWithMurf(text, options) {
       };
     }
     if (response.data?.audioFile) {
-      const downloadRes = await axios3.get(response.data.audioFile, {
+      const downloadRes = await axios4.get(response.data.audioFile, {
         responseType: "arraybuffer",
         timeout: 12e3
       });
@@ -740,13 +773,22 @@ async function synthesizeSpeech(text, preferredVoice) {
     if (murfResult) {
       return murfResult;
     }
-    console.warn("[Speech Engine] Murf synthesis failed or yielded no audio.");
+    console.warn("[Speech Engine] Murf synthesis failed or yielded no audio. Trying Deepgram Aura TTS...");
+  }
+  try {
+    const deepgramResult = await synthesizeSpeechWithDeepgram(text, "aura-orpheus-en");
+    if (deepgramResult) {
+      return deepgramResult;
+    }
+  } catch (deepgramErr) {
+    console.warn("[Speech Engine] Deepgram fallback TTS error:", deepgramErr?.message);
   }
   return null;
 }
 var init_murfService = __esm({
   "src/services/murfService.ts"() {
     "use strict";
+    init_deepgramService();
   }
 });
 
@@ -923,7 +965,7 @@ __export(sttVerificationService_exports, {
   reconcileTranscripts: () => reconcileTranscripts,
   verifyTurnSpeech: () => verifyTurnSpeech
 });
-import axios4 from "axios";
+import axios5 from "axios";
 import dotenv2 from "dotenv";
 function normalizeForComparison(text) {
   return text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
@@ -1048,7 +1090,7 @@ async function verifyTurnSpeech(params) {
       }
     }
     const contentType = mimeType || "audio/webm";
-    const response = await axios4.post(url.toString(), audioBuffer, {
+    const response = await axios5.post(url.toString(), audioBuffer, {
       headers: {
         Authorization: `Token ${DEEPGRAM_API_KEY.trim()}`,
         "Content-Type": contentType
@@ -17332,7 +17374,10 @@ var GDCurrentTurnSchema = new Schema9(
     lastSpokeAt: { type: Date, default: Date.now },
     warningEmitted: { type: Boolean, default: false },
     round: { type: Number, default: 1 },
-    suggestedDurationSeconds: { type: Number, default: 90 }
+    suggestedDurationSeconds: { type: Number, default: 90 },
+    nextParticipantId: { type: String, default: "" },
+    nextParticipantName: { type: String, default: "" },
+    turnQueue: { type: [String], default: [] }
   },
   { _id: false }
 );
@@ -17668,7 +17713,7 @@ var GDEvaluationService = class {
    * Awards gamification points idempotently.
    */
   async evaluateAllStudents(topic, participants, transcript, metrics, totalDurationSeconds, expectedLanguage = "English") {
-    const students = participants.filter((p) => !p.isHost && p.role !== "admin");
+    const students = participants.filter((p) => !p.isAi);
     if (students.length === 0) {
       return [];
     }
@@ -18334,26 +18379,20 @@ var GDSessionService = class {
     if (!room) {
       throw new Error("Discussion room not found");
     }
-    const invitation = room.invitations.find((inv) => inv.username === cleanUsername);
-    if (!invitation) {
-      throw new Error("No invitation found for this user in this room");
-    }
+    const invitation = room.invitations.find(
+      (inv) => inv.username?.toLowerCase().trim() === cleanUsername
+    );
     if (action === "decline") {
       const updated2 = await GroupDiscussion.findOneAndUpdate(
-        { _id: roomId, "invitations.username": cleanUsername },
+        { _id: roomId },
         {
-          $set: {
-            "invitations.$.status": "declined",
-            "invitations.$.respondedAt": /* @__PURE__ */ new Date()
+          $pull: {
+            invitations: { username: { $regex: new RegExp(`^${cleanUsername}$`, "i") } }
           }
         },
         { new: true }
       );
-      const declinedInv = updated2?.invitations.find((i) => i.username === cleanUsername) || {
-        ...invitation,
-        status: "declined",
-        respondedAt: /* @__PURE__ */ new Date()
-      };
+      const declinedInv = invitation ? { ...invitation, status: "declined", respondedAt: /* @__PURE__ */ new Date() } : { username: cleanUsername, status: "declined", invitedAt: /* @__PURE__ */ new Date(), respondedAt: /* @__PURE__ */ new Date() };
       broadcastToGDRoom(roomId, {
         type: "invitation_updated",
         payload: { invitation: declinedInv }
@@ -18364,22 +18403,26 @@ var GDSessionService = class {
       });
       return { room: updated2 || room, invitation: declinedInv };
     }
+    if (!invitation) {
+      throw new Error("No invitation found for this user in this room");
+    }
     const acceptedCount = room.invitations.filter(
-      (i) => i.status === "accepted" && i.username !== cleanUsername
+      (i) => i.status === "accepted" && i.username?.toLowerCase().trim() !== cleanUsername
     ).length;
     const studentParticipants = room.participants.filter(
-      (p) => !p.isHost && p.role !== "admin" && p.username !== cleanUsername
+      (p) => !p.isHost && p.role !== "admin" && p.username?.toLowerCase().trim() !== cleanUsername
     ).length;
     const occupiedStudents = Math.max(acceptedCount, studentParticipants);
     if (occupiedStudents >= MAX_STUDENTS_CAPACITY) {
       await GroupDiscussion.updateOne(
-        { _id: roomId, "invitations.username": cleanUsername },
+        { _id: roomId, "invitations.username": { $regex: new RegExp(`^${cleanUsername}$`, "i") } },
         { $set: { "invitations.$.status": "expired" } }
       );
       throw new Error(`Room is already full. Maximum ${MAX_STUDENTS_CAPACITY} students reached.`);
     }
+    const matchedUsername = invitation.username || cleanUsername;
     const updated = await GroupDiscussion.findOneAndUpdate(
-      { _id: roomId, "invitations.username": cleanUsername },
+      { _id: roomId, "invitations.username": matchedUsername },
       {
         $set: {
           "invitations.$.status": "accepted",
@@ -18388,7 +18431,9 @@ var GDSessionService = class {
       },
       { new: true }
     );
-    const acceptedInv = updated?.invitations.find((i) => i.username === cleanUsername) || {
+    const acceptedInv = updated?.invitations.find(
+      (i) => i.username?.toLowerCase().trim() === cleanUsername
+    ) || {
       ...invitation,
       status: "accepted",
       respondedAt: /* @__PURE__ */ new Date()
@@ -18416,7 +18461,7 @@ var GDSessionService = class {
     }
     await GroupDiscussion.updateOne(
       { _id: roomId },
-      { $pull: { invitations: { username: cleanTarget } } }
+      { $pull: { invitations: { username: { $regex: new RegExp(`^${cleanTarget}$`, "i") } } } }
     );
     broadcastToGDRoom(roomId, {
       type: "invitation_removed",
@@ -18437,8 +18482,8 @@ var GDSessionService = class {
     const rooms = await GroupDiscussion.find({
       invitations: {
         $elemMatch: {
-          username: cleanUsername,
-          status: { $in: ["pending", "accepted"] }
+          username: { $regex: new RegExp(`^${cleanUsername}$`, "i") },
+          status: "pending"
         }
       },
       status: { $in: ["preparing", "in_progress"] },
@@ -18450,13 +18495,13 @@ var GDSessionService = class {
       const roomIdStr = r._id.toString();
       if (seenRooms.has(roomIdStr)) continue;
       const inv = (r.invitations || []).find(
-        (i) => i.username?.toLowerCase().trim() === cleanUsername && (i.status === "pending" || i.status === "accepted")
+        (i) => i.username?.toLowerCase().trim() === cleanUsername && i.status === "pending"
       );
       if (!inv) continue;
       const isAlreadyParticipant = (r.participants || []).some(
         (p) => p.username?.toLowerCase().trim() === cleanUsername
       );
-      if (inv.status === "accepted" && isAlreadyParticipant) {
+      if (isAlreadyParticipant) {
         continue;
       }
       seenRooms.add(roomIdStr);
@@ -18611,7 +18656,7 @@ var GDSessionService = class {
       });
     }
     const activeStudents = session.participants.filter(
-      (p) => !p.isHost && p.role !== "admin" && p.isOnline !== false
+      (p) => !p.isAi && p.isOnline !== false
     );
     if (activeStudents.length === 0) {
       session.currentTurn = void 0;
@@ -18644,6 +18689,8 @@ var GDSessionService = class {
       return opp === minOpportunities;
     });
     const selected = pool[Math.floor(Math.random() * pool.length)];
+    const remainingEligible = eligibleStudents.filter((p) => p.id !== selected.id);
+    const nextInLine = remainingEligible.length > 0 ? remainingEligible[0] : activeStudents.find((p) => p.id !== selected.id);
     const nextTurn = {
       participantId: selected.id,
       username: selected.username || selected.name,
@@ -18652,7 +18699,10 @@ var GDSessionService = class {
       lastSpokeAt: now,
       warningEmitted: false,
       round: session.round || 1,
-      suggestedDurationSeconds: DEFAULT_SUGGESTED_DURATION_SEC
+      suggestedDurationSeconds: DEFAULT_SUGGESTED_DURATION_SEC,
+      nextParticipantId: nextInLine?.id || "",
+      nextParticipantName: nextInLine?.name || "",
+      turnQueue: remainingEligible.map((p) => p.name || p.username || p.id)
     };
     session.currentTurn = nextTurn;
     await session.save();
@@ -19915,10 +19965,18 @@ function initGDWebSocketServer(server) {
           }
           case "transcript_segment": {
             if (payload?.text && payload.text.trim()) {
+              const currentSess = await gdSessionService.getSessionById(sessionId);
+              const senderPartId = payload.participantId || ws.participantId;
+              if (currentSess && currentSess.status === "in_progress" && currentSess.currentTurn && currentSess.currentTurn.participantId && senderPartId && currentSess.currentTurn.participantId !== senderPartId) {
+                console.warn(
+                  `[GD WS] Ignored transcript from non-active speaker ${senderPartId}. Active turn: ${currentSess.currentTurn.participantId}`
+                );
+                break;
+              }
               const updatedSession = await gdSessionService.addTranscriptSegment(
                 sessionId,
                 {
-                  participantId: payload.participantId || ws.participantId || "candidate",
+                  participantId: senderPartId || "candidate",
                   participantName: payload.participantName || ws.participantName || "Candidate",
                   username: payload.username || ws.username,
                   text: payload.text,

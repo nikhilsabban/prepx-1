@@ -153,6 +153,9 @@ export interface IGDCurrentTurn {
   warningEmitted: boolean;
   round: number;
   suggestedDurationSeconds: number;
+  nextParticipantId?: string;
+  nextParticipantName?: string;
+  turnQueue?: string[];
 }
 
 export interface IGDTurnHistoryItem {
@@ -300,6 +303,9 @@ const GDCurrentTurnSchema = new Schema<IGDCurrentTurn>(
     warningEmitted: { type: Boolean, default: false },
     round: { type: Number, default: 1 },
     suggestedDurationSeconds: { type: Number, default: 90 },
+    nextParticipantId: { type: String, default: "" },
+    nextParticipantName: { type: String, default: "" },
+    turnQueue: { type: [String], default: [] },
   },
   { _id: false }
 );
