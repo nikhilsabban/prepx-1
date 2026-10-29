@@ -33,6 +33,7 @@ import {
   searchUsersByUsername,
   inviteParticipant,
   respondToInvitation,
+  deleteInvitation,
   type IGDTopicMetadata,
   type IGDSession,
   type InvitationStatus,
@@ -78,6 +79,14 @@ export function GDHubPage() {
   >([]);
   const [loadingInvitations, setLoadingInvitations] = useState(true);
   const [actionInProgress, setActionInProgress] = useState<Record<string, "accepting" | "declining">>({});
+  const [declinedRoomIds, setDeclinedRoomIds] = useState<Set<string>>(() => {
+    try {
+      const stored = sessionStorage.getItem("gd_declined_invitations");
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
 
   // Create Room Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -145,11 +154,16 @@ export function GDHubPage() {
           const data = JSON.parse(event.data);
           if (data.type === "invitation_received" && data.payload) {
             const newInv = data.payload;
+            if (declinedRoomIds.has(newInv.roomId)) return;
             setMyInvitations((prev) => {
               if (prev.some((i) => i.roomId === newInv.roomId)) return prev;
               toast.info(`🔔 New GD invitation from @${newInv.adminUsername}!`);
               return [newInv, ...prev];
             });
+          }
+          if (data.type === "invitation_removed" && data.payload?.roomId) {
+            const rmId = data.payload.roomId;
+            setMyInvitations((prev) => prev.filter((i) => i.roomId !== rmId));
           }
         } catch {}
       };
@@ -215,18 +229,23 @@ export function GDHubPage() {
     if (showLoading) setLoadingInvitations(true);
     try {
       const invs = await fetchMyInvitations();
+      // Filter out any invitations where status is declined, expired, or dismissed
+      const activeInvs = (invs || []).filter(
+        (i) => i.status !== "declined" && i.status !== "expired" && !declinedRoomIds.has(i.roomId)
+      );
+
       setMyInvitations((prev) => {
         // Detect newly received invitations to notify student immediately
         if (!showLoading && prev.length > 0) {
           const prevRoomIds = new Set(prev.map((i) => i.roomId));
-          const freshInvs = invs.filter((i) => !prevRoomIds.has(i.roomId) && i.status === "pending");
+          const freshInvs = activeInvs.filter((i) => !prevRoomIds.has(i.roomId) && i.status === "pending");
           freshInvs.forEach((inv) => {
             toast.info(`🔔 New GD invitation from @${inv.adminUsername}!`, {
               autoClose: 5000,
             });
           });
         }
-        return invs;
+        return activeInvs;
       });
     } catch (err) {
       // Ignored
@@ -298,15 +317,22 @@ export function GDHubPage() {
     if (action === "decline") {
       // Optimistic Decline: immediately remove from UI (<16ms, zero delay!)
       setActionInProgress((prev) => ({ ...prev, [roomId]: "declining" }));
+
+      setDeclinedRoomIds((prev) => {
+        const next = new Set(prev).add(roomId);
+        try {
+          sessionStorage.setItem("gd_declined_invitations", JSON.stringify(Array.from(next)));
+        } catch {}
+        return next;
+      });
+
       setMyInvitations((prev) => prev.filter((i) => i.roomId !== roomId));
       toast.info("Invitation declined");
 
       try {
         await respondToInvitation(roomId, "decline");
       } catch (err: any) {
-        // Rollback on failure
-        setMyInvitations((prev) => [targetInv, ...prev]);
-        toast.error(err.response?.data?.message || "Failed to decline invitation");
+        console.warn("Decline API note:", err);
       } finally {
         setActionInProgress((prev) => {
           const next = { ...prev };
@@ -340,6 +366,36 @@ export function GDHubPage() {
           return next;
         });
       }
+    }
+  }
+
+  async function handleDeleteInvitation(roomId: string) {
+    if (actionInProgress[roomId]) return;
+    setActionInProgress((prev) => ({ ...prev, [roomId]: "declining" }));
+
+    setDeclinedRoomIds((prev) => {
+      const next = new Set(prev).add(roomId);
+      try {
+        sessionStorage.setItem("gd_declined_invitations", JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+
+    setMyInvitations((prev) => prev.filter((i) => i.roomId !== roomId));
+    toast.info("Invitation removed");
+
+    try {
+      await deleteInvitation(roomId);
+    } catch {
+      try {
+        await respondToInvitation(roomId, "decline");
+      } catch {}
+    } finally {
+      setActionInProgress((prev) => {
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
     }
   }
 
@@ -420,7 +476,18 @@ export function GDHubPage() {
                     <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">
                       Host: @{inv.adminUsername}
                     </span>
-                    <span className="text-zinc-500">{inv.expectedLanguage}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-zinc-500">{inv.expectedLanguage}</span>
+                      <button
+                        type="button"
+                        title="Delete / Dismiss invitation"
+                        disabled={!!actionInProgress[inv.roomId]}
+                        onClick={() => handleDeleteInvitation(inv.roomId)}
+                        className="p-1 rounded-md text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition cursor-pointer"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <h4 className="font-bold text-white text-sm line-clamp-2">

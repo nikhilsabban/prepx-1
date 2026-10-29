@@ -383,6 +383,11 @@ class GDSessionService {
         payload: { invitation: declinedInv },
       });
 
+      broadcastToGDUser(cleanUsername, {
+        type: "invitation_removed",
+        payload: { roomId, username: cleanUsername },
+      });
+
       return { room: updated || room, invitation: declinedInv as any };
     }
 
@@ -431,6 +436,49 @@ class GDSessionService {
   }
 
   /**
+   * Deletes or revokes an invitation (host removes invitee or student cancels/dismisses).
+   */
+  public async deleteInvitation(
+    roomId: string,
+    requestingUsername: string,
+    targetUsername?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const cleanRequesting = requestingUsername.toLowerCase().trim();
+    const cleanTarget = (targetUsername || requestingUsername).toLowerCase().trim();
+
+    const room = await this.getSessionById(roomId);
+    if (!room) {
+      throw new Error("Discussion room not found");
+    }
+
+    const isHost = room.adminUsername?.toLowerCase().trim() === cleanRequesting;
+    const isSelf = cleanTarget === cleanRequesting;
+
+    if (!isHost && !isSelf) {
+      throw new Error("Unauthorized to remove this invitation");
+    }
+
+    // Pull from invitations array
+    await GroupDiscussion.updateOne(
+      { _id: roomId },
+      { $pull: { invitations: { username: cleanTarget } } }
+    );
+
+    // Notify room and direct user in real-time
+    broadcastToGDRoom(roomId, {
+      type: "invitation_removed",
+      payload: { roomId, username: cleanTarget },
+    });
+
+    broadcastToGDUser(cleanTarget, {
+      type: "invitation_removed",
+      payload: { roomId, username: cleanTarget },
+    });
+
+    return { success: true, message: "Invitation removed successfully" };
+  }
+
+  /**
    * Retrieves pending invitations for a user.
    */
   public async getInvitationsForUser(username: string): Promise<
@@ -445,28 +493,54 @@ class GDSessionService {
     }>
   > {
     const cleanUsername = username.toLowerCase().trim();
+    const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000); // Only rooms from the past 24 hours
+
     const rooms = await GroupDiscussion.find({
-      "invitations.username": cleanUsername,
+      invitations: {
+        $elemMatch: {
+          username: cleanUsername,
+          status: { $in: ["pending", "accepted"] },
+        },
+      },
       status: { $in: ["preparing", "in_progress"] },
+      createdAt: { $gte: cutoffTime },
     })
-      .select("topic adminUsername adminFullName expectedLanguage invitations createdAt")
+      .select("topic adminUsername adminFullName expectedLanguage invitations participants createdAt")
       .sort({ createdAt: -1 })
       .lean();
 
     const results: any[] = [];
+    const seenRooms = new Set<string>();
+
     for (const r of rooms) {
-      const inv = (r.invitations || []).find((i: any) => i.username === cleanUsername);
-      if (inv) {
-        results.push({
-          roomId: r._id.toString(),
-          topic: r.topic,
-          adminUsername: r.adminUsername,
-          adminFullName: r.adminFullName,
-          expectedLanguage: r.expectedLanguage,
-          status: inv.status,
-          invitedAt: inv.invitedAt,
-        });
+      const roomIdStr = r._id.toString();
+      if (seenRooms.has(roomIdStr)) continue;
+
+      const inv = (r.invitations || []).find(
+        (i: any) =>
+          i.username?.toLowerCase().trim() === cleanUsername &&
+          (i.status === "pending" || i.status === "accepted")
+      );
+      if (!inv) continue;
+
+      // If accepted, exclude if student is already in participants
+      const isAlreadyParticipant = (r.participants || []).some(
+        (p: any) => p.username?.toLowerCase().trim() === cleanUsername
+      );
+      if (inv.status === "accepted" && isAlreadyParticipant) {
+        continue;
       }
+
+      seenRooms.add(roomIdStr);
+      results.push({
+        roomId: roomIdStr,
+        topic: r.topic,
+        adminUsername: r.adminUsername,
+        adminFullName: r.adminFullName,
+        expectedLanguage: r.expectedLanguage,
+        status: inv.status,
+        invitedAt: inv.invitedAt,
+      });
     }
     return results;
   }

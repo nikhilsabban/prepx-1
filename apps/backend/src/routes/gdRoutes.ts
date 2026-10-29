@@ -6,6 +6,7 @@ import {
   searchUsersByUsername,
   inviteParticipant,
   respondToInvitation,
+  deleteInvitation,
   getMyInvitations,
   joinGDRoom,
   getGDSession,
@@ -35,8 +36,12 @@ router.get("/users/search", protect as any, searchUsersByUsername as any);
 router.get("/my-invitations", protect as any, getMyInvitations as any);
 router.post("/rooms/:roomId/invitations", protect as any, inviteParticipant as any);
 router.post("/rooms/:roomId/invitations/respond", protect as any, respondToInvitation as any);
+router.delete("/rooms/:roomId/invitations/:username?", protect as any, deleteInvitation as any);
+router.delete("/rooms/:roomId/invitations", protect as any, deleteInvitation as any);
 router.post("/sessions/:sessionId/invitations", protect as any, inviteParticipant as any);
 router.post("/sessions/:sessionId/invitations/respond", protect as any, respondToInvitation as any);
+router.delete("/sessions/:sessionId/invitations/:username?", protect as any, deleteInvitation as any);
+router.delete("/sessions/:sessionId/invitations", protect as any, deleteInvitation as any);
 
 // Room & Session lifecycle routes
 router.post("/rooms", protect as any, createGDRoom as any);

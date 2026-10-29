@@ -224,6 +224,31 @@ export async function getMyInvitations(req: AuthRequest, res: Response): Promise
 }
 
 /**
+ * Deletes or revokes an invitation (by host or student).
+ */
+export async function deleteInvitation(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const roomId = getParam(req.params.roomId || req.params.sessionId);
+    const targetUsername = req.params.username || req.body?.username;
+    const requestingUser = req.user?.username;
+
+    if (!roomId || !requestingUser) {
+      res.status(400).json({ success: false, message: "Authentication and room ID required" });
+      return;
+    }
+
+    const result = await gdSessionService.deleteInvitation(roomId, requestingUser, targetUsername);
+    res.json(result);
+  } catch (error: any) {
+    console.error("[GD Controller] Delete invitation error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to delete invitation",
+    });
+  }
+}
+
+/**
  * Joins room with authorization checks.
  */
 export async function joinGDRoom(req: AuthRequest, res: Response): Promise<void> {

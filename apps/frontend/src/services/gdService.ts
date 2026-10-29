@@ -268,6 +268,20 @@ export async function respondToInvitation(
 }
 
 /**
+ * Deletes or cancels an invitation (host removes invitee or student dismisses).
+ */
+export async function deleteInvitation(
+  roomId: string,
+  username?: string
+): Promise<{ success: boolean; message: string }> {
+  const url = username
+    ? `/api/v1/gd/rooms/${roomId}/invitations/${encodeURIComponent(username)}`
+    : `/api/v1/gd/rooms/${roomId}/invitations`;
+  const res = await api.delete(url);
+  return res.data;
+}
+
+/**
  * Fetches invitations received by the current student.
  */
 export async function fetchMyInvitations(): Promise<

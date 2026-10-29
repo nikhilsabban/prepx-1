@@ -17243,6 +17243,10 @@ var GDSessionService = class {
         type: "invitation_updated",
         payload: { invitation: declinedInv }
       });
+      broadcastToGDUser(cleanUsername, {
+        type: "invitation_removed",
+        payload: { roomId, username: cleanUsername }
+      });
       return { room: updated2 || room, invitation: declinedInv };
     }
     const acceptedCount = room.invitations.filter(
@@ -17281,28 +17285,75 @@ var GDSessionService = class {
     return { room: updated || room, invitation: acceptedInv };
   }
   /**
+   * Deletes or revokes an invitation (host removes invitee or student cancels/dismisses).
+   */
+  async deleteInvitation(roomId, requestingUsername, targetUsername) {
+    const cleanRequesting = requestingUsername.toLowerCase().trim();
+    const cleanTarget = (targetUsername || requestingUsername).toLowerCase().trim();
+    const room = await this.getSessionById(roomId);
+    if (!room) {
+      throw new Error("Discussion room not found");
+    }
+    const isHost = room.adminUsername?.toLowerCase().trim() === cleanRequesting;
+    const isSelf = cleanTarget === cleanRequesting;
+    if (!isHost && !isSelf) {
+      throw new Error("Unauthorized to remove this invitation");
+    }
+    await GroupDiscussion.updateOne(
+      { _id: roomId },
+      { $pull: { invitations: { username: cleanTarget } } }
+    );
+    broadcastToGDRoom(roomId, {
+      type: "invitation_removed",
+      payload: { roomId, username: cleanTarget }
+    });
+    broadcastToGDUser(cleanTarget, {
+      type: "invitation_removed",
+      payload: { roomId, username: cleanTarget }
+    });
+    return { success: true, message: "Invitation removed successfully" };
+  }
+  /**
    * Retrieves pending invitations for a user.
    */
   async getInvitationsForUser(username) {
     const cleanUsername = username.toLowerCase().trim();
+    const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1e3);
     const rooms = await GroupDiscussion.find({
-      "invitations.username": cleanUsername,
-      status: { $in: ["preparing", "in_progress"] }
-    }).select("topic adminUsername adminFullName expectedLanguage invitations createdAt").sort({ createdAt: -1 }).lean();
+      invitations: {
+        $elemMatch: {
+          username: cleanUsername,
+          status: { $in: ["pending", "accepted"] }
+        }
+      },
+      status: { $in: ["preparing", "in_progress"] },
+      createdAt: { $gte: cutoffTime }
+    }).select("topic adminUsername adminFullName expectedLanguage invitations participants createdAt").sort({ createdAt: -1 }).lean();
     const results = [];
+    const seenRooms = /* @__PURE__ */ new Set();
     for (const r of rooms) {
-      const inv = (r.invitations || []).find((i) => i.username === cleanUsername);
-      if (inv) {
-        results.push({
-          roomId: r._id.toString(),
-          topic: r.topic,
-          adminUsername: r.adminUsername,
-          adminFullName: r.adminFullName,
-          expectedLanguage: r.expectedLanguage,
-          status: inv.status,
-          invitedAt: inv.invitedAt
-        });
+      const roomIdStr = r._id.toString();
+      if (seenRooms.has(roomIdStr)) continue;
+      const inv = (r.invitations || []).find(
+        (i) => i.username?.toLowerCase().trim() === cleanUsername && (i.status === "pending" || i.status === "accepted")
+      );
+      if (!inv) continue;
+      const isAlreadyParticipant = (r.participants || []).some(
+        (p) => p.username?.toLowerCase().trim() === cleanUsername
+      );
+      if (inv.status === "accepted" && isAlreadyParticipant) {
+        continue;
       }
+      seenRooms.add(roomIdStr);
+      results.push({
+        roomId: roomIdStr,
+        topic: r.topic,
+        adminUsername: r.adminUsername,
+        adminFullName: r.adminFullName,
+        expectedLanguage: r.expectedLanguage,
+        status: inv.status,
+        invitedAt: inv.invitedAt
+      });
     }
     return results;
   }
@@ -17824,6 +17875,25 @@ async function getMyInvitations(req, res) {
     res.status(500).json({ success: false, message: "Failed to retrieve invitations" });
   }
 }
+async function deleteInvitation(req, res) {
+  try {
+    const roomId = getParam(req.params.roomId || req.params.sessionId);
+    const targetUsername = req.params.username || req.body?.username;
+    const requestingUser = req.user?.username;
+    if (!roomId || !requestingUser) {
+      res.status(400).json({ success: false, message: "Authentication and room ID required" });
+      return;
+    }
+    const result = await gdSessionService.deleteInvitation(roomId, requestingUser, targetUsername);
+    res.json(result);
+  } catch (error) {
+    console.error("[GD Controller] Delete invitation error:", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to delete invitation"
+    });
+  }
+}
 async function joinGDRoom(req, res) {
   try {
     const roomId = getParam(req.params.roomId || req.params.sessionId);
@@ -18154,8 +18224,12 @@ router5.get("/users/search", protect, searchUsersByUsername);
 router5.get("/my-invitations", protect, getMyInvitations);
 router5.post("/rooms/:roomId/invitations", protect, inviteParticipant);
 router5.post("/rooms/:roomId/invitations/respond", protect, respondToInvitation);
+router5.delete("/rooms/:roomId/invitations/:username?", protect, deleteInvitation);
+router5.delete("/rooms/:roomId/invitations", protect, deleteInvitation);
 router5.post("/sessions/:sessionId/invitations", protect, inviteParticipant);
 router5.post("/sessions/:sessionId/invitations/respond", protect, respondToInvitation);
+router5.delete("/sessions/:sessionId/invitations/:username?", protect, deleteInvitation);
+router5.delete("/sessions/:sessionId/invitations", protect, deleteInvitation);
 router5.post("/rooms", protect, createGDRoom);
 router5.post("/sessions", protect, createGDRoom);
 router5.get("/rooms/:roomId", getGDSession);
