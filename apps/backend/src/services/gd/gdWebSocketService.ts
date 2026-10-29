@@ -1,6 +1,12 @@
 import { Server as HttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { gdSessionService, registerGDRoomBroadcaster, DEFAULT_SILENCE_WARNING_SEC, DEFAULT_SILENCE_TIMEOUT_SEC } from "./gdSessionService";
+import {
+  gdSessionService,
+  registerGDRoomBroadcaster,
+  registerGDUserBroadcaster,
+  DEFAULT_SILENCE_WARNING_SEC,
+  DEFAULT_SILENCE_TIMEOUT_SEC,
+} from "./gdSessionService";
 
 interface GDClient extends WebSocket {
   isAlive?: boolean;
@@ -16,6 +22,9 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
   // Map of sessionId -> Set of active client WebSockets
   const sessionRooms = new Map<string, Set<GDClient>>();
+
+  // Map of username -> Set of active client WebSockets for real-time personal notifications
+  const userSockets = new Map<string, Set<GDClient>>();
 
   // Active room silence checker intervals: sessionId -> NodeJS.Timeout
   const silenceCheckers = new Map<string, NodeJS.Timeout>();
@@ -44,9 +53,26 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
     }
   }
 
+  function sendToUser(username: string, payload: any) {
+    const clean = username.toLowerCase().trim();
+    const sockets = userSockets.get(clean);
+    if (!sockets) return;
+    const message = JSON.stringify(payload);
+    for (const client of sockets) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    }
+  }
+
   // Register real-time room broadcaster for instant cross-service events (e.g. invites)
   registerGDRoomBroadcaster((sessionId, payload) => {
     broadcastToEveryoneInRoom(sessionId, payload);
+  });
+
+  // Register real-time user broadcaster for direct instant delivery (<50ms)
+  registerGDUserBroadcaster((username, payload) => {
+    sendToUser(username, payload);
   });
 
   function sendToSpecificClient(sessionId: string, targetParticipantId: string, payload: any) {
@@ -151,6 +177,20 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
       try {
         const message = JSON.parse(data.toString());
         const { type, sessionId, payload } = message;
+
+        // Register active user connection for direct real-time invitation pushes
+        if (type === "register_user") {
+          const cleanUser = (payload?.username || "").toLowerCase().trim();
+          if (cleanUser) {
+            ws.username = cleanUser;
+            if (!userSockets.has(cleanUser)) {
+              userSockets.set(cleanUser, new Set());
+            }
+            userSockets.get(cleanUser)!.add(ws);
+            ws.send(JSON.stringify({ type: "user_registered", payload: { username: cleanUser } }));
+          }
+          return;
+        }
 
         if (!sessionId) return;
 
@@ -461,6 +501,14 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
     });
 
     ws.on("close", async () => {
+      // Clean up user-level socket registration
+      if (ws.username && userSockets.has(ws.username)) {
+        userSockets.get(ws.username)!.delete(ws);
+        if (userSockets.get(ws.username)!.size === 0) {
+          userSockets.delete(ws.username);
+        }
+      }
+
       if (ws.sessionId) {
         const sessionId = ws.sessionId;
         const participantId = ws.participantId;

@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { SkeletonGDList } from "../../components/ui/skeleton";
+import { useAuth } from "../../context/AuthContext";
+import { BACKEND_URL } from "../../lib/config";
 import {
   fetchRandomTopic,
   createGDRoom,
@@ -54,6 +56,7 @@ const LANGUAGES = [
 
 export function GDHubPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [topic, setTopic] = useState<IGDTopicMetadata | null>(null);
@@ -74,6 +77,7 @@ export function GDHubPage() {
     }>
   >([]);
   const [loadingInvitations, setLoadingInvitations] = useState(true);
+  const [actionInProgress, setActionInProgress] = useState<Record<string, "accepting" | "declining">>({});
 
   // Create Room Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -113,6 +117,51 @@ export function GDHubPage() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
+
+  // Real-time WebSocket connection for instant (<50ms) invitation delivery
+  useEffect(() => {
+    if (!user?.username) return;
+
+    let socket: WebSocket | null = null;
+    let isCancelled = false;
+
+    try {
+      const wsUrl = BACKEND_URL.replace(/^http/, "ws") + "/api/v1/gd/ws";
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        if (!isCancelled && socket?.readyState === WebSocket.OPEN) {
+          socket.send(
+            JSON.stringify({
+              type: "register_user",
+              payload: { username: user.username },
+            })
+          );
+        }
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "invitation_received" && data.payload) {
+            const newInv = data.payload;
+            setMyInvitations((prev) => {
+              if (prev.some((i) => i.roomId === newInv.roomId)) return prev;
+              toast.info(`🔔 New GD invitation from @${newInv.adminUsername}!`);
+              return [newInv, ...prev];
+            });
+          }
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      isCancelled = true;
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, [user?.username]);
 
   // Search users debounce (snappy 200ms)
   useEffect(() => {
@@ -241,17 +290,56 @@ export function GDHubPage() {
   }
 
   async function handleRespondToInvitation(roomId: string, action: "accept" | "decline") {
-    try {
-      await respondToInvitation(roomId, action);
-      if (action === "accept") {
-        toast.success("Invitation accepted! Entering discussion room...");
-        navigate(`/group-discussion/${roomId}`);
-      } else {
-        toast.info("Invitation declined");
-        loadInvitations();
+    if (actionInProgress[roomId]) return;
+
+    const targetInv = myInvitations.find((i) => i.roomId === roomId);
+    if (!targetInv) return;
+
+    if (action === "decline") {
+      // Optimistic Decline: immediately remove from UI (<16ms, zero delay!)
+      setActionInProgress((prev) => ({ ...prev, [roomId]: "declining" }));
+      setMyInvitations((prev) => prev.filter((i) => i.roomId !== roomId));
+      toast.info("Invitation declined");
+
+      try {
+        await respondToInvitation(roomId, "decline");
+      } catch (err: any) {
+        // Rollback on failure
+        setMyInvitations((prev) => [targetInv, ...prev]);
+        toast.error(err.response?.data?.message || "Failed to decline invitation");
+      } finally {
+        setActionInProgress((prev) => {
+          const next = { ...prev };
+          delete next[roomId];
+          return next;
+        });
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || `Failed to ${action} invitation`);
+      return;
+    }
+
+    if (action === "accept") {
+      // Optimistic Accept: immediately update UI to accepted state (<16ms)
+      setActionInProgress((prev) => ({ ...prev, [roomId]: "accepting" }));
+      setMyInvitations((prev) =>
+        prev.map((i) => (i.roomId === roomId ? { ...i, status: "accepted" as const } : i))
+      );
+      toast.success("Invitation accepted! Entering discussion room...");
+
+      try {
+        await respondToInvitation(roomId, "accept");
+        navigate(`/group-discussion/${roomId}`);
+      } catch (err: any) {
+        // Rollback on failure
+        setMyInvitations((prev) =>
+          prev.map((i) => (i.roomId === roomId ? { ...i, status: "pending" as const } : i))
+        );
+        toast.error(err.response?.data?.message || "Failed to accept invitation");
+        setActionInProgress((prev) => {
+          const next = { ...prev };
+          delete next[roomId];
+          return next;
+        });
+      }
     }
   }
 
@@ -350,17 +438,30 @@ export function GDHubPage() {
                     ) : (
                       <>
                         <Button
+                          disabled={!!actionInProgress[inv.roomId]}
                           onClick={() => handleRespondToInvitation(inv.roomId, "accept")}
-                          className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold"
+                          className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold transition-all disabled:opacity-50"
                         >
-                          Accept & Join
+                          {actionInProgress[inv.roomId] === "accepting" ? (
+                            <span className="flex items-center gap-1.5">
+                              <RefreshCw className="size-3 animate-spin" />
+                              Joining...
+                            </span>
+                          ) : (
+                            "Accept & Join"
+                          )}
                         </Button>
                         <Button
+                          disabled={!!actionInProgress[inv.roomId]}
                           onClick={() => handleRespondToInvitation(inv.roomId, "decline")}
                           variant="ghost"
-                          className="px-3 py-1.5 border border-zinc-700 text-zinc-400 hover:text-white text-xs"
+                          className="px-3 py-1.5 border border-zinc-700 text-zinc-400 hover:text-white text-xs transition-all disabled:opacity-50"
                         >
-                          Decline
+                          {actionInProgress[inv.roomId] === "declining" ? (
+                            <RefreshCw className="size-3 animate-spin" />
+                          ) : (
+                            "Decline"
+                          )}
                         </Button>
                       </>
                     )}

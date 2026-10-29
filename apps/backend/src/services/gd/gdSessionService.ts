@@ -54,15 +54,30 @@ export const VIRTUAL_PARTICIPANTS: Omit<IGDParticipant, "speakingTimeSeconds" | 
 ];
 
 let gdRoomBroadcaster: ((sessionId: string, payload: any) => void) | null = null;
+let gdUserBroadcaster: ((username: string, payload: any) => void) | null = null;
 
 export function registerGDRoomBroadcaster(broadcaster: (sessionId: string, payload: any) => void) {
   gdRoomBroadcaster = broadcaster;
+}
+
+export function registerGDUserBroadcaster(broadcaster: (username: string, payload: any) => void) {
+  gdUserBroadcaster = broadcaster;
 }
 
 export function broadcastToGDRoom(sessionId: string, payload: any) {
   if (gdRoomBroadcaster) {
     try {
       gdRoomBroadcaster(sessionId, payload);
+    } catch {
+      // Non-fatal
+    }
+  }
+}
+
+export function broadcastToGDUser(username: string, payload: any) {
+  if (gdUserBroadcaster) {
+    try {
+      gdUserBroadcaster(username, payload);
     } catch {
       // Non-fatal
     }
@@ -225,12 +240,6 @@ class GDSessionService {
       throw new Error(`User "@${cleanUsername}" does not exist in PrepX`);
     }
 
-    // Check for duplicate invitation
-    const existingInv = room.invitations.find((inv) => inv.username === cleanUsername);
-    if (existingInv && existingInv.status !== "declined" && existingInv.status !== "expired") {
-      throw new Error(`User "@${cleanUsername}" has already been invited (status: ${existingInv.status})`);
-    }
-
     // Check student capacity constraint (Max 5 students excluding admin)
     const acceptedCount = room.invitations.filter((i) => i.status === "accepted").length;
     const studentParticipantsCount = room.participants.filter((p) => !p.isHost && p.role !== "admin").length;
@@ -248,23 +257,86 @@ class GDSessionService {
       invitedAt: new Date(),
     };
 
-    if (existingInv) {
-      existingInv.status = "pending";
-      existingInv.invitedAt = new Date();
-      existingInv.respondedAt = undefined;
-    } else {
-      room.invitations.push(newInvitation);
+    // 1. Handle re-inviting an existing invitation (prevent duplicate creation)
+    const existingIndex = room.invitations.findIndex((inv) => inv.username === cleanUsername);
+    if (existingIndex >= 0) {
+      const existingInv = room.invitations[existingIndex];
+      if (existingInv.status !== "declined" && existingInv.status !== "expired") {
+        throw new Error(`User "@${cleanUsername}" has already been invited (status: ${existingInv.status})`);
+      }
+
+      // Atomic update of existing invitation status back to pending
+      const updatedRoom = await GroupDiscussion.findOneAndUpdate(
+        { _id: roomId, "invitations.username": cleanUsername },
+        {
+          $set: {
+            "invitations.$.status": "pending",
+            "invitations.$.invitedAt": new Date(),
+            "invitations.$.respondedAt": undefined,
+          },
+        },
+        { new: true }
+      );
+
+      const renewedInv = updatedRoom?.invitations.find((i) => i.username === cleanUsername) || existingInv;
+
+      broadcastToGDRoom(roomId, {
+        type: "invitation_sent",
+        payload: { invitation: renewedInv },
+      });
+
+      broadcastToGDUser(cleanUsername, {
+        type: "invitation_received",
+        payload: {
+          roomId,
+          topic: room.topic,
+          adminUsername: room.adminUsername,
+          adminFullName: room.adminFullName,
+          expectedLanguage: room.expectedLanguage,
+          status: "pending",
+          invitedAt: renewedInv.invitedAt,
+        },
+      });
+
+      return { room: updatedRoom || room, invitation: renewedInv as any };
     }
 
-    await room.save();
+    // 2. Atomic push with uniqueness condition: guarantees NO duplicate records even under high concurrency
+    const updatedRoom = await GroupDiscussion.findOneAndUpdate(
+      {
+        _id: roomId,
+        "invitations.username": { $ne: cleanUsername },
+      },
+      {
+        $push: { invitations: newInvitation },
+      },
+      { new: true }
+    );
 
-    // Instant WebSocket broadcast to active room participants
+    if (!updatedRoom) {
+      throw new Error(`User "@${cleanUsername}" has already been invited`);
+    }
+
+    // Real-time notifications: room broadcast & direct target user push
     broadcastToGDRoom(roomId, {
       type: "invitation_sent",
       payload: { invitation: newInvitation },
     });
 
-    return { room, invitation: newInvitation };
+    broadcastToGDUser(cleanUsername, {
+      type: "invitation_received",
+      payload: {
+        roomId,
+        topic: room.topic,
+        adminUsername: room.adminUsername,
+        adminFullName: room.adminFullName,
+        expectedLanguage: room.expectedLanguage,
+        status: "pending",
+        invitedAt: newInvitation.invitedAt,
+      },
+    });
+
+    return { room: updatedRoom, invitation: newInvitation };
   }
 
   /**
@@ -275,27 +347,43 @@ class GDSessionService {
     username: string,
     action: "accept" | "decline"
   ): Promise<{ room: IGroupDiscussion; invitation: IGDInvitation }> {
+    const cleanUsername = username.toLowerCase().trim();
+
     const room = await this.getSessionById(roomId);
     if (!room) {
       throw new Error("Discussion room not found");
     }
 
-    const cleanUsername = username.toLowerCase().trim();
     const invitation = room.invitations.find((inv) => inv.username === cleanUsername);
-
     if (!invitation) {
       throw new Error("No invitation found for this user in this room");
     }
 
     if (action === "decline") {
-      invitation.status = "declined";
-      invitation.respondedAt = new Date();
-      await room.save();
+      // Atomic status update in MongoDB
+      const updated = await GroupDiscussion.findOneAndUpdate(
+        { _id: roomId, "invitations.username": cleanUsername },
+        {
+          $set: {
+            "invitations.$.status": "declined",
+            "invitations.$.respondedAt": new Date(),
+          },
+        },
+        { new: true }
+      );
+
+      const declinedInv = updated?.invitations.find((i) => i.username === cleanUsername) || {
+        ...invitation,
+        status: "declined",
+        respondedAt: new Date(),
+      };
+
       broadcastToGDRoom(roomId, {
         type: "invitation_updated",
-        payload: { invitation },
+        payload: { invitation: declinedInv },
       });
-      return { room, invitation };
+
+      return { room: updated || room, invitation: declinedInv as any };
     }
 
     // Acceptance: verify capacity constraint
@@ -309,21 +397,37 @@ class GDSessionService {
     const occupiedStudents = Math.max(acceptedCount, studentParticipants);
 
     if (occupiedStudents >= MAX_STUDENTS_CAPACITY) {
-      invitation.status = "expired";
-      await room.save();
+      await GroupDiscussion.updateOne(
+        { _id: roomId, "invitations.username": cleanUsername },
+        { $set: { "invitations.$.status": "expired" } }
+      );
       throw new Error(`Room is already full. Maximum ${MAX_STUDENTS_CAPACITY} students reached.`);
     }
 
-    invitation.status = "accepted";
-    invitation.respondedAt = new Date();
-    await room.save();
+    // Atomic update to accepted
+    const updated = await GroupDiscussion.findOneAndUpdate(
+      { _id: roomId, "invitations.username": cleanUsername },
+      {
+        $set: {
+          "invitations.$.status": "accepted",
+          "invitations.$.respondedAt": new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    const acceptedInv = updated?.invitations.find((i) => i.username === cleanUsername) || {
+      ...invitation,
+      status: "accepted",
+      respondedAt: new Date(),
+    };
 
     broadcastToGDRoom(roomId, {
       type: "invitation_updated",
-      payload: { invitation },
+      payload: { invitation: acceptedInv },
     });
 
-    return { room, invitation };
+    return { room: updated || room, invitation: acceptedInv as any };
   }
 
   /**
