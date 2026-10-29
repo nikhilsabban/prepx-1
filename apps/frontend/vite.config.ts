@@ -36,6 +36,14 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    chunkSizeWarningLimit: 1200,
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router"],
+          "vendor-icons": ["lucide-react"],
+        },
+      },
+    },
   },
 });
