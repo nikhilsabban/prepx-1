@@ -1,6 +1,6 @@
 import { Server as HttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { gdSessionService, DEFAULT_SILENCE_WARNING_SEC, DEFAULT_SILENCE_TIMEOUT_SEC } from "./gdSessionService";
+import { gdSessionService, registerGDRoomBroadcaster, DEFAULT_SILENCE_WARNING_SEC, DEFAULT_SILENCE_TIMEOUT_SEC } from "./gdSessionService";
 
 interface GDClient extends WebSocket {
   isAlive?: boolean;
@@ -43,6 +43,11 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
       }
     }
   }
+
+  // Register real-time room broadcaster for instant cross-service events (e.g. invites)
+  registerGDRoomBroadcaster((sessionId, payload) => {
+    broadcastToEveryoneInRoom(sessionId, payload);
+  });
 
   function sendToSpecificClient(sessionId: string, targetParticipantId: string, payload: any) {
     const room = sessionRooms.get(sessionId);

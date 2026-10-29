@@ -90,10 +90,31 @@ export function GDHubPage() {
   useEffect(() => {
     loadTopic(selectedCategory);
     loadHistory();
-    loadInvitations();
+    loadInvitations(true);
   }, [selectedCategory]);
 
-  // Search users debounce
+  // Active polling for incoming invitations so user receives friend invites in real time (<2.5s)
+  useEffect(() => {
+    const pollTimer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadInvitations(false);
+      }
+    }, 2500);
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadInvitations(false);
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      clearInterval(pollTimer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
+  // Search users debounce (snappy 200ms)
   useEffect(() => {
     if (!userSearchQuery.trim()) {
       setSearchResults([]);
@@ -109,7 +130,7 @@ export function GDHubPage() {
       } finally {
         setIsSearchingUsers(false);
       }
-    }, 300);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [userSearchQuery, selectedInvitees]);
@@ -141,15 +162,27 @@ export function GDHubPage() {
     }
   }
 
-  async function loadInvitations() {
-    setLoadingInvitations(true);
+  async function loadInvitations(showLoading = false) {
+    if (showLoading) setLoadingInvitations(true);
     try {
       const invs = await fetchMyInvitations();
-      setMyInvitations(invs);
+      setMyInvitations((prev) => {
+        // Detect newly received invitations to notify student immediately
+        if (!showLoading && prev.length > 0) {
+          const prevRoomIds = new Set(prev.map((i) => i.roomId));
+          const freshInvs = invs.filter((i) => !prevRoomIds.has(i.roomId) && i.status === "pending");
+          freshInvs.forEach((inv) => {
+            toast.info(`🔔 New GD invitation from @${inv.adminUsername}!`, {
+              autoClose: 5000,
+            });
+          });
+        }
+        return invs;
+      });
     } catch (err) {
       // Ignored
     } finally {
-      setLoadingInvitations(false);
+      if (showLoading) setLoadingInvitations(false);
     }
   }
 
@@ -174,19 +207,26 @@ export function GDHubPage() {
     setIsCreatingRoom(true);
 
     try {
+      // Batch invite directly during room creation (zero extra roundtrips)
       const room = await createGDRoom({
         category: selectedCategory !== "All" ? selectedCategory : undefined,
         expectedLanguage,
         topicOverride: customQuestion && topic ? { ...topic, question: customQuestion } : topic || undefined,
+        invitees: selectedInvitees,
       });
 
-      // Dispatch invitations
-      for (const username of selectedInvitees) {
-        try {
-          await inviteParticipant(room._id, username);
-        } catch (invErr: any) {
-          console.warn(`Failed to invite ${username}:`, invErr?.message);
-        }
+      // Concurrently dispatch any remaining invitees not already recorded
+      const existingInvUsernames = new Set(
+        (room.invitations || []).map((i: any) => i.username?.toLowerCase().trim())
+      );
+      const remainingInvitees = selectedInvitees.filter(
+        (u) => !existingInvUsernames.has(u.toLowerCase().trim())
+      );
+
+      if (remainingInvitees.length > 0) {
+        await Promise.allSettled(
+          remainingInvitees.map((username) => inviteParticipant(room._id, username))
+        );
       }
 
       toast.success("GD room created! Entering live room as Admin / Moderator...");

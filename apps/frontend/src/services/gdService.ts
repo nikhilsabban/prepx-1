@@ -220,6 +220,7 @@ export async function createGDRoom(data: {
   category?: string;
   expectedLanguage?: string;
   topicOverride?: IGDTopicMetadata;
+  invitees?: string[];
 }): Promise<IGDSession> {
   const res = await api.post("/api/v1/gd/rooms", data);
   return res.data.session;

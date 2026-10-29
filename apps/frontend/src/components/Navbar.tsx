@@ -5,6 +5,7 @@ import { useGamification } from "../context/GamificationContext";
 import { Button } from "./ui/button";
 import { LogOut, User, BookOpenCheck, History, Bookmark, ArrowLeft, Menu, X, Sparkles, LayoutDashboard, FileText, Users, Trophy, Flame } from "lucide-react";
 import { toast } from "react-toastify";
+import { fetchMyInvitations } from "../services/gdService";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -13,6 +14,40 @@ export function Navbar() {
   const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pendingGDInvitationsCount, setPendingGDInvitationsCount] = useState(0);
+
+  // Poll for pending Group Discussion invitations when user is logged in
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      setPendingGDInvitationsCount(0);
+      return;
+    }
+
+    let isMounted = true;
+    async function checkInvites() {
+      try {
+        const invs = await fetchMyInvitations();
+        if (isMounted) {
+          const pending = (invs || []).filter((i: any) => i.status === "pending").length;
+          setPendingGDInvitationsCount(pending);
+        }
+      } catch {
+        // Silently ignore background poll errors
+      }
+    }
+
+    checkInvites();
+    const pollInterval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        checkInvites();
+      }
+    }, 8000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
+  }, [isAuthenticated, user?.id, location.pathname]);
 
   // Automatically close dropdown and mobile menu whenever route changes or user auth changes (login/logout)
   useEffect(() => {
@@ -92,8 +127,13 @@ export function Navbar() {
             <Link to="/ai-interview" className={`px-3 py-1.5 rounded-full transition-all ${location.pathname === "/ai-interview" ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
               Mock Interview
             </Link>
-            <Link to="/group-discussion" className={`px-3 py-1.5 rounded-full transition-all ${location.pathname.includes("/group-discussion") ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
-              Group Discussion
+            <Link to="/group-discussion" className={`px-3 py-1.5 rounded-full transition-all relative flex items-center gap-1.5 ${location.pathname.includes("/group-discussion") ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
+              <span>Group Discussion</span>
+              {pendingGDInvitationsCount > 0 && (
+                <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-black leading-none text-white bg-rose-500 rounded-full animate-pulse shadow-sm shadow-rose-500/50">
+                  {pendingGDInvitationsCount}
+                </span>
+              )}
             </Link>
             <Link to={`/${user.id}/coding`} className={`px-3 py-1.5 rounded-full transition-all ${location.pathname.includes("/coding") ? "bg-indigo-600 text-white font-semibold" : "hover:text-white hover:bg-zinc-900"}`}>
               Coding
@@ -246,8 +286,15 @@ export function Navbar() {
               <Link to="/ai-interview" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
                 <Sparkles className="size-4 text-purple-400" /> Mock Interview
               </Link>
-              <Link to="/group-discussion" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
-                <Users className="size-4 text-pink-400" /> Group Discussion
+              <Link to="/group-discussion" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-between text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
+                <div className="flex items-center gap-3">
+                  <Users className="size-4 text-pink-400" /> Group Discussion
+                </div>
+                {pendingGDInvitationsCount > 0 && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold text-white bg-rose-500 rounded-full animate-pulse shadow-sm shadow-rose-500/50">
+                    {pendingGDInvitationsCount} new
+                  </span>
+                )}
               </Link>
               <Link to={`/${user.id}/coding`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 text-sm font-medium text-zinc-200 py-2.5 border-b border-zinc-800/50">
                 <BookOpenCheck className="size-4 text-blue-400" /> Coding Practice

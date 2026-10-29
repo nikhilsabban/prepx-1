@@ -53,6 +53,22 @@ export const VIRTUAL_PARTICIPANTS: Omit<IGDParticipant, "speakingTimeSeconds" | 
   },
 ];
 
+let gdRoomBroadcaster: ((sessionId: string, payload: any) => void) | null = null;
+
+export function registerGDRoomBroadcaster(broadcaster: (sessionId: string, payload: any) => void) {
+  gdRoomBroadcaster = broadcaster;
+}
+
+export function broadcastToGDRoom(sessionId: string, payload: any) {
+  if (gdRoomBroadcaster) {
+    try {
+      gdRoomBroadcaster(sessionId, payload);
+    } catch {
+      // Non-fatal
+    }
+  }
+}
+
 class GDSessionService {
   /**
    * Creates a new Group Discussion room hosted by an admin/moderator.
@@ -66,6 +82,7 @@ class GDSessionService {
     category?: string;
     expectedLanguage?: string;
     topicOverride?: IGDTopicMetadata;
+    invitees?: string[];
   }): Promise<IGroupDiscussion> {
     // 1. Resolve Discussion Topic
     let topic: IGDTopicMetadata;
@@ -105,7 +122,37 @@ class GDSessionService {
       joinedAt: new Date(),
     };
 
-    // 3. Create room document
+    // 3. Batch resolve initial student invitations
+    const initialInvitations: IGDInvitation[] = [];
+    if (params.invitees && Array.isArray(params.invitees) && params.invitees.length > 0) {
+      const cleanInvitees = Array.from(
+        new Set(
+          params.invitees
+            .map((u) => (typeof u === "string" ? u.toLowerCase().trim() : ""))
+            .filter((u) => u && u !== params.adminUsername.toLowerCase().trim())
+        )
+      ).slice(0, MAX_STUDENTS_CAPACITY);
+
+      if (cleanInvitees.length > 0) {
+        const foundUsers = await User.find({ username: { $in: cleanInvitees } })
+          .select("_id username fullName")
+          .lean();
+
+        for (const u of foundUsers) {
+          if (u.username) {
+            initialInvitations.push({
+              userId: u._id as any,
+              username: u.username.toLowerCase().trim(),
+              fullName: u.fullName,
+              status: "pending",
+              invitedAt: new Date(),
+            });
+          }
+        }
+      }
+    }
+
+    // 4. Create room document
     const room = new GroupDiscussion({
       userId: adminObjectId, // Backward compatibility
       adminId: adminObjectId,
@@ -114,7 +161,7 @@ class GDSessionService {
       expectedLanguage: params.expectedLanguage?.trim() || "English",
       status: "preparing",
       topic,
-      invitations: [],
+      invitations: initialInvitations,
       participants: [adminParticipant],
       turnHistory: [],
       round: 1,
@@ -138,13 +185,15 @@ class GDSessionService {
     if (!cleanQuery) return [];
 
     const lowerExcluded = excludeUsernames.map((u) => u.toLowerCase().trim());
+    const escapedQuery = cleanQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
     const users = await User.find({
-      username: { $regex: cleanQuery, $options: "i" },
+      username: { $regex: escapedQuery, $options: "i" },
       ...(lowerExcluded.length > 0 ? { username: { $nin: lowerExcluded } } : {}),
     })
       .select("username fullName profilePicture")
-      .limit(10);
+      .limit(10)
+      .lean();
 
     return users.map((u) => ({
       id: u._id.toString(),
@@ -171,7 +220,7 @@ class GDSessionService {
     const cleanUsername = targetUsername.toLowerCase().trim();
 
     // Check user existence
-    const user = await User.findOne({ username: cleanUsername });
+    const user = await User.findOne({ username: cleanUsername }).select("_id fullName username").lean();
     if (!user) {
       throw new Error(`User "@${cleanUsername}" does not exist in PrepX`);
     }
@@ -192,7 +241,7 @@ class GDSessionService {
     }
 
     const newInvitation: IGDInvitation = {
-      userId: user._id,
+      userId: user._id as any,
       username: cleanUsername,
       fullName: user.fullName,
       status: "pending",
@@ -208,6 +257,13 @@ class GDSessionService {
     }
 
     await room.save();
+
+    // Instant WebSocket broadcast to active room participants
+    broadcastToGDRoom(roomId, {
+      type: "invitation_sent",
+      payload: { invitation: newInvitation },
+    });
+
     return { room, invitation: newInvitation };
   }
 
@@ -235,6 +291,10 @@ class GDSessionService {
       invitation.status = "declined";
       invitation.respondedAt = new Date();
       await room.save();
+      broadcastToGDRoom(roomId, {
+        type: "invitation_updated",
+        payload: { invitation },
+      });
       return { room, invitation };
     }
 
@@ -258,6 +318,11 @@ class GDSessionService {
     invitation.respondedAt = new Date();
     await room.save();
 
+    broadcastToGDRoom(roomId, {
+      type: "invitation_updated",
+      payload: { invitation },
+    });
+
     return { room, invitation };
   }
 
@@ -279,11 +344,14 @@ class GDSessionService {
     const rooms = await GroupDiscussion.find({
       "invitations.username": cleanUsername,
       status: { $in: ["preparing", "in_progress"] },
-    }).sort({ createdAt: -1 });
+    })
+      .select("topic adminUsername adminFullName expectedLanguage invitations createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
 
     const results: any[] = [];
     for (const r of rooms) {
-      const inv = r.invitations.find((i) => i.username === cleanUsername);
+      const inv = (r.invitations || []).find((i: any) => i.username === cleanUsername);
       if (inv) {
         results.push({
           roomId: r._id.toString(),

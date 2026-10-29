@@ -452,6 +452,7 @@ const GroupDiscussionSchema = new Schema<IGroupDiscussion>(
 // Indexes
 GroupDiscussionSchema.index({ adminId: 1, createdAt: -1 });
 GroupDiscussionSchema.index({ "invitations.username": 1, "invitations.status": 1 });
+GroupDiscussionSchema.index({ "invitations.username": 1, status: 1, createdAt: -1 });
 GroupDiscussionSchema.index({ status: 1 });
 GroupDiscussionSchema.index({ "participants.username": 1 });
 

@@ -71,7 +71,7 @@ export async function getTopicsPool(req: Request, res: Response): Promise<void> 
  */
 export async function createGDRoom(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { category, topicOverride, expectedLanguage } = req.body;
+    const { category, topicOverride, expectedLanguage, invitees } = req.body;
 
     const adminId = req.user?._id?.toString() || req.user?.id?.toString();
     const adminUsername = req.user?.username || req.user?.email?.split("@")[0] || "admin";
@@ -91,6 +91,7 @@ export async function createGDRoom(req: AuthRequest, res: Response): Promise<voi
       category,
       expectedLanguage: expectedLanguage || "English",
       topicOverride,
+      invitees: Array.isArray(invitees) ? invitees : undefined,
     });
 
     res.status(201).json({

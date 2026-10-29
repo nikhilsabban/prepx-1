@@ -122,6 +122,8 @@ export function GDRoomPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearchingInvite, setIsSearchingInvite] = useState(false);
+  const [isInvitingStudent, setIsInvitingStudent] = useState(false);
   const [manualText, setManualText] = useState("");
   const [isSendingText, setIsSendingText] = useState(false);
   const [liveTranscriptPreview, setLiveTranscriptPreview] = useState("");
@@ -1048,6 +1050,22 @@ export function GDRoomPage() {
             break;
           }
 
+          case "invitation_sent":
+          case "invitation_updated": {
+            if (payload?.invitation) {
+              setSession((prev) => {
+                if (!prev) return prev;
+                const existing = prev.invitations || [];
+                const idx = existing.findIndex((i: any) => i.username === payload.invitation.username);
+                const updatedInvs = idx >= 0
+                  ? existing.map((inv: any, i: number) => (i === idx ? payload.invitation : inv))
+                  : [...existing, payload.invitation];
+                return { ...prev, invitations: updatedInvs };
+              });
+            }
+            break;
+          }
+
           case "participant_joined": {
             toast.info(`@${payload.username || payload.participantName} joined the room`);
             setSession((prev) => {
@@ -1695,35 +1713,49 @@ export function GDRoomPage() {
     }
   }
 
-  // Invite student search
-  async function handleSearchInviteUsers(query: string) {
-    setSearchQuery(query);
-    if (!query.trim()) {
+  // Invite student search debounce (200ms)
+  useEffect(() => {
+    if (!searchQuery.trim()) {
       setSearchResults([]);
+      setIsSearchingInvite(false);
       return;
     }
-    try {
-      const existing = session?.participants.map((p) => p.username || "").filter(Boolean) || [];
-      const results = await searchUsersByUsername(query.trim(), existing);
-      setSearchResults(results);
-    } catch (e) {
-      setSearchResults([]);
-    }
-  }
+    setIsSearchingInvite(true);
+    const timer = setTimeout(async () => {
+      try {
+        const existing = session?.participants.map((p) => p.username || "").filter(Boolean) || [];
+        const results = await searchUsersByUsername(searchQuery.trim(), existing);
+        setSearchResults(results);
+      } catch (e) {
+        setSearchResults([]);
+      } finally {
+        setIsSearchingInvite(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, session?.participants]);
 
   async function handleSendInvite(targetUsername: string) {
-    if (!sessionId) return;
+    if (!sessionId || isInvitingStudent) return;
+    setIsInvitingStudent(true);
     try {
-      await inviteParticipant(sessionId, targetUsername);
+      const res = await inviteParticipant(sessionId, targetUsername);
       toast.success(`Invitation sent to @${targetUsername}`);
       setShowInviteModal(false);
       setSearchQuery("");
       setSearchResults([]);
-      // Refresh session
-      const updated = await fetchGDSession(sessionId);
-      setSession(updated);
+      // Use room payload directly if provided to avoid redundant fetch roundtrip
+      if (res?.room) {
+        setSession(res.room);
+      } else {
+        const updated = await fetchGDSession(sessionId);
+        setSession(updated);
+      }
     } catch (err: any) {
       toast.error(getErrorMessage(err, "Unable to send invitation right now. Please try again."));
+    } finally {
+      setIsInvitingStudent(false);
     }
   }
 
@@ -2341,10 +2373,13 @@ export function GDRoomPage() {
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => handleSearchInviteUsers(e.target.value)}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search username..."
                   className="bg-transparent text-xs text-white placeholder-zinc-500 outline-none flex-1"
                 />
+                {isSearchingInvite && (
+                  <RefreshCw className="size-3.5 text-zinc-400 animate-spin" />
+                )}
               </div>
 
               {searchResults.length > 0 && (
@@ -2352,14 +2387,18 @@ export function GDRoomPage() {
                   {searchResults.map((u) => (
                     <div
                       key={u.id}
-                      onClick={() => handleSendInvite(u.username)}
-                      className="p-2.5 rounded-lg hover:bg-zinc-800 cursor-pointer flex items-center justify-between"
+                      onClick={() => !isInvitingStudent && handleSendInvite(u.username)}
+                      className={`p-2.5 rounded-lg hover:bg-zinc-800 cursor-pointer flex items-center justify-between ${
+                        isInvitingStudent ? "opacity-50 pointer-events-none" : ""
+                      }`}
                     >
                       <div>
                         <span className="font-bold text-white block">@{u.username}</span>
                         <span className="text-zinc-500 text-[11px]">{u.fullName}</span>
                       </div>
-                      <span className="text-indigo-400 font-bold">Invite</span>
+                      <span className="text-indigo-400 font-bold">
+                        {isInvitingStudent ? "Inviting..." : "Invite"}
+                      </span>
                     </div>
                   ))}
                 </div>
