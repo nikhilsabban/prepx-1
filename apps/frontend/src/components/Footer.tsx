@@ -108,7 +108,7 @@ export function Footer() {
                 <li key={label}>
                   <Link
                     to={to}
-                    className="text-sm text-zinc-500 hover:text-white transition-all inline-block active:scale-95 active:text-indigo-400 cursor-pointer"
+                    className="text-sm text-zinc-500 hover:text-white transition-colors inline-block py-1 touch-manipulation cursor-pointer"
                   >
                     {label}
                   </Link>
@@ -119,20 +119,20 @@ export function Footer() {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-12 pt-4 border-t border-zinc-900 flex flex-col md:flex-row justify-between items-center gap-2 text-xs text-zinc-600">
+        <div className="relative z-20 mt-12 pt-4 border-t border-zinc-900 flex flex-col md:flex-row justify-between items-center gap-3 text-xs text-zinc-500">
           <p>© {new Date().getFullYear()} prepX. All rights reserved.</p>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-3">
             <Link 
               to="/terms" 
-              className="hover:text-zinc-300 transition-all inline-block px-2.5 py-1 rounded-lg active:scale-90 active:bg-zinc-800 active:text-indigo-400 cursor-pointer"
+              className="hover:text-white text-zinc-400 transition-colors inline-flex items-center justify-center min-h-[36px] px-3.5 py-1.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 hover:bg-zinc-800 touch-manipulation cursor-pointer"
             >
-              Terms
+              Terms & Conditions
             </Link>
             <Link 
               to="/privacy-policy" 
-              className="hover:text-zinc-300 transition-all inline-block px-2.5 py-1 rounded-lg active:scale-90 active:bg-zinc-800 active:text-indigo-400 cursor-pointer"
+              className="hover:text-white text-zinc-400 transition-colors inline-flex items-center justify-center min-h-[36px] px-3.5 py-1.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 hover:bg-zinc-800 touch-manipulation cursor-pointer"
             >
-              Privacy
+              Privacy Policy
             </Link>
           </div>
         </div>

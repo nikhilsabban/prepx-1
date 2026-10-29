@@ -44,7 +44,11 @@ import { useLocation } from "react-router";
 function ScrollToTop() {
   const { pathname } = useLocation();
   React.useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    try {
+      window.scrollTo(0, 0);
+    } catch {
+      window.scrollTo({ top: 0, left: 0 });
+    }
   }, [pathname]);
   return null;
 }
@@ -71,7 +75,10 @@ export function App() {
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/reset-password/:token" element={<ResetPassword />} />
                   <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                  <Route path="/privacy" element={<PrivacyPolicy />} />
                   <Route path="/terms" element={<TermsAndConditions />} />
+                  <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+                  <Route path="/terms-of-service" element={<TermsAndConditions />} />
                   <Route
                     path="/ai-interview"
                     element={

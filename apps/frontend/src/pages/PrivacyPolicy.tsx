@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Shield, ArrowLeft } from "lucide-react";
 
 interface Definition { term: string; def: string; }
@@ -168,19 +168,21 @@ const sections: Section[] = [
 ];
 
 export function PrivacyPolicy() {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-[#09090b] text-white">
       {/* Hero */}
       <div className="relative overflow-hidden border-b border-zinc-800 bg-gradient-to-b from-indigo-950/30 to-[#09090b]">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-transparent to-transparent pointer-events-none" />
-        <div className="mx-auto max-w-4xl px-6 py-16 relative">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors mb-8 group"
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-10 sm:py-16 relative">
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors mb-6 sm:mb-8 group cursor-pointer"
           >
             <ArrowLeft className="size-4 group-hover:-translate-x-1 transition-transform" />
-            Back to PrepX
-          </Link>
+            Back
+          </button>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/20">
               <Shield className="size-5 text-white" />
@@ -189,47 +191,47 @@ export function PrivacyPolicy() {
               Legal
             </span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white mb-4">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white mb-3 sm:mb-4">
             Privacy Policy
           </h1>
-          <p className="text-zinc-400 text-base md:text-lg max-w-2xl leading-relaxed">
+          <p className="text-zinc-400 text-sm sm:text-base md:text-lg max-w-2xl leading-relaxed">
             This Privacy Policy describes how PrepX collects, uses, and protects your information when you
             use our Service. By using PrepX, you agree to the collection and use of information in
             accordance with this Privacy Policy.
           </p>
-          <p className="mt-4 text-xs text-zinc-500">Last updated: September 2025</p>
+          <p className="mt-3 sm:mt-4 text-xs text-zinc-500">Last updated: September 2025</p>
         </div>
       </div>
 
       {/* Content */}
-      <div className="mx-auto max-w-4xl px-6 py-14 space-y-12">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 sm:py-14 space-y-8 sm:space-y-12">
         {sections.map((section, si) => (
-          <div key={si} className="space-y-5">
-            <h2 className="text-xl font-bold text-white border-l-4 border-indigo-500 pl-4">
+          <div key={si} className="space-y-4 sm:space-y-5">
+            <h2 className="text-lg sm:text-xl font-bold text-white border-l-4 border-indigo-500 pl-3 sm:pl-4">
               {section.title}
             </h2>
             {section.subsections.map((sub, ssi) => (
-              <div key={ssi} className="ml-4 space-y-3">
+              <div key={ssi} className="ml-2 sm:ml-4 space-y-2.5 sm:space-y-3">
                 {sub.subtitle && (
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-indigo-400">
+                  <h3 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-indigo-400">
                     {sub.subtitle}
                   </h3>
                 )}
                 {sub.prose && (
-                  <p className="text-zinc-300 text-sm leading-relaxed">{sub.prose}</p>
+                  <p className="text-zinc-300 text-xs sm:text-sm leading-relaxed">{sub.prose}</p>
                 )}
                 {/* Definitions grid */}
                 {sub.content && (
-                  <div className="grid gap-2 mt-3">
+                  <div className="grid gap-2 mt-2 sm:mt-3">
                     {sub.content.map((item, ii) => (
                       <div
                         key={ii}
-                        className="flex gap-3 rounded-lg bg-zinc-900/60 border border-zinc-800 px-4 py-3"
+                        className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3 rounded-lg bg-zinc-900/60 border border-zinc-800 px-3.5 sm:px-4 py-2.5 sm:py-3"
                       >
-                        <span className="text-sm font-semibold text-indigo-300 min-w-[130px] shrink-0">
+                        <span className="text-xs sm:text-sm font-semibold text-indigo-300 sm:min-w-[130px] shrink-0">
                           {item.term}
                         </span>
-                        <span className="text-sm text-zinc-400">{item.def}</span>
+                        <span className="text-xs sm:text-sm text-zinc-400 leading-relaxed">{item.def}</span>
                       </div>
                     ))}
                   </div>
@@ -238,7 +240,7 @@ export function PrivacyPolicy() {
                 {sub.list && (
                   <ul className="space-y-2 mt-2">
                     {sub.list.map((item, li) => (
-                      <li key={li} className="flex items-start gap-2.5 text-sm text-zinc-300">
+                      <li key={li} className="flex items-start gap-2.5 text-xs sm:text-sm text-zinc-300">
                         <span className="mt-1.5 size-1.5 rounded-full bg-indigo-400 shrink-0" />
                         {item}
                       </li>
@@ -251,16 +253,16 @@ export function PrivacyPolicy() {
         ))}
 
         {/* Contact */}
-        <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/20 p-8 space-y-3">
-          <h2 className="text-xl font-bold text-white">Contact Us</h2>
-          <p className="text-zinc-400 text-sm leading-relaxed">
+        <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/20 p-5 sm:p-8 space-y-3">
+          <h2 className="text-lg sm:text-xl font-bold text-white">Contact Us</h2>
+          <p className="text-zinc-400 text-xs sm:text-sm leading-relaxed">
             For questions or concerns regarding this Privacy Policy, please contact:
           </p>
-          <div className="mt-4 space-y-1">
+          <div className="mt-3 sm:mt-4 space-y-1">
             <p className="text-sm font-semibold text-white">PrepX Support</p>
             <a
               href="mailto:aixprepx@gmail.com"
-              className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-2"
+              className="text-xs sm:text-sm text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-2"
             >
               aixprepx@gmail.com
             </a>

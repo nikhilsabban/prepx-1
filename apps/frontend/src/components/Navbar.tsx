@@ -319,6 +319,25 @@ export function Navbar() {
               </button>
             </div>
           )}
+
+          {/* Legal / Policy Quick Access on Mobile */}
+          <div className="pt-3 mt-1 border-t border-zinc-800/80 flex items-center justify-around text-xs text-zinc-400">
+            <Link
+              to="/terms"
+              onClick={() => setMobileMenuOpen(false)}
+              className="py-2 px-1 hover:text-white transition-colors touch-manipulation"
+            >
+              Terms &amp; Conditions
+            </Link>
+            <span className="text-zinc-600">•</span>
+            <Link
+              to="/privacy-policy"
+              onClick={() => setMobileMenuOpen(false)}
+              className="py-2 px-1 hover:text-white transition-colors touch-manipulation"
+            >
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       )}
     </header>
