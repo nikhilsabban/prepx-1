@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { PreInterviewBody } from "../types";
-import { scrapeGithub, scrapeSpecificRepo } from "../scrapers/github";
+import { scrapeGithub, scrapeSpecificRepo, GitHubRepoNotFoundError } from "../scrapers/github";
 import { Interview } from "../models/Interview";
 import { Message } from "../models/Message";
 import { calculateResult } from "../services/resultService";
@@ -30,12 +30,9 @@ export function parseGithubTarget(input: string, explicitRepoName?: string, inte
     }
   }
 
-  // Fallback: If repo is still not identified but title explicitly names it
-  if (!repo && interviewTitle) {
-    const match = interviewTitle.match(/Technical Interview on ([\w.-]+)/i);
-    if (match && match[1]) {
-      repo = match[1].trim();
-    }
+  owner = owner.replace(/^@/, "").trim();
+  if (repo) {
+    repo = repo.trim();
   }
 
   return { owner, repo };
@@ -63,7 +60,28 @@ export async function createPreInterview(req: AuthRequest, res: Response): Promi
 
       if (owner && repo) {
         console.log(`🔍 [Interview Controller] Targeting specific repository: ${owner}/${repo}`);
-        githubData = await scrapeSpecificRepo(owner, repo);
+        try {
+          githubData = await scrapeSpecificRepo(owner, repo);
+        } catch (err: any) {
+          if (err instanceof GitHubRepoNotFoundError || err.name === "GitHubRepoNotFoundError" || err.status === 404) {
+            console.log(`ℹ️ [Interview Controller] Repo "${owner}/${repo}" not found. Gracefully attempting profile fallback for @${owner}...`);
+            const userRepos = await scrapeGithub(owner);
+            const validRepos = userRepos.filter(
+              (r) => r.name !== owner || r.starCount > 0 || r.description !== `Candidate GitHub Profile: ${owner}`
+            );
+            if (validRepos.length > 0) {
+              console.log(`✅ [Interview Controller] Fallback successful: using ${validRepos.length} public repos from @${owner}`);
+              githubData = userRepos;
+            } else {
+              res.status(400).json({
+                message: `Repository "${owner}/${repo}" was not found on GitHub. Please check the URL or ensure the repository is public.`,
+              });
+              return;
+            }
+          } else {
+            throw err;
+          }
+        }
       } else if (owner) {
         console.log(`🔍 [Interview Controller] Targeting user profile: ${owner}`);
         githubData = await scrapeGithub(owner);
@@ -105,16 +123,22 @@ export async function createPreInterview(req: AuthRequest, res: Response): Promi
  */
 export async function getDeepgramKey(req: AuthRequest, res: Response): Promise<void> {
   const isMurfConfigured = !!process.env.MURF_API_KEY?.trim();
-  const isConfigured = isMurfConfigured;
+  const hasDeepgram = !!process.env.DEEPGRAM_API_KEY?.trim();
+  const isConfigured = hasDeepgram || isMurfConfigured;
+
+  const defaultModel = process.env.DEEPGRAM_MODEL || (hasDeepgram ? "nova-3" : "murf-stt");
+  const defaultLanguage = process.env.DEEPGRAM_LANGUAGE || "en-IN";
+  const preferredProvider = hasDeepgram ? "deepgram" : (isMurfConfigured ? "murf" : "native");
 
   if (!isConfigured) {
     res.json({
       configured: false,
       proxyUrl: "",
       token: "",
-      recommendedModel: "murf-stt",
-      defaultLanguage: "en-IN",
-      provider: "murf",
+      recommendedModel: defaultModel,
+      defaultLanguage,
+      provider: "native",
+      sttVerificationEnabled: false,
     });
     return;
   }
@@ -134,9 +158,10 @@ export async function getDeepgramKey(req: AuthRequest, res: Response): Promise<v
     configured: true,
     proxyUrl: "/api/v1/interview/stt-stream",
     token: sttToken,
-    recommendedModel: isMurfConfigured ? "murf-stt" : "nova-2",
-    defaultLanguage: "en-IN",
-    provider: isMurfConfigured ? "murf" : "deepgram",
+    recommendedModel: defaultModel,
+    defaultLanguage,
+    provider: preferredProvider,
+    sttVerificationEnabled: process.env.STT_VERIFICATION_ENABLED !== "false",
   });
 }
 
@@ -561,5 +586,51 @@ Rules (strictly follow):
     // On any error, return the original text so the interview is never blocked
     const { text } = req.body as { text?: string };
     res.json({ corrected: text || "" });
+  }
+}
+
+/**
+ * Acoustic second-pass verification for candidate turn speech.
+ * Reprocesses candidate audio using Deepgram Prerecorded Nova-3 with domain keyterms.
+ * Deterministic and acoustically grounded — strictly avoids LLM rewriting.
+ */
+export async function verifyTurnSpeechHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { interviewId } = req.params;
+    const liveTranscript = (req.body?.liveTranscript || req.body?.transcript || "").trim();
+    let audioBuffer: Buffer | undefined;
+
+    if ((req as any).file?.buffer) {
+      audioBuffer = (req as any).file.buffer;
+    } else if (req.body?.audioBase64) {
+      audioBuffer = Buffer.from(req.body.audioBase64, "base64");
+    }
+
+    const mimeType = (req as any).file?.mimetype || req.body?.mimeType || "audio/webm";
+
+    const { getDynamicInterviewKeyterms } = await import("../services/sttKeytermsService");
+    const keyterms = await getDynamicInterviewKeyterms(interviewId);
+
+    const { verifyTurnSpeech } = await import("../services/sttVerificationService");
+    const result = await verifyTurnSpeech({
+      audioBuffer,
+      mimeType,
+      liveTranscript,
+      keyterms,
+    });
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error("Turn verification error:", error);
+    res.json({
+      success: false,
+      verifiedTranscript: (req.body?.liveTranscript || req.body?.transcript || "").trim(),
+      confidence: 1.0,
+      usedVerification: false,
+      method: "fallback",
+    });
   }
 }

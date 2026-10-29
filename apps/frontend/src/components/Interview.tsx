@@ -9,6 +9,7 @@ import {
   fetchDeepgramKey,
   initiateInterviewSession,
   sendUserSpeechAndGetResponse,
+  verifyTurnSpeechApi,
   type VoiceResponse,
   type STTCredentialsResponse,
 } from "../services/interviewService";
@@ -135,6 +136,9 @@ export function Interview() {
   const captionDivRef = useRef<HTMLDivElement | null>(null);
   const initiatedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const turnAudioChunksRef = useRef<BlobPart[]>([]);
+  const sttVerificationEnabledRef = useRef<boolean>(true);
+  const sttRetryCountRef = useRef<number>(0);
 
   async function retryMicrophone() {
     setMicError(null);
@@ -361,6 +365,7 @@ export function Interview() {
         try {
           const creds = await fetchDeepgramKey();
           if (creds.configured && userStreamRef.current) {
+            sttVerificationEnabledRef.current = creds.sttVerificationEnabled !== false;
             let wsBase = BACKEND_URL;
             if (!wsBase.startsWith("http")) wsBase = window.location.origin;
             const wsProtocol = wsBase.startsWith("https") ? "wss:" : "ws:";
@@ -370,13 +375,13 @@ export function Interview() {
             if (creds.proxyUrl) {
               const wsUrl = `${wsProtocol}//${wsHost}${creds.proxyUrl}?token=${encodeURIComponent(
                 creds.token || ""
-              )}&model=${encodeURIComponent(creds.recommendedModel || "nova-2")}&language=${encodeURIComponent(
+              )}&model=${encodeURIComponent(creds.recommendedModel || "nova-3")}&language=${encodeURIComponent(
                 creds.defaultLanguage || "en-IN"
               )}&interviewId=${encodeURIComponent(interviewId)}`;
               socket = new WebSocket(wsUrl);
             } else if (creds.key) {
               const legacyUrl =
-                "wss://api.deepgram.com/v1/listen?model=nova-2&language=en-IN&smart_format=true&punctuate=true&interim_results=true&no_delay=true&endpointing=300&utterance_end_ms=1000";
+                "wss://api.deepgram.com/v1/listen?model=nova-3&language=en-IN&smart_format=true&punctuate=true&interim_results=true&no_delay=true&endpointing=350&utterance_end_ms=1000&filler_words=true";
               socket = new WebSocket(legacyUrl, ["token", creds.key]);
             } else {
               throw new Error("STT configuration unavailable");
@@ -389,7 +394,7 @@ export function Interview() {
               hasDeepgramRef.current = true;
               setSttStatus("listening");
               diagnosticsRef.current.engine = creds.provider === "murf" ? "murf" : "deepgram";
-              diagnosticsRef.current.model = creds.recommendedModel || (creds.provider === "murf" ? "murf-stt" : "nova-2");
+              diagnosticsRef.current.model = creds.recommendedModel || (creds.provider === "murf" ? "murf-stt" : "nova-3");
               diagnosticsRef.current.language = creds.defaultLanguage || "en-IN";
               diagnosticsRef.current.startTime = Date.now();
 
@@ -411,16 +416,20 @@ export function Interview() {
                   diagnosticsRef.current.chunksDropped++;
                   return;
                 }
-                if (socket.readyState === WebSocket.OPEN && event.data.size > 0) {
-                  diagnosticsRef.current.chunksSent++;
-                  socket.send(event.data);
+                if (event.data.size > 0) {
+                  // Buffer for turn-level acoustic verification
+                  turnAudioChunksRef.current.push(event.data);
+                  if (socket.readyState === WebSocket.OPEN) {
+                    diagnosticsRef.current.chunksSent++;
+                    socket.send(event.data);
+                  }
                 }
               });
 
               if (import.meta.env.DEV) {
                 console.info("🎙️ [STT Streaming Gateway Online]", {
-                  engine: creds.provider === "murf" ? "Murf AI Real-time Streaming" : "Deepgram Real-time Streaming",
-                  model: creds.recommendedModel || (creds.provider === "murf" ? "murf-stt" : "nova-2"),
+                  engine: creds.provider === "murf" ? "Murf AI Real-time Streaming" : "Deepgram Nova-3 Streaming",
+                  model: creds.recommendedModel || (creds.provider === "murf" ? "murf-stt" : "nova-3"),
                   locale: creds.defaultLanguage || "en-IN",
                   mimeType: selectedMime,
                   chunkInterval: "200ms",
@@ -476,20 +485,17 @@ export function Interview() {
               } catch (e) {}
             };
 
-            socket.onerror = () => {
-              if (!cancelled && !hasDeepgramSTT) {
-                hasDeepgramRef.current = false;
-                setSttStatus("reconnecting");
+            const handleSocketDisconnect = () => {
+              if (cancelled) return;
+              hasDeepgramRef.current = false;
+              if (isListeningRef.current && !isAiSpeakingRef.current) {
                 startNativeSpeechRecognition();
+                setSttStatus("listening");
               }
             };
 
-            socket.onclose = () => {
-              if (!cancelled && isListeningRef.current && !hasDeepgramSTT) {
-                hasDeepgramRef.current = false;
-                startNativeSpeechRecognition();
-              }
-            };
+            socket.onerror = handleSocketDisconnect;
+            socket.onclose = handleSocketDisconnect;
           }
         } catch (dgErr) {
           console.warn("STT WebSocket fallback to browser engine:", dgErr);
@@ -764,7 +770,7 @@ export function Interview() {
     }
   }
 
-  function handleManualSubmit(e: React.FormEvent) {
+  async function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isProcessingResponse) return;
 
@@ -785,7 +791,35 @@ export function Interview() {
     }
 
     if (!fullText) return;
-    handleUserSpeechFinal(fullText);
+
+    // Retain turn audio chunks for second-pass acoustic verification
+    const chunks = [...turnAudioChunksRef.current];
+    turnAudioChunksRef.current = [];
+
+    let candidateUtterance = fullText;
+
+    if (
+      sttVerificationEnabledRef.current &&
+      chunks.length > 0 &&
+      interviewId &&
+      candidateUtterance
+    ) {
+      try {
+        const turnBlob = new Blob(chunks, {
+          type: diagnosticsRef.current.mimeType || "audio/webm",
+        });
+        if (turnBlob.size > 2000) {
+          const verResult = await verifyTurnSpeechApi(interviewId, turnBlob, candidateUtterance);
+          if (verResult?.verifiedTranscript && verResult.verifiedTranscript.trim()) {
+            candidateUtterance = verResult.verifiedTranscript.trim();
+          }
+        }
+      } catch (verErr) {
+        // Fallback: keep live streaming candidate utterance directly
+      }
+    }
+
+    handleUserSpeechFinal(candidateUtterance);
   }
 
   function clearTextInput() {

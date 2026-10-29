@@ -2,12 +2,15 @@ import { Server as HttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import { getDynamicInterviewKeyterms } from "./sttKeytermsService";
 
 dotenv.config();
 
 const MURF_API_KEY = process.env.MURF_API_KEY || "";
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
+const DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-3";
+const DEEPGRAM_LANGUAGE = process.env.DEEPGRAM_LANGUAGE || "en-IN";
 
 interface STTClient extends WebSocket {
   isAlive?: boolean;
@@ -20,6 +23,7 @@ interface STTClient extends WebSocket {
   username?: string;
   requestedLang?: string;
   requestedModel?: string;
+  keyterms?: string[];
 }
 
 /**
@@ -68,14 +72,14 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
         client.interviewId = searchParams.get("interviewId") || "";
         client.participantId = searchParams.get("participantId") || userId || "speaker";
         client.username = searchParams.get("username") || "";
-        client.requestedLang = searchParams.get("language") || "en-IN";
-        client.requestedModel = searchParams.get("model") || (MURF_API_KEY ? "murf-stt" : "nova-2");
+        client.requestedLang = searchParams.get("language") || DEEPGRAM_LANGUAGE;
+        client.requestedModel = searchParams.get("model") || DEEPGRAM_MODEL;
         wss.emit("connection", client, request);
       });
     }
   });
 
-  wss.on("connection", (client: STTClient) => {
+  wss.on("connection", async (client: STTClient) => {
     client.isAlive = true;
     client.audioQueue = [];
 
@@ -101,6 +105,13 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
       return;
     }
 
+    // Pre-fetch dynamic interview context keyterms for Nova-3
+    try {
+      client.keyterms = await getDynamicInterviewKeyterms(client.interviewId);
+    } catch {
+      client.keyterms = [];
+    }
+
     function connectUpstream(provider: "murf" | "deepgram") {
       client.provider = provider;
       let upstreamSocket: WebSocket | null = null;
@@ -119,17 +130,33 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
             },
           });
         } else {
-          // Deepgram streaming WebSocket fallback
-          const dgModel = client.requestedModel && client.requestedModel !== "murf-stt" ? client.requestedModel : "nova-2";
-          const deepgramUrl = `wss://api.deepgram.com/v1/listen?model=${encodeURIComponent(
-            dgModel
-          )}&language=${encodeURIComponent(
-            client.requestedLang || "en-IN"
-          )}&smart_format=true&punctuate=true&interim_results=true&no_delay=true&endpointing=300&utterance_end_ms=1000`;
+          // Deepgram Nova-3 streaming WebSocket with keyterm prompting
+          const dgModel = DEEPGRAM_MODEL || client.requestedModel || "nova-3";
+          const dgLang = DEEPGRAM_LANGUAGE || client.requestedLang || "en-IN";
 
-          upstreamSocket = new WebSocket(deepgramUrl, {
+          const urlObj = new URL("wss://api.deepgram.com/v1/listen");
+          urlObj.searchParams.set("model", dgModel);
+          urlObj.searchParams.set("language", dgLang);
+          urlObj.searchParams.set("smart_format", "true");
+          urlObj.searchParams.set("punctuate", "true");
+          urlObj.searchParams.set("interim_results", "true");
+          urlObj.searchParams.set("no_delay", "true");
+          urlObj.searchParams.set("endpointing", "350"); // 350ms pause gives natural interview pacing
+          urlObj.searchParams.set("utterance_end_ms", "1000");
+          urlObj.searchParams.set("filler_words", "true"); // Preserve "um", "uh", "well" for interview coaching
+
+          // Inject technical keyterms into Nova-3 streaming session
+          if (Array.isArray(client.keyterms)) {
+            for (const kt of client.keyterms) {
+              if (kt && kt.trim()) {
+                urlObj.searchParams.append("keyterm", kt.trim());
+              }
+            }
+          }
+
+          upstreamSocket = new WebSocket(urlObj.toString(), {
             headers: {
-              Authorization: `Token ${DEEPGRAM_API_KEY}`,
+              Authorization: `Token ${DEEPGRAM_API_KEY.trim()}`,
             },
           });
         }
@@ -137,7 +164,11 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
         client.upstreamSocket = upstreamSocket;
       } catch (err: any) {
         console.error(`[STT Gateway] Error initiating ${provider} connection:`, err.message);
-        if (provider === "murf" && hasDeepgram) {
+        if (provider === "deepgram" && hasMurf) {
+          console.warn("[STT Gateway] Deepgram initialization failed, attempting fallback to Murf...");
+          connectUpstream("murf");
+          return;
+        } else if (provider === "murf" && hasDeepgram) {
           console.warn("[STT Gateway] Murf initialization failed, attempting fallback to Deepgram...");
           connectUpstream("deepgram");
           return;
@@ -158,18 +189,18 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
 
       // Upstream socket open
       upstreamSocket.on("open", () => {
-        // Send status ready to frontend
         if (client.readyState === WebSocket.OPEN) {
           client.send(
             JSON.stringify({
               type: "ready",
               status: "listening",
               provider,
-              model: provider === "murf" ? "murf-stt" : client.requestedModel,
+              model: provider === "murf" ? "murf-stt" : DEEPGRAM_MODEL,
               language: client.requestedLang,
               participantId: client.participantId,
               username: client.username,
-              message: `${provider === "murf" ? "Murf AI" : "Deepgram"} real-time speech stream established.`,
+              keytermsCount: client.keyterms?.length || 0,
+              message: `${provider === "deepgram" ? "Deepgram Nova-3" : "Murf AI"} real-time speech stream established.`,
             })
           );
         }
@@ -195,10 +226,11 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
 
           let transcriptText = "";
           let isFinal = false;
+          let speechFinal = false;
           let confidence = 0.95;
+          let words: any[] = [];
 
           if (client.provider === "murf") {
-            // Murf payload normalization
             transcriptText =
               parsed.transcript ||
               parsed.text ||
@@ -211,17 +243,21 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
               parsed.event === "EndOfTurn" ||
               parsed.is_final === true;
 
+            speechFinal = isFinal;
             confidence = parsed.confidence ?? (isFinal ? 0.98 : 0.85);
           } else {
-            // Deepgram payload normalization
+            // Deepgram payload normalization with word confidences & speech_final
+            const alt = parsed.channel?.alternatives?.[0];
             transcriptText =
-              parsed.channel?.alternatives?.[0]?.transcript ||
+              alt?.transcript ||
               parsed.transcript ||
               parsed.text ||
               "";
 
             isFinal = parsed.is_final === true || parsed.type === "final";
-            confidence = parsed.channel?.alternatives?.[0]?.confidence ?? (isFinal ? 0.98 : 0.85);
+            speechFinal = parsed.speech_final === true;
+            confidence = alt?.confidence ?? (isFinal ? 0.98 : 0.85);
+            words = alt?.words || [];
           }
 
           if (transcriptText && transcriptText.trim()) {
@@ -229,7 +265,11 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
               type: isFinal ? "final" : "partial",
               transcript: transcriptText.trim(),
               is_final: isFinal,
+              speech_final: speechFinal,
               confidence,
+              words,
+              start: parsed.start,
+              duration: parsed.duration,
               participantId: client.participantId,
               username: client.username,
               timestamp: Date.now(),
@@ -239,6 +279,7 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
                   {
                     transcript: transcriptText.trim(),
                     confidence,
+                    words,
                   },
                 ],
               },
@@ -247,7 +288,6 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
             client.send(JSON.stringify(normalizedPayload));
           }
         } catch {
-          // If unparseable string, forward as-is
           client.send(data.toString());
         }
       });
@@ -256,9 +296,21 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
       upstreamSocket.on("error", (err: Error) => {
         console.error(`[STT Gateway] ${provider} socket error:`, err.message);
 
-        // If Murf failed and Deepgram is available, switch upstream seamlessly
-        if (provider === "murf" && hasDeepgram && client.readyState === WebSocket.OPEN) {
-          console.warn("[STT Gateway] Switching upstream from Murf AI to Deepgram fallback...");
+        // Failover between providers if available
+        if (provider === "deepgram" && hasMurf && client.readyState === WebSocket.OPEN) {
+          console.warn("[STT Gateway] Switching upstream from Deepgram to Murf AI fallback...");
+          client.send(
+            JSON.stringify({
+              type: "status",
+              status: "reconnecting",
+              message: "Switching to secondary speech recognition engine...",
+            })
+          );
+          try { upstreamSocket?.close(); } catch {}
+          connectUpstream("murf");
+          return;
+        } else if (provider === "murf" && hasDeepgram && client.readyState === WebSocket.OPEN) {
+          console.warn("[STT Gateway] Switching upstream from Murf to Deepgram fallback...");
           client.send(
             JSON.stringify({
               type: "status",
@@ -266,9 +318,7 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
               message: "Failing over to secondary speech recognition engine...",
             })
           );
-          try {
-            upstreamSocket?.close();
-          } catch {}
+          try { upstreamSocket?.close(); } catch {}
           connectUpstream("deepgram");
           return;
         }
@@ -292,8 +342,8 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
       });
     }
 
-    // Connect to primary provider (Murf preferred, otherwise Deepgram)
-    connectUpstream(hasMurf ? "murf" : "deepgram");
+    // Connect to primary provider (Deepgram Nova-3 preferred, otherwise Murf)
+    connectUpstream(hasDeepgram ? "deepgram" : (hasMurf ? "murf" : "deepgram"));
 
     // Client incoming message handlers
     client.on("message", (data: WebSocket.RawData, isBinary: boolean) => {

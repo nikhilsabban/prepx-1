@@ -88,8 +88,9 @@ export interface STTCredentialsResponse {
   token?: string;
   recommendedModel?: string;
   defaultLanguage?: string;
-  provider?: "murf" | "deepgram";
+  provider?: "murf" | "deepgram" | "native";
   key?: string;
+  sttVerificationEnabled?: boolean;
 }
 
 export async function fetchSTTCredentials(): Promise<STTCredentialsResponse> {
@@ -141,4 +142,38 @@ export async function correctTranscript(text: string): Promise<string> {
   } catch {
     return text;
   }
+}
+
+export interface VerifyTurnSpeechResponse {
+  success: boolean;
+  verifiedTranscript: string;
+  confidence: number;
+  usedVerification: boolean;
+  method: string;
+  wordsCount?: number;
+}
+
+/**
+ * Sends the candidate's turn audio for an acoustic second-pass verification
+ * using Deepgram Prerecorded Nova-3 before submitting for interview response.
+ */
+export async function verifyTurnSpeechApi(
+  interviewId: string,
+  audioBlob: Blob,
+  liveTranscript: string
+): Promise<VerifyTurnSpeechResponse> {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "candidate_turn.webm");
+  formData.append("liveTranscript", liveTranscript);
+  formData.append("mimeType", audioBlob.type || "audio/webm");
+
+  const response = await api.post<VerifyTurnSpeechResponse>(
+    `/api/v1/interview/verify-turn-speech/${interviewId}`,
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 9000,
+    }
+  );
+  return response.data;
 }

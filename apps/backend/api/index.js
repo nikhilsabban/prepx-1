@@ -562,6 +562,116 @@ var init_groqService = __esm({
   }
 });
 
+// src/models/Interview.ts
+import mongoose3, { Schema as Schema2 } from "mongoose";
+var InterviewSchema, Interview;
+var init_Interview = __esm({
+  "src/models/Interview.ts"() {
+    "use strict";
+    InterviewSchema = new Schema2(
+      {
+        userId: {
+          type: Schema2.Types.ObjectId,
+          ref: "User",
+          required: false
+        },
+        title: {
+          type: String,
+          default: ""
+        },
+        mode: {
+          type: String,
+          enum: ["github", "role", "jd"],
+          default: "github"
+        },
+        role: {
+          type: String,
+          default: ""
+        },
+        jobDescription: {
+          type: String,
+          default: ""
+        },
+        githubMetadata: {
+          type: Schema2.Types.Mixed,
+          default: {}
+        },
+        difficulty: {
+          type: String,
+          enum: ["Basic", "Easy", "Medium", "Difficult"],
+          default: "Medium"
+        },
+        status: {
+          type: String,
+          enum: ["Pre", "InProgress", "Done"],
+          default: "Pre"
+        },
+        activeDeviceToken: {
+          type: String,
+          default: ""
+        },
+        score: {
+          type: Number,
+          default: 0
+        },
+        isBookmarked: {
+          type: Boolean,
+          default: false
+        },
+        feedback: {
+          type: String,
+          default: ""
+        },
+        evaluationData: {
+          type: Schema2.Types.Mixed,
+          default: null
+        }
+      },
+      {
+        timestamps: true
+      }
+    );
+    InterviewSchema.index({ userId: 1, createdAt: -1 });
+    InterviewSchema.index({ userId: 1, isBookmarked: 1 });
+    InterviewSchema.index({ status: 1 });
+    Interview = mongoose3.model("Interview", InterviewSchema);
+  }
+});
+
+// src/models/Message.ts
+import mongoose4, { Schema as Schema3 } from "mongoose";
+var MessageSchema, Message;
+var init_Message = __esm({
+  "src/models/Message.ts"() {
+    "use strict";
+    MessageSchema = new Schema3(
+      {
+        interviewId: {
+          type: Schema3.Types.ObjectId,
+          ref: "Interview",
+          required: true,
+          index: true
+        },
+        type: {
+          type: String,
+          enum: ["User", "Assistant"],
+          required: true
+        },
+        message: {
+          type: String,
+          required: true
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    );
+    MessageSchema.index({ interviewId: 1, createdAt: 1 });
+    Message = mongoose4.model("Message", MessageSchema);
+  }
+});
+
 // src/services/murfService.ts
 var murfService_exports = {};
 __export(murfService_exports, {
@@ -637,6 +747,346 @@ async function synthesizeSpeech(text, preferredVoice) {
 var init_murfService = __esm({
   "src/services/murfService.ts"() {
     "use strict";
+  }
+});
+
+// src/services/sttKeytermsService.ts
+var sttKeytermsService_exports = {};
+__export(sttKeytermsService_exports, {
+  getDynamicInterviewKeyterms: () => getDynamicInterviewKeyterms
+});
+async function getDynamicInterviewKeyterms(interviewId) {
+  const termsSet = /* @__PURE__ */ new Set();
+  if (interviewId) {
+    try {
+      const interview = await Interview.findById(interviewId).select("githubMetadata targetRole").lean();
+      if (interview) {
+        const gh = interview.githubMetadata || {};
+        if (gh.targetRole) {
+          gh.targetRole.split(/\s+/).forEach((w) => {
+            if (w.length > 2) termsSet.add(w);
+          });
+        }
+        if (Array.isArray(gh.languages)) {
+          gh.languages.forEach((lang) => {
+            if (typeof lang === "string" && lang.trim()) termsSet.add(lang.trim());
+          });
+        }
+        if (Array.isArray(gh.keyDependencies)) {
+          gh.keyDependencies.slice(0, 15).forEach((dep) => {
+            if (typeof dep === "string" && dep.trim()) {
+              const cleanDep = dep.replace(/^@[\w-]+\//, "").trim();
+              if (cleanDep.length > 2) termsSet.add(cleanDep);
+            }
+          });
+        }
+        if (gh.repoName && typeof gh.repoName === "string" && gh.repoName.length > 2) {
+          termsSet.add(gh.repoName);
+        }
+      }
+      const lastAssistantMsg = await Message.findOne({
+        interviewId,
+        type: "Assistant"
+      }).sort({ createdAt: -1 }).select("message").lean();
+      if (lastAssistantMsg?.message) {
+        const qText = lastAssistantMsg.message;
+        const words2 = qText.match(/\b([A-Z][a-zA-Z0-9.+#-]+|[a-z]+-[a-z]+|\d+)\b/g) || [];
+        for (const w of words2) {
+          if (w.length > 1 && !["The", "What", "How", "Why", "Could", "You", "When", "Please", "Describe", "Explain", "Can"].includes(w)) {
+            termsSet.add(w);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[Keyterms Service] Non-blocking metadata extraction note:", err);
+    }
+  }
+  for (const term of CORE_TECHNICAL_TAXONOMY) {
+    if (termsSet.size >= 80) break;
+    termsSet.add(term);
+  }
+  return Array.from(termsSet).slice(0, 80);
+}
+var CORE_TECHNICAL_TAXONOMY;
+var init_sttKeytermsService = __esm({
+  "src/services/sttKeytermsService.ts"() {
+    "use strict";
+    init_Interview();
+    init_Message();
+    CORE_TECHNICAL_TAXONOMY = [
+      // Languages & Core
+      "JavaScript",
+      "TypeScript",
+      "Python",
+      "Java",
+      "C++",
+      "C#",
+      "Golang",
+      "Rust",
+      "PHP",
+      "Ruby",
+      "Swift",
+      "Kotlin",
+      // Web Frameworks & Libraries
+      "React",
+      "Next.js",
+      "Vue",
+      "Angular",
+      "Node.js",
+      "Express",
+      "NestJS",
+      "Django",
+      "FastAPI",
+      "Spring Boot",
+      "Flask",
+      // Databases & Caching
+      "MongoDB",
+      "PostgreSQL",
+      "MySQL",
+      "Redis",
+      "SQLite",
+      "DynamoDB",
+      "Elasticsearch",
+      "Cassandra",
+      "Memcached",
+      // Database Concepts
+      "aggregation",
+      "indexing",
+      "B-Tree",
+      "normalization",
+      "ACID",
+      "sharding",
+      "replication",
+      "foreign key",
+      // Cloud & DevOps
+      "Docker",
+      "Kubernetes",
+      "AWS",
+      "EKS",
+      "EC2",
+      "S3",
+      "GCP",
+      "Azure",
+      "Terraform",
+      "CI/CD",
+      "GitHub Actions",
+      "Jenkins",
+      // Architecture & APIs
+      "REST API",
+      "GraphQL",
+      "microservices",
+      "WebSocket",
+      "gRPC",
+      "OAuth",
+      "JWT",
+      "monolith",
+      "serverless",
+      // CS Fundamentals & Algorithms
+      "DSA",
+      "OOP",
+      "DBMS",
+      "recursion",
+      "binary search",
+      "dynamic programming",
+      "time complexity",
+      "concurrency",
+      "deadlock",
+      // AI & Data
+      "machine learning",
+      "embeddings",
+      "transformers",
+      "neural networks",
+      "gradient descent",
+      "fine-tuning",
+      // Tools & Security
+      "Git",
+      "GitHub",
+      "Linux",
+      "Nginx",
+      "Jest",
+      "Pytest",
+      "Postman",
+      "CORS",
+      "SSL",
+      "TLS",
+      "RSA-256",
+      "AES"
+    ];
+  }
+});
+
+// src/services/sttVerificationService.ts
+var sttVerificationService_exports = {};
+__export(sttVerificationService_exports, {
+  computeCER: () => computeCER,
+  computeWER: () => computeWER,
+  reconcileTranscripts: () => reconcileTranscripts,
+  verifyTurnSpeech: () => verifyTurnSpeech
+});
+import axios4 from "axios";
+import dotenv2 from "dotenv";
+function normalizeForComparison(text) {
+  return text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+}
+function computeWER(reference, hypothesis) {
+  const r = normalizeForComparison(reference);
+  const h = normalizeForComparison(hypothesis);
+  if (r.length === 0) return h.length === 0 ? 0 : 1;
+  const d = Array.from(
+    { length: r.length + 1 },
+    () => Array(h.length + 1).fill(0)
+  );
+  for (let i = 0; i <= r.length; i++) d[i][0] = i;
+  for (let j = 0; j <= h.length; j++) d[0][j] = j;
+  for (let i = 1; i <= r.length; i++) {
+    for (let j = 1; j <= h.length; j++) {
+      if (r[i - 1] === h[j - 1]) {
+        d[i][j] = d[i - 1][j - 1];
+      } else {
+        d[i][j] = Math.min(
+          d[i - 1][j] + 1,
+          // Deletion
+          d[i][j - 1] + 1,
+          // Insertion
+          d[i - 1][j - 1] + 1
+          // Substitution
+        );
+      }
+    }
+  }
+  return d[r.length][h.length] / r.length;
+}
+function computeCER(reference, hypothesis) {
+  const r = reference.toLowerCase().replace(/\s+/g, "");
+  const h = hypothesis.toLowerCase().replace(/\s+/g, "");
+  if (r.length === 0) return h.length === 0 ? 0 : 1;
+  const d = Array.from(
+    { length: r.length + 1 },
+    () => Array(h.length + 1).fill(0)
+  );
+  for (let i = 0; i <= r.length; i++) d[i][0] = i;
+  for (let j = 0; j <= h.length; j++) d[0][j] = j;
+  for (let i = 1; i <= r.length; i++) {
+    for (let j = 1; j <= h.length; j++) {
+      if (r[i - 1] === h[j - 1]) {
+        d[i][j] = d[i - 1][j - 1];
+      } else {
+        d[i][j] = Math.min(
+          d[i - 1][j] + 1,
+          d[i][j - 1] + 1,
+          d[i - 1][j - 1] + 1
+        );
+      }
+    }
+  }
+  return d[r.length][h.length] / r.length;
+}
+function reconcileTranscripts(streamingText, prerecordedText, prerecordedConfidence) {
+  const streamTrimmed = streamingText.trim();
+  const prerecordTrimmed = prerecordedText.trim();
+  if (!prerecordTrimmed) {
+    return {
+      finalTranscript: streamTrimmed,
+      decisionReason: "prerecorded_empty_retained_streaming"
+    };
+  }
+  if (!streamTrimmed) {
+    return {
+      finalTranscript: prerecordTrimmed,
+      decisionReason: "streaming_empty_used_prerecorded"
+    };
+  }
+  const streamWords = normalizeForComparison(streamTrimmed);
+  const prerecordWords = normalizeForComparison(prerecordTrimmed);
+  if (streamWords.join(" ") === prerecordWords.join(" ")) {
+    return {
+      finalTranscript: prerecordTrimmed,
+      decisionReason: "identical_words_used_prerecorded_formatting"
+    };
+  }
+  const streamJoined = streamWords.join(" ");
+  const prerecordJoined = prerecordWords.join(" ");
+  if (prerecordJoined.endsWith(streamJoined) && prerecordWords.length > streamWords.length) {
+    return {
+      finalTranscript: prerecordTrimmed,
+      decisionReason: "prerecorded_recovered_missing_lead_words"
+    };
+  }
+  if (prerecordedConfidence >= 0.75) {
+    return {
+      finalTranscript: prerecordTrimmed,
+      decisionReason: "high_confidence_prerecorded_selected"
+    };
+  }
+  return {
+    finalTranscript: streamTrimmed,
+    decisionReason: "uncertain_prerecorded_preserved_streaming"
+  };
+}
+async function verifyTurnSpeech(params) {
+  const { audioBuffer, mimeType, liveTranscript, keyterms = [], language = DEEPGRAM_LANGUAGE } = params;
+  if (!STT_VERIFICATION_ENABLED || !audioBuffer || audioBuffer.length < 2e3 || // Less than ~0.5s audio
+  !DEEPGRAM_API_KEY.trim()) {
+    return {
+      verifiedTranscript: liveTranscript.trim(),
+      confidence: 1,
+      usedVerification: false,
+      method: "streaming-preserved",
+      wordsCount: liveTranscript.trim().split(/\s+/).filter(Boolean).length
+    };
+  }
+  try {
+    const url = new URL("https://api.deepgram.com/v1/listen");
+    url.searchParams.set("model", DEEPGRAM_MODEL);
+    url.searchParams.set("language", language);
+    url.searchParams.set("smart_format", "true");
+    url.searchParams.set("punctuate", "true");
+    url.searchParams.set("filler_words", "true");
+    for (const term of keyterms.slice(0, 35)) {
+      if (term && term.trim()) {
+        url.searchParams.append("keyterm", term.trim());
+      }
+    }
+    const contentType = mimeType || "audio/webm";
+    const response = await axios4.post(url.toString(), audioBuffer, {
+      headers: {
+        Authorization: `Token ${DEEPGRAM_API_KEY.trim()}`,
+        "Content-Type": contentType
+      },
+      timeout: 7e3,
+      maxBodyLength: 25 * 1024 * 1024
+    });
+    const alt = response.data?.results?.channels?.[0]?.alternatives?.[0];
+    const prerecordedText = alt?.transcript || "";
+    const confidence = alt?.confidence ?? 0.85;
+    const { finalTranscript } = reconcileTranscripts(liveTranscript, prerecordedText, confidence);
+    return {
+      verifiedTranscript: finalTranscript,
+      confidence,
+      usedVerification: true,
+      method: "deepgram-prerecorded",
+      wordsCount: finalTranscript.split(/\s+/).filter(Boolean).length
+    };
+  } catch (error) {
+    console.warn("[STT Verification] Second pass note:", error.message || error);
+    return {
+      verifiedTranscript: liveTranscript.trim(),
+      confidence: 0.9,
+      usedVerification: false,
+      method: "fallback",
+      wordsCount: liveTranscript.trim().split(/\s+/).filter(Boolean).length
+    };
+  }
+}
+var DEEPGRAM_API_KEY, STT_VERIFICATION_ENABLED, DEEPGRAM_MODEL, DEEPGRAM_LANGUAGE;
+var init_sttVerificationService = __esm({
+  "src/services/sttVerificationService.ts"() {
+    "use strict";
+    dotenv2.config();
+    DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
+    STT_VERIFICATION_ENABLED = process.env.STT_VERIFICATION_ENABLED !== "false";
+    DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-3";
+    DEEPGRAM_LANGUAGE = process.env.DEEPGRAM_LANGUAGE || "en-IN";
   }
 });
 
@@ -2324,6 +2774,7 @@ var authRoutes_default = router;
 
 // src/routes/interviewRoutes.ts
 import { Router as Router2 } from "express";
+import multer2 from "multer";
 
 // src/types/index.ts
 import z from "zod";
@@ -2353,6 +2804,15 @@ function getAxiosConfig(timeoutMs = 7e3) {
     timeout: timeoutMs
   };
 }
+var GitHubRepoNotFoundError = class extends Error {
+  constructor(owner, repo) {
+    super(`GitHub repository "${owner}/${repo}" was not found or is private.`);
+    this.owner = owner;
+    this.repo = repo;
+    this.name = "GitHubRepoNotFoundError";
+  }
+  status = 404;
+};
 async function scrapeSpecificRepo(owner, repo) {
   const cleanOwner = owner.trim().replace(/^@/, "");
   const cleanRepo = repo.trim().replace(/\.git$/i, "");
@@ -2380,6 +2840,9 @@ async function scrapeSpecificRepo(owner, repo) {
       openIssues = repoRes.data.open_issues_count || 0;
     }
   } catch (err) {
+    if (err.response?.status === 404) {
+      throw new GitHubRepoNotFoundError(cleanOwner, cleanRepo);
+    }
     console.warn(`GitHub API notice for ${cleanOwner}/${cleanRepo}:`, err.message);
   }
   const languagePromise = (async () => {
@@ -2510,103 +2973,9 @@ async function scrapeGithub(username) {
   }
 }
 
-// src/models/Interview.ts
-import mongoose3, { Schema as Schema2 } from "mongoose";
-var InterviewSchema = new Schema2(
-  {
-    userId: {
-      type: Schema2.Types.ObjectId,
-      ref: "User",
-      required: false
-    },
-    title: {
-      type: String,
-      default: ""
-    },
-    mode: {
-      type: String,
-      enum: ["github", "role", "jd"],
-      default: "github"
-    },
-    role: {
-      type: String,
-      default: ""
-    },
-    jobDescription: {
-      type: String,
-      default: ""
-    },
-    githubMetadata: {
-      type: Schema2.Types.Mixed,
-      default: {}
-    },
-    difficulty: {
-      type: String,
-      enum: ["Basic", "Easy", "Medium", "Difficult"],
-      default: "Medium"
-    },
-    status: {
-      type: String,
-      enum: ["Pre", "InProgress", "Done"],
-      default: "Pre"
-    },
-    activeDeviceToken: {
-      type: String,
-      default: ""
-    },
-    score: {
-      type: Number,
-      default: 0
-    },
-    isBookmarked: {
-      type: Boolean,
-      default: false
-    },
-    feedback: {
-      type: String,
-      default: ""
-    },
-    evaluationData: {
-      type: Schema2.Types.Mixed,
-      default: null
-    }
-  },
-  {
-    timestamps: true
-  }
-);
-InterviewSchema.index({ userId: 1, createdAt: -1 });
-InterviewSchema.index({ userId: 1, isBookmarked: 1 });
-InterviewSchema.index({ status: 1 });
-var Interview = mongoose3.model("Interview", InterviewSchema);
-
-// src/models/Message.ts
-import mongoose4, { Schema as Schema3 } from "mongoose";
-var MessageSchema = new Schema3(
-  {
-    interviewId: {
-      type: Schema3.Types.ObjectId,
-      ref: "Interview",
-      required: true,
-      index: true
-    },
-    type: {
-      type: String,
-      enum: ["User", "Assistant"],
-      required: true
-    },
-    message: {
-      type: String,
-      required: true
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now
-    }
-  }
-);
-MessageSchema.index({ interviewId: 1, createdAt: 1 });
-var Message = mongoose4.model("Message", MessageSchema);
+// src/controllers/interviewController.ts
+init_Interview();
+init_Message();
 
 // src/services/resultService.ts
 init_groqService();
@@ -2636,11 +3005,9 @@ function parseGithubTarget(input, explicitRepoName, interviewTitle) {
       repo = parts[1];
     }
   }
-  if (!repo && interviewTitle) {
-    const match = interviewTitle.match(/Technical Interview on ([\w.-]+)/i);
-    if (match && match[1]) {
-      repo = match[1].trim();
-    }
+  owner = owner.replace(/^@/, "").trim();
+  if (repo) {
+    repo = repo.trim();
   }
   return { owner, repo };
 }
@@ -2659,7 +3026,28 @@ async function createPreInterview(req, res) {
       const { owner, repo } = parseGithubTarget(data.github, data.repoName, data.title);
       if (owner && repo) {
         console.log(`\u{1F50D} [Interview Controller] Targeting specific repository: ${owner}/${repo}`);
-        githubData = await scrapeSpecificRepo(owner, repo);
+        try {
+          githubData = await scrapeSpecificRepo(owner, repo);
+        } catch (err) {
+          if (err instanceof GitHubRepoNotFoundError || err.name === "GitHubRepoNotFoundError" || err.status === 404) {
+            console.log(`\u2139\uFE0F [Interview Controller] Repo "${owner}/${repo}" not found. Gracefully attempting profile fallback for @${owner}...`);
+            const userRepos = await scrapeGithub(owner);
+            const validRepos = userRepos.filter(
+              (r) => r.name !== owner || r.starCount > 0 || r.description !== `Candidate GitHub Profile: ${owner}`
+            );
+            if (validRepos.length > 0) {
+              console.log(`\u2705 [Interview Controller] Fallback successful: using ${validRepos.length} public repos from @${owner}`);
+              githubData = userRepos;
+            } else {
+              res.status(400).json({
+                message: `Repository "${owner}/${repo}" was not found on GitHub. Please check the URL or ensure the repository is public.`
+              });
+              return;
+            }
+          } else {
+            throw err;
+          }
+        }
       } else if (owner) {
         console.log(`\u{1F50D} [Interview Controller] Targeting user profile: ${owner}`);
         githubData = await scrapeGithub(owner);
@@ -2693,15 +3081,20 @@ async function createPreInterview(req, res) {
 }
 async function getDeepgramKey(req, res) {
   const isMurfConfigured = !!process.env.MURF_API_KEY?.trim();
-  const isConfigured = isMurfConfigured;
+  const hasDeepgram = !!process.env.DEEPGRAM_API_KEY?.trim();
+  const isConfigured = hasDeepgram || isMurfConfigured;
+  const defaultModel = process.env.DEEPGRAM_MODEL || (hasDeepgram ? "nova-3" : "murf-stt");
+  const defaultLanguage = process.env.DEEPGRAM_LANGUAGE || "en-IN";
+  const preferredProvider = hasDeepgram ? "deepgram" : isMurfConfigured ? "murf" : "native";
   if (!isConfigured) {
     res.json({
       configured: false,
       proxyUrl: "",
       token: "",
-      recommendedModel: "murf-stt",
-      defaultLanguage: "en-IN",
-      provider: "murf"
+      recommendedModel: defaultModel,
+      defaultLanguage,
+      provider: "native",
+      sttVerificationEnabled: false
     });
     return;
   }
@@ -2717,9 +3110,10 @@ async function getDeepgramKey(req, res) {
     configured: true,
     proxyUrl: "/api/v1/interview/stt-stream",
     token: sttToken,
-    recommendedModel: isMurfConfigured ? "murf-stt" : "nova-2",
-    defaultLanguage: "en-IN",
-    provider: isMurfConfigured ? "murf" : "deepgram"
+    recommendedModel: defaultModel,
+    defaultLanguage,
+    provider: preferredProvider,
+    sttVerificationEnabled: process.env.STT_VERIFICATION_ENABLED !== "false"
   });
 }
 async function initiateInterview(req, res) {
@@ -3047,14 +3441,60 @@ Rules (strictly follow):
     res.json({ corrected: text || "" });
   }
 }
+async function verifyTurnSpeechHandler(req, res) {
+  try {
+    const { interviewId } = req.params;
+    const liveTranscript = (req.body?.liveTranscript || req.body?.transcript || "").trim();
+    let audioBuffer;
+    if (req.file?.buffer) {
+      audioBuffer = req.file.buffer;
+    } else if (req.body?.audioBase64) {
+      audioBuffer = Buffer.from(req.body.audioBase64, "base64");
+    }
+    const mimeType = req.file?.mimetype || req.body?.mimeType || "audio/webm";
+    const { getDynamicInterviewKeyterms: getDynamicInterviewKeyterms2 } = await Promise.resolve().then(() => (init_sttKeytermsService(), sttKeytermsService_exports));
+    const keyterms = await getDynamicInterviewKeyterms2(interviewId);
+    const { verifyTurnSpeech: verifyTurnSpeech2 } = await Promise.resolve().then(() => (init_sttVerificationService(), sttVerificationService_exports));
+    const result = await verifyTurnSpeech2({
+      audioBuffer,
+      mimeType,
+      liveTranscript,
+      keyterms
+    });
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error("Turn verification error:", error);
+    res.json({
+      success: false,
+      verifiedTranscript: (req.body?.liveTranscript || req.body?.transcript || "").trim(),
+      confidence: 1,
+      usedVerification: false,
+      method: "fallback"
+    });
+  }
+}
 
 // src/routes/interviewRoutes.ts
 var router2 = Router2();
+var upload2 = multer2({
+  storage: multer2.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }
+  // Max 20MB turn audio
+});
 router2.post("/pre-interview", optionalAuth, createPreInterview);
 router2.get("/stt-key", optionalAuth, getDeepgramKey);
 router2.get("/deepgram-key", optionalAuth, getDeepgramKey);
 router2.post("/interview/initiate/:interviewId", optionalAuth, initiateInterview);
 router2.post("/interview/respond/:interviewId", optionalAuth, processInterviewResponse);
+router2.post(
+  "/interview/verify-turn-speech/:interviewId",
+  optionalAuth,
+  upload2.single("audio"),
+  verifyTurnSpeechHandler
+);
 router2.post("/session/user/response/:interviewId", optionalAuth, saveUserResponse);
 router2.get("/result/:interviewId", optionalAuth, getResult);
 router2.get("/my-interviews", protect, getMyInterviews);
@@ -3067,7 +3507,7 @@ var interviewRoutes_default = router2;
 import { Router as Router3 } from "express";
 
 // src/controllers/resumeAnalysisController.ts
-import multer2 from "multer";
+import multer3 from "multer";
 
 // src/models/Resume.ts
 import mongoose5, { Schema as Schema4 } from "mongoose";
@@ -4648,8 +5088,8 @@ function getFallbackAIResponse(req) {
 }
 
 // src/controllers/resumeAnalysisController.ts
-var storage2 = multer2.memoryStorage();
-var uploadResumeFile = multer2({
+var storage2 = multer3.memoryStorage();
+var uploadResumeFile = multer3({
   storage: storage2,
   limits: { fileSize: 10 * 1024 * 1024 },
   // 10MB limit
@@ -19668,13 +20108,16 @@ function initGDWebSocketServer(server) {
 }
 
 // src/services/sttProxyService.ts
+init_sttKeytermsService();
 import { WebSocketServer as WebSocketServer2, WebSocket as WebSocket2 } from "ws";
 import jwt4 from "jsonwebtoken";
-import dotenv2 from "dotenv";
-dotenv2.config();
+import dotenv3 from "dotenv";
+dotenv3.config();
 var MURF_API_KEY = process.env.MURF_API_KEY || "";
-var DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
+var DEEPGRAM_API_KEY2 = process.env.DEEPGRAM_API_KEY || "";
 var JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
+var DEEPGRAM_MODEL2 = process.env.DEEPGRAM_MODEL || "nova-3";
+var DEEPGRAM_LANGUAGE2 = process.env.DEEPGRAM_LANGUAGE || "en-IN";
 function initSTTWebSocketServer(server) {
   const wss = new WebSocketServer2({ noServer: true });
   server.on("upgrade", (request, socket, head) => {
@@ -19705,20 +20148,20 @@ function initSTTWebSocketServer(server) {
         client.interviewId = searchParams.get("interviewId") || "";
         client.participantId = searchParams.get("participantId") || userId || "speaker";
         client.username = searchParams.get("username") || "";
-        client.requestedLang = searchParams.get("language") || "en-IN";
-        client.requestedModel = searchParams.get("model") || (MURF_API_KEY ? "murf-stt" : "nova-2");
+        client.requestedLang = searchParams.get("language") || DEEPGRAM_LANGUAGE2;
+        client.requestedModel = searchParams.get("model") || DEEPGRAM_MODEL2;
         wss.emit("connection", client, request);
       });
     }
   });
-  wss.on("connection", (client) => {
+  wss.on("connection", async (client) => {
     client.isAlive = true;
     client.audioQueue = [];
     client.on("pong", () => {
       client.isAlive = true;
     });
     const hasMurf = !!MURF_API_KEY.trim();
-    const hasDeepgram = !!DEEPGRAM_API_KEY.trim();
+    const hasDeepgram = !!DEEPGRAM_API_KEY2.trim();
     if (!hasMurf && !hasDeepgram) {
       console.error("[STT Gateway] Neither MURF_API_KEY nor DEEPGRAM_API_KEY configured on backend server.");
       if (client.readyState === WebSocket2.OPEN) {
@@ -19732,6 +20175,11 @@ function initSTTWebSocketServer(server) {
         client.close(1011, "STT server configuration missing");
       }
       return;
+    }
+    try {
+      client.keyterms = await getDynamicInterviewKeyterms(client.interviewId);
+    } catch {
+      client.keyterms = [];
     }
     function connectUpstream(provider2) {
       client.provider = provider2;
@@ -19748,22 +20196,39 @@ function initSTTWebSocketServer(server) {
             }
           });
         } else {
-          const dgModel = client.requestedModel && client.requestedModel !== "murf-stt" ? client.requestedModel : "nova-2";
-          const deepgramUrl = `wss://api.deepgram.com/v1/listen?model=${encodeURIComponent(
-            dgModel
-          )}&language=${encodeURIComponent(
-            client.requestedLang || "en-IN"
-          )}&smart_format=true&punctuate=true&interim_results=true&no_delay=true&endpointing=300&utterance_end_ms=1000`;
-          upstreamSocket = new WebSocket2(deepgramUrl, {
+          const dgModel = DEEPGRAM_MODEL2 || client.requestedModel || "nova-3";
+          const dgLang = DEEPGRAM_LANGUAGE2 || client.requestedLang || "en-IN";
+          const urlObj = new URL("wss://api.deepgram.com/v1/listen");
+          urlObj.searchParams.set("model", dgModel);
+          urlObj.searchParams.set("language", dgLang);
+          urlObj.searchParams.set("smart_format", "true");
+          urlObj.searchParams.set("punctuate", "true");
+          urlObj.searchParams.set("interim_results", "true");
+          urlObj.searchParams.set("no_delay", "true");
+          urlObj.searchParams.set("endpointing", "350");
+          urlObj.searchParams.set("utterance_end_ms", "1000");
+          urlObj.searchParams.set("filler_words", "true");
+          if (Array.isArray(client.keyterms)) {
+            for (const kt of client.keyterms) {
+              if (kt && kt.trim()) {
+                urlObj.searchParams.append("keyterm", kt.trim());
+              }
+            }
+          }
+          upstreamSocket = new WebSocket2(urlObj.toString(), {
             headers: {
-              Authorization: `Token ${DEEPGRAM_API_KEY}`
+              Authorization: `Token ${DEEPGRAM_API_KEY2.trim()}`
             }
           });
         }
         client.upstreamSocket = upstreamSocket;
       } catch (err) {
         console.error(`[STT Gateway] Error initiating ${provider2} connection:`, err.message);
-        if (provider2 === "murf" && hasDeepgram) {
+        if (provider2 === "deepgram" && hasMurf) {
+          console.warn("[STT Gateway] Deepgram initialization failed, attempting fallback to Murf...");
+          connectUpstream("murf");
+          return;
+        } else if (provider2 === "murf" && hasDeepgram) {
           console.warn("[STT Gateway] Murf initialization failed, attempting fallback to Deepgram...");
           connectUpstream("deepgram");
           return;
@@ -19787,11 +20252,12 @@ function initSTTWebSocketServer(server) {
               type: "ready",
               status: "listening",
               provider: provider2,
-              model: provider2 === "murf" ? "murf-stt" : client.requestedModel,
+              model: provider2 === "murf" ? "murf-stt" : DEEPGRAM_MODEL2,
               language: client.requestedLang,
               participantId: client.participantId,
               username: client.username,
-              message: `${provider2 === "murf" ? "Murf AI" : "Deepgram"} real-time speech stream established.`
+              keytermsCount: client.keyterms?.length || 0,
+              message: `${provider2 === "deepgram" ? "Deepgram Nova-3" : "Murf AI"} real-time speech stream established.`
             })
           );
         }
@@ -19811,22 +20277,32 @@ function initSTTWebSocketServer(server) {
           const parsed = JSON.parse(rawStr);
           let transcriptText = "";
           let isFinal = false;
+          let speechFinal = false;
           let confidence = 0.95;
+          let words2 = [];
           if (client.provider === "murf") {
             transcriptText = parsed.transcript || parsed.text || parsed.channel?.alternatives?.[0]?.transcript || "";
             isFinal = parsed.type === "final" || parsed.type === "Final" || parsed.event === "EndOfTurn" || parsed.is_final === true;
+            speechFinal = isFinal;
             confidence = parsed.confidence ?? (isFinal ? 0.98 : 0.85);
           } else {
-            transcriptText = parsed.channel?.alternatives?.[0]?.transcript || parsed.transcript || parsed.text || "";
+            const alt = parsed.channel?.alternatives?.[0];
+            transcriptText = alt?.transcript || parsed.transcript || parsed.text || "";
             isFinal = parsed.is_final === true || parsed.type === "final";
-            confidence = parsed.channel?.alternatives?.[0]?.confidence ?? (isFinal ? 0.98 : 0.85);
+            speechFinal = parsed.speech_final === true;
+            confidence = alt?.confidence ?? (isFinal ? 0.98 : 0.85);
+            words2 = alt?.words || [];
           }
           if (transcriptText && transcriptText.trim()) {
             const normalizedPayload = {
               type: isFinal ? "final" : "partial",
               transcript: transcriptText.trim(),
               is_final: isFinal,
+              speech_final: speechFinal,
               confidence,
+              words: words2,
+              start: parsed.start,
+              duration: parsed.duration,
               participantId: client.participantId,
               username: client.username,
               timestamp: Date.now(),
@@ -19835,7 +20311,8 @@ function initSTTWebSocketServer(server) {
                 alternatives: [
                   {
                     transcript: transcriptText.trim(),
-                    confidence
+                    confidence,
+                    words: words2
                   }
                 ]
               }
@@ -19848,8 +20325,23 @@ function initSTTWebSocketServer(server) {
       });
       upstreamSocket.on("error", (err) => {
         console.error(`[STT Gateway] ${provider2} socket error:`, err.message);
-        if (provider2 === "murf" && hasDeepgram && client.readyState === WebSocket2.OPEN) {
-          console.warn("[STT Gateway] Switching upstream from Murf AI to Deepgram fallback...");
+        if (provider2 === "deepgram" && hasMurf && client.readyState === WebSocket2.OPEN) {
+          console.warn("[STT Gateway] Switching upstream from Deepgram to Murf AI fallback...");
+          client.send(
+            JSON.stringify({
+              type: "status",
+              status: "reconnecting",
+              message: "Switching to secondary speech recognition engine..."
+            })
+          );
+          try {
+            upstreamSocket?.close();
+          } catch {
+          }
+          connectUpstream("murf");
+          return;
+        } else if (provider2 === "murf" && hasDeepgram && client.readyState === WebSocket2.OPEN) {
+          console.warn("[STT Gateway] Switching upstream from Murf to Deepgram fallback...");
           client.send(
             JSON.stringify({
               type: "status",
@@ -19880,7 +20372,7 @@ function initSTTWebSocketServer(server) {
         }
       });
     }
-    connectUpstream(hasMurf ? "murf" : "deepgram");
+    connectUpstream(hasDeepgram ? "deepgram" : hasMurf ? "murf" : "deepgram");
     client.on("message", (data, isBinary) => {
       const upstream = client.upstreamSocket;
       if (isBinary) {

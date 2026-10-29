@@ -41,6 +41,14 @@ function getAxiosConfig(timeoutMs: number = 7000) {
   };
 }
 
+export class GitHubRepoNotFoundError extends Error {
+  public status: number = 404;
+  constructor(public owner: string, public repo: string) {
+    super(`GitHub repository "${owner}/${repo}" was not found or is private.`);
+    this.name = "GitHubRepoNotFoundError";
+  }
+}
+
 /**
  * Deeply scrapes a specific GitHub repository for architectural details, README,
  * languages, topics, dependencies, and root structure.
@@ -78,6 +86,10 @@ export async function scrapeSpecificRepo(
       openIssues = repoRes.data.open_issues_count || 0;
     }
   } catch (err: any) {
+    if (err.response?.status === 404) {
+      // Repository does not exist or is private — fail fast without redundant downstream calls
+      throw new GitHubRepoNotFoundError(cleanOwner, cleanRepo);
+    }
     console.warn(`GitHub API notice for ${cleanOwner}/${cleanRepo}:`, err.message);
   }
 
