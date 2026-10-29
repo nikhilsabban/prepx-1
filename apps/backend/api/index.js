@@ -3233,139 +3233,75 @@ var ResumeAnalysis = mongoose7.model(
 // src/services/resume/resumeParserService.ts
 import mammoth from "mammoth";
 import zlib from "zlib";
-function decodeAscii85(str) {
-  str = str.replace(/<~|~>/g, "").replace(/\s+/g, "");
-  const out = [];
-  let tuple = 0;
-  let count = 0;
-  for (let i = 0; i < str.length; i++) {
-    const c = str.charCodeAt(i);
-    if (str[i] === "z" && count === 0) {
-      out.push(0, 0, 0, 0);
-      continue;
-    }
-    if (c < 33 || c > 117) continue;
-    tuple = tuple * 85 + (c - 33);
-    count++;
-    if (count === 5) {
-      out.push(tuple >> 24 & 255, tuple >> 16 & 255, tuple >> 8 & 255, tuple & 255);
-      tuple = 0;
-      count = 0;
-    }
+var ScannedPdfError = class extends Error {
+  constructor(message) {
+    super(
+      message || "This PDF appears to be a scanned image or non-selectable graphical document. ATS systems and our analyzer require selectable, text-based resumes. Please export or save your resume as a standard text-based PDF (e.g., from Google Docs, Word, or Canva 'PDF Standard') or upload a DOCX file."
+    );
+    this.name = "ScannedPdfError";
   }
-  if (count > 0) {
-    for (let j = count; j < 5; j++) {
-      tuple = tuple * 85 + 84;
-    }
-    for (let k = 0; k < count - 1; k++) {
-      out.push(tuple >> 24 - 8 * k & 255);
-    }
-  }
-  return Buffer.from(out);
+};
+function sanitizeExtractedText(text) {
+  if (!text) return "";
+  return text.replace(/\u0000/g, "").replace(/[\x01-\x08\x0B\x0C\x0E-\x1F]/g, " ").replace(/^-- \d+ of \d+ --\s*$/gm, "").replace(/\r\n|\r/g, "\n").replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, " ").replace(/[ \t]+/g, " ").replace(/ \n/g, "\n").replace(/\n /g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-function parseTjArray(inner) {
-  const tokenRegex = /\(([^()\\]*(?:\\.[^()\\]*)*)\)|(-?\d+(?:\.\d+)?)/g;
-  let result = "";
-  let tokenMatch;
-  while ((tokenMatch = tokenRegex.exec(inner)) !== null) {
-    if (tokenMatch[1] !== void 0) {
-      const decoded = tokenMatch[1].replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ").replace(/\\b/g, "").replace(/\\f/g, "").replace(/\\\(/g, "(").replace(/\\\)/g, ")").replace(/\\\\/g, "\\").replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8))).replace(/[^\x20-\x7E\n]/g, " ").trim();
-      result += decoded;
-    } else if (tokenMatch[2] !== void 0) {
-      const offset = parseFloat(tokenMatch[2]);
-      if (offset <= -80 && result.length > 0 && !result.endsWith(" ")) {
-        result += " ";
-      }
-    }
-  }
-  return result.trim();
-}
-function extractTextFromPdfBuffer(buffer) {
+function extractTextFromPdfStreamFallback(buffer) {
   try {
     const binary = buffer.toString("binary");
     const extractedLines = [];
     const decodePdfString = (str) => {
-      return str.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ").replace(/\\b/g, "").replace(/\\f/g, "").replace(/\\\(/g, "(").replace(/\\\)/g, ")").replace(/\\\\/g, "\\").replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8))).replace(/[^\x20-\x7E\n]/g, " ").trim();
+      return str.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ").replace(/\\b/g, "").replace(/\\f/g, "").replace(/\\\(/g, "(").replace(/\\\)/g, ")").replace(/\\\\/g, "\\").replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8))).trim();
     };
     const extractFromStream = (streamText) => {
-      const cleaned = streamText.replace(/(\bT\*|\bET|\b\d+\s+-\d+(?:\.\d+)?\s+Td|\b\d+\s+-\d+(?:\.\d+)?\s+TD)/g, "\n$1");
       const opRegex = /(?:\[([^\]]+)\]\s*TJ|\(([^()\\]*(?:\\.[^()\\]*)*)\)\s*(?:Tj|'|")|<([0-9A-Fa-f]{2,})>\s*(?:Tj|'|"))/g;
-      const lines2 = cleaned.split("\n");
-      for (const line of lines2) {
-        let m;
-        const currentLine = [];
-        while ((m = opRegex.exec(line)) !== null) {
-          if (m[1] !== void 0) {
-            const text = parseTjArray(m[1]);
-            if (text) currentLine.push(text);
-          } else if (m[2] !== void 0) {
-            const text = decodePdfString(m[2]);
-            if (text) currentLine.push(text);
-          } else if (m[3] !== void 0) {
-            const hex = m[3];
-            let str = "";
-            if (hex.startsWith("FEFF") || hex.startsWith("feff")) {
-              for (let i = 4; i < hex.length; i += 4) {
-                str += String.fromCharCode(parseInt(hex.substr(i, 4), 16));
-              }
-            } else {
-              for (let i = 0; i < hex.length; i += 2) {
-                str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-              }
-            }
-            const text = decodePdfString(str);
-            if (text) currentLine.push(text);
+      let m;
+      const currentLine = [];
+      while ((m = opRegex.exec(streamText)) !== null) {
+        if (m[1] !== void 0) {
+          const tokenRegex = /\(([^()\\]*(?:\\.[^()\\]*)*)\)/g;
+          let tm;
+          let subText = "";
+          while ((tm = tokenRegex.exec(m[1])) !== null) {
+            subText += decodePdfString(tm[1]) + " ";
           }
+          if (subText.trim()) currentLine.push(subText.trim());
+        } else if (m[2] !== void 0) {
+          const t = decodePdfString(m[2]);
+          if (t) currentLine.push(t);
+        } else if (m[3] !== void 0) {
+          const hex = m[3];
+          let str = "";
+          for (let i = 0; i < hex.length; i += 2) {
+            const code = parseInt(hex.substr(i, 2), 16);
+            if (code >= 32 && code <= 126) str += String.fromCharCode(code);
+          }
+          if (str.trim()) currentLine.push(str.trim());
         }
-        if (currentLine.length > 0) {
-          extractedLines.push(currentLine.join(" "));
-        }
+      }
+      if (currentLine.length > 0) {
+        extractedLines.push(currentLine.join(" "));
       }
     };
     const streamRegex = /stream\r?\n?([\s\S]*?)(?:[\r\n\s]*|~>)endstream/g;
     let sMatch;
     while ((sMatch = streamRegex.exec(binary)) !== null) {
-      const streamHeader = binary.slice(Math.max(0, sMatch.index - 300), sMatch.index);
       let rawData = sMatch[1];
-      if (sMatch[0].includes("~>endstream") && !rawData.endsWith("~>")) {
-        rawData += "~>";
-      }
-      let streamBuf = Buffer.from(rawData, "binary");
-      const isAscii85 = streamHeader.includes("ASCII85Decode") || rawData.includes("~>");
-      if (isAscii85) {
-        try {
-          streamBuf = decodeAscii85(rawData);
-        } catch {
-        }
-      }
-      const isFlate = streamHeader.includes("FlateDecode") || isAscii85;
-      let decompressed = "";
-      if (isFlate) {
-        try {
-          decompressed = zlib.inflateSync(streamBuf).toString("binary");
-        } catch {
-          try {
-            decompressed = zlib.inflateRawSync(streamBuf).toString("binary");
-          } catch {
-            decompressed = streamBuf.toString("binary");
-          }
-        }
-      } else {
-        decompressed = streamBuf.toString("binary");
-      }
-      if (decompressed) {
+      const streamBuf = Buffer.from(rawData, "binary");
+      try {
+        const decompressed = zlib.inflateSync(streamBuf).toString("binary");
         extractFromStream(decompressed);
+      } catch {
+        try {
+          const decompressed = zlib.inflateRawSync(streamBuf).toString("binary");
+          extractFromStream(decompressed);
+        } catch {
+          extractFromStream(rawData);
+        }
       }
     }
-    if (extractedLines.length < 5) {
-      extractFromStream(binary);
-    }
-    if (extractedLines.length > 0) {
-      return extractedLines.join("\n");
-    }
-    return "";
+    return sanitizeExtractedText(extractedLines.join("\n"));
   } catch (err) {
-    console.error("[ResumeParser] Error in extractTextFromPdfBuffer:", err);
+    console.warn("[ResumeParser] Stream fallback error:", err);
     return "";
   }
 }
@@ -3375,277 +3311,462 @@ async function extractTextFromBuffer(buffer, fileType, originalFileName) {
   let rawText = "";
   if (isPdf) {
     let parsedViaPdfParse = false;
+    let totalPages = 0;
     try {
       const pdfModule = await import("pdf-parse").catch(() => null);
-      if (pdfModule) {
-        if (typeof pdfModule.PDFParse === "function") {
-          const parser = new pdfModule.PDFParse({ data: buffer });
-          const result = await parser.getText();
-          if (result?.text && result.text.trim().length > 10) {
-            rawText = result.text;
+      if (pdfModule && typeof pdfModule.PDFParse === "function") {
+        const parser = new pdfModule.PDFParse({ data: buffer });
+        const result = await parser.getText();
+        totalPages = result?.total || result?.pages?.length || 0;
+        if (Array.isArray(result?.pages) && result.pages.length > 0) {
+          const pageTexts = result.pages.map((p) => (p.text || "").replace(/^-- \d+ of \d+ --\s*$/gm, "").trim()).filter((t) => t.length > 0);
+          rawText = pageTexts.join("\n\n");
+          if (rawText.trim().length >= 40) {
             parsedViaPdfParse = true;
           }
+        } else if (result?.text && result.text.trim().length >= 40) {
+          rawText = result.text.replace(/^-- \d+ of \d+ --\s*$/gm, "").trim();
+          parsedViaPdfParse = true;
         }
-        if (!parsedViaPdfParse) {
-          const pdfParseFn = typeof pdfModule === "function" ? pdfModule : typeof pdfModule.default === "function" ? pdfModule.default : null;
-          if (pdfParseFn) {
-            const result = await pdfParseFn(buffer);
-            if (result?.text && result.text.trim().length > 10) {
-              rawText = result.text;
-              parsedViaPdfParse = true;
-            }
-          }
+        if (typeof parser.destroy === "function") {
+          await parser.destroy().catch(() => {
+          });
         }
       }
     } catch (err) {
-      console.warn("[ResumeParser] pdf-parse library failed, falling back to stream extractor:", err);
+      console.warn("[ResumeParser] pdf-parse threw error:", err?.message || err);
     }
     if (!parsedViaPdfParse || rawText.trim().length < 40) {
-      const fallbackText = extractTextFromPdfBuffer(buffer);
+      const fallbackText = extractTextFromPdfStreamFallback(buffer);
       if (fallbackText && fallbackText.trim().length > rawText.trim().length) {
         rawText = fallbackText;
       }
     }
+    const cleaned = sanitizeExtractedText(rawText);
+    const alphaCount = (cleaned.match(/[a-zA-Z]/g) || []).length;
+    const isImageOnly = totalPages > 0 && alphaCount < 30 || buffer.length > 2e4 && alphaCount < 25;
+    if (isImageOnly) {
+      throw new ScannedPdfError();
+    }
+    return cleaned;
   } else if (isDocx) {
     try {
-      const parsed = await mammoth.extractRawText({ buffer });
-      rawText = parsed.value;
+      const mdResult = await mammoth.convertToMarkdown({ buffer });
+      let text = mdResult.value || "";
+      text = text.replace(/\|---+\|/g, "").replace(/\|/g, "  |  ").replace(/^#+\s*/gm, "");
+      if (!text.trim() || text.trim().length < 40) {
+        const rawResult = await mammoth.extractRawText({ buffer });
+        text = rawResult.value || text;
+      }
+      rawText = text;
     } catch (err) {
-      console.error("DOCX parse error:", err);
-      throw new Error("Could not extract text from DOCX resume.");
+      console.error("[ResumeParser] DOCX parse error:", err);
+      throw new Error("Could not extract readable text from DOCX resume.");
     }
+    return sanitizeExtractedText(rawText);
   } else {
     rawText = buffer.toString("utf-8");
+    return sanitizeExtractedText(rawText);
   }
-  return sanitizeExtractedText(rawText);
 }
-function sanitizeExtractedText(text) {
-  return (text || "").replace(/\u0000/g, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ").replace(/^-- \d+ of \d+ --\s*$/gm, "").replace(/\r\n/g, "\n").replace(/\t/g, " ").replace(/[ \u00A0]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+var MULTI_INDUSTRY_SKILLS = [
+  // 3D Animation, VFX, Game Development & Creative Media
+  "3D Animation",
+  "Maya",
+  "Autodesk Maya",
+  "Blender",
+  "3ds Max",
+  "Cinema 4D",
+  "Houdini",
+  "ZBrush",
+  "Character Animation",
+  "Character Rigging",
+  "Rigging",
+  "Skinning",
+  "Keyframing",
+  "Keyframe Animation",
+  "Motion Graphics",
+  "After Effects",
+  "Adobe After Effects",
+  "Premiere Pro",
+  "Photoshop",
+  "Illustrator",
+  "Unreal Engine",
+  "Unity",
+  "Substance Painter",
+  "Substance Designer",
+  "Texturing",
+  "Lighting",
+  "Shading",
+  "Rendering",
+  "Arnold",
+  "V-Ray",
+  "Redshift",
+  "Compositing",
+  "Nuke",
+  "Motion Capture",
+  "MoCap",
+  "Storyboarding",
+  "UV Mapping",
+  "Weight Painting",
+  "Facial Animation",
+  "Particle Effects",
+  "VFX",
+  // UI/UX & Graphic Design
+  "Figma",
+  "Sketch",
+  "Adobe XD",
+  "InDesign",
+  "UI/UX",
+  "User Interface",
+  "User Experience",
+  "Wireframing",
+  "Prototyping",
+  "Design Systems",
+  "User Research",
+  "Usability Testing",
+  "Information Architecture",
+  "Interaction Design",
+  "Visual Design",
+  "Typography",
+  // Programming Languages
+  "JavaScript",
+  "TypeScript",
+  "Python",
+  "Java",
+  "C++",
+  "C#",
+  "C",
+  "Go",
+  "Golang",
+  "Rust",
+  "PHP",
+  "Ruby",
+  "Swift",
+  "Kotlin",
+  "R",
+  "Scala",
+  "Dart",
+  "Shell",
+  "Bash",
+  "SQL",
+  // Web & Frontend Frameworks
+  "React",
+  "React.js",
+  "Next.js",
+  "Vue.js",
+  "Vue",
+  "Angular",
+  "Svelte",
+  "Redux",
+  "Zustand",
+  "HTML",
+  "HTML5",
+  "CSS",
+  "CSS3",
+  "Tailwind CSS",
+  "Tailwind",
+  "Bootstrap",
+  "Sass",
+  "SCSS",
+  "Material UI",
+  "Vite",
+  "Webpack",
+  "REST API",
+  "GraphQL",
+  "WebSockets",
+  // Backend & APIs
+  "Node.js",
+  "NodeJS",
+  "Express.js",
+  "Express",
+  "NestJS",
+  "FastAPI",
+  "Django",
+  "Flask",
+  "Spring Boot",
+  "Spring",
+  "ASP.NET",
+  ".NET",
+  "gRPC",
+  "Microservices",
+  "System Design",
+  // Databases & Caching
+  "PostgreSQL",
+  "MySQL",
+  "MongoDB",
+  "Redis",
+  "Elasticsearch",
+  "Cassandra",
+  "DynamoDB",
+  "SQLite",
+  "Firebase",
+  "Supabase",
+  "Prisma",
+  "Mongoose",
+  // Cloud & DevOps
+  "AWS",
+  "Amazon Web Services",
+  "Azure",
+  "GCP",
+  "Google Cloud",
+  "Docker",
+  "Kubernetes",
+  "K8s",
+  "CI/CD",
+  "GitHub Actions",
+  "Jenkins",
+  "GitLab CI",
+  "Terraform",
+  "Ansible",
+  "Linux",
+  "Nginx",
+  "Serverless",
+  "Git",
+  "GitHub",
+  "GitLab",
+  // Data Engineering, AI & Machine Learning
+  "Machine Learning",
+  "Deep Learning",
+  "Pandas",
+  "NumPy",
+  "PyTorch",
+  "TensorFlow",
+  "Scikit-learn",
+  "NLP",
+  "Natural Language Processing",
+  "Computer Vision",
+  "LLM",
+  "Generative AI",
+  "LangChain",
+  "Data Pipelines",
+  "ETL",
+  "Apache Spark",
+  "PySpark",
+  "Airflow",
+  "Snowflake",
+  "BigQuery",
+  "Tableau",
+  "Power BI",
+  "Data Warehousing",
+  "Data Modeling",
+  "Databricks",
+  "Kafka",
+  // Product, Project & Agile
+  "Agile",
+  "Scrum",
+  "Kanban",
+  "Jira",
+  "Confluence",
+  "Product Management",
+  "Project Management",
+  "Sprint Planning",
+  "Product Strategy",
+  "Roadmapping",
+  "A/B Testing",
+  // Marketing & Sales
+  "SEO",
+  "SEM",
+  "Google Analytics",
+  "Content Strategy",
+  "Digital Marketing",
+  "Social Media Marketing",
+  "Email Marketing",
+  "CRM",
+  "Salesforce",
+  "HubSpot",
+  "Lead Generation",
+  "Copywriting",
+  // Finance, Accounting & Business
+  "Financial Modeling",
+  "Excel",
+  "QuickBooks",
+  "GAAP",
+  "Financial Analysis",
+  "Auditing",
+  "Tax",
+  "Valuation",
+  "Accounting",
+  "Budgeting",
+  "Forecasting",
+  // HR & Operations
+  "Recruiting",
+  "Talent Acquisition",
+  "Employee Relations",
+  "Onboarding",
+  "HRIS",
+  "Payroll",
+  // Testing & Quality Assurance
+  "Jest",
+  "Pytest",
+  "Mocha",
+  "Cypress",
+  "Playwright",
+  "Selenium",
+  "Unit Testing",
+  "Integration Testing"
+];
+function matchesSkillInText(skill, text) {
+  const escaped = skill.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+  const bStart = /^[a-zA-Z0-9_]/.test(skill) ? "(?:^|[^a-zA-Z0-9_])" : "";
+  const bEnd = "(?=$|[^a-zA-Z0-9_#+])";
+  return new RegExp(bStart + escaped + bEnd, "i").test(text);
 }
 function parseStructuredResume(rawText) {
-  const emailMatch = rawText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
-  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\d{5}[-.\s]?\d{5}|\b\d{10}\b)/);
-  const linkedinMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|pub)\/[A-Za-z0-9_.-]+/i);
-  const githubMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_.-]+/i);
-  const portfolioMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?[A-Za-z0-9.-]+\.(?:com|org|io|dev|me|net|tech|app)(?:\/[^\s]*)?/i);
+  const text = sanitizeExtractedText(rawText);
+  const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+  const phoneMatch = text.match(/(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\d{5}[-.\s]?\d{5}|\b\d{10}\b)/);
+  const linkedinMatch = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|pub)\/[A-Za-z0-9_.-]+/i);
+  const githubMatch = text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9_.-]+/i);
+  const portfolioMatch = text.match(/(?:https?:\/\/)?(?:www\.)?[A-Za-z0-9.-]+\.(?:com|org|io|dev|me|net|tech|app|artstation\.com)(?:\/[^\s]*)?/i);
   const emailDomain = emailMatch ? emailMatch[0].split("@")[1]?.toLowerCase() : "";
   const portfolioRaw = portfolioMatch ? portfolioMatch[0] : "";
   const isEmailDomain = emailDomain && portfolioRaw.toLowerCase().includes(emailDomain);
   const isValidPortfolio = portfolioRaw && !isEmailDomain && !portfolioRaw.toLowerCase().includes("linkedin") && !portfolioRaw.toLowerCase().includes("github");
-  const lines2 = rawText.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
-  const headerRegex = /^(resume|curriculum vitae|cv|page \d+|profile|contact|about me)$/i;
+  const lines2 = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  const headerRegex = /^(resume|curriculum vitae|cv|page \d+|profile|contact|about me|portfolio)$/i;
   let candidateName = "";
-  for (const line of lines2.slice(0, 5)) {
-    if (!headerRegex.test(line) && !line.includes("@") && !line.includes("http") && !line.includes("www.") && !line.includes(".com") && !/\d{5,}/.test(line) && line.length >= 2 && line.length <= 50) {
+  for (const line of lines2.slice(0, 6)) {
+    if (!headerRegex.test(line) && !line.includes("@") && !line.includes("http") && !line.includes("www.") && !line.includes(".com") && !/\d{5,}/.test(line) && line.length >= 2 && line.length <= 40 && !/^[•\-\*\|]/.test(line)) {
       candidateName = line;
       break;
     }
   }
-  const skillKeywords = [
-    // Programming Languages
-    "JavaScript",
-    "TypeScript",
-    "Python",
-    "Java",
-    "C++",
-    "C#",
-    "C",
-    "Go",
-    "Golang",
-    "Rust",
-    "PHP",
-    "Ruby",
-    "Swift",
-    "Kotlin",
-    "R",
-    "Scala",
-    "Dart",
-    "Shell",
-    "Bash",
-    // Databases & Cache
-    "SQL",
-    "PostgreSQL",
-    "MySQL",
-    "MongoDB",
-    "Redis",
-    "Elasticsearch",
-    "Cassandra",
-    "DynamoDB",
-    "SQLite",
-    "Firebase",
-    "Supabase",
-    "Prisma",
-    "Mongoose",
-    // Frontend Frameworks & Web
-    "React",
-    "Next.js",
-    "Vue.js",
-    "Angular",
-    "Svelte",
-    "Redux",
-    "Zustand",
-    "HTML",
-    "HTML5",
-    "CSS",
-    "CSS3",
-    "Tailwind",
-    "TailwindCSS",
-    "Bootstrap",
-    "Sass",
-    "Material UI",
-    "Vite",
-    "Webpack",
-    // Backend Frameworks & APIs
-    "Node.js",
-    "NodeJS",
-    "Express",
-    "Express.js",
-    "NestJS",
-    "FastAPI",
-    "Django",
-    "Flask",
-    "Spring Boot",
-    "Spring",
-    "ASP.NET",
-    ".NET",
-    "GraphQL",
-    "REST API",
-    "gRPC",
-    // Cloud, DevOps & Infrastructure
-    "AWS",
-    "Azure",
-    "GCP",
-    "Docker",
-    "Kubernetes",
-    "K8s",
-    "CI/CD",
-    "GitHub Actions",
-    "Jenkins",
-    "GitLab CI",
-    "Terraform",
-    "Ansible",
-    "Linux",
-    "Nginx",
-    "Serverless",
-    "Microservices",
-    "System Design",
-    // Data Engineering, Big Data & Analytics
-    "ETL",
-    "Data Pipelines",
-    "Power BI",
-    "Tableau",
-    "Apache Spark",
-    "PySpark",
-    "Airflow",
-    "Snowflake",
-    "BigQuery",
-    "Data Warehousing",
-    "Star Schema",
-    "Hadoop",
-    "Kafka",
-    "Data Modeling",
-    "Databricks",
-    // Machine Learning & AI
-    "Machine Learning",
-    "Deep Learning",
-    "Pandas",
-    "NumPy",
-    "PyTorch",
-    "TensorFlow",
-    "Scikit-learn",
-    "NLP",
-    "Computer Vision",
-    "LLM",
-    "Generative AI",
-    "LangChain",
-    "OpenAI",
-    // UI/UX Design & Product
-    "Figma",
-    "Adobe XD",
-    "Illustrator",
-    "Photoshop",
-    "Miro",
-    "UI/UX",
-    "Wireframing",
-    "Wireframes",
-    "Prototyping",
-    "Prototypes",
-    "Design Systems",
-    "User Research",
-    "Interaction Design",
-    "Jira",
-    // Testing & Quality Assurance
-    "Jest",
-    "Pytest",
-    "Mocha",
-    "Cypress",
-    "Playwright",
-    "Selenium",
-    "Unit Testing",
-    "Integration Testing",
-    // Tools, Methodologies & Soft Skills
-    "Git",
-    "GitHub",
-    "GitLab",
-    "Bitbucket",
-    "OOP",
-    "Agile",
-    "Scrum",
-    "Kanban",
-    "Data Structures",
-    "Algorithms",
-    "Design Patterns",
-    "Communication",
-    "Leadership",
-    "Problem Solving"
+  const sectionKeywords = [
+    { key: "summary", patterns: ["summary", "professional summary", "profile", "objective", "about me", "overview"] },
+    { key: "skills", patterns: ["skills", "technical skills", "core competencies", "tools", "technologies", "proficiencies", "areas of expertise", "software skills"] },
+    { key: "experience", patterns: ["experience", "work experience", "employment history", "professional experience", "work history", "relevant experience"] },
+    { key: "education", patterns: ["education", "academic background", "academics", "qualifications", "educational background"] },
+    { key: "projects", patterns: ["projects", "key projects", "personal projects", "portfolio projects", "academic projects"] },
+    { key: "certifications", patterns: ["certifications", "certificates", "licenses", "courses"] },
+    { key: "achievements", patterns: ["achievements", "awards", "honors", "recognition"] },
+    { key: "languages", patterns: ["languages", "spoken languages"] }
   ];
-  function matchesSkill(skill, text) {
-    const escaped = skill.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
-    const bStart = /^[a-zA-Z0-9_]/.test(skill) ? "(?:^|[^a-zA-Z0-9_])" : "";
-    const bEnd = "(?=$|[^a-zA-Z0-9_#+])";
-    return new RegExp(bStart + escaped + bEnd, "i").test(text);
+  const detectedIndices = [];
+  for (let i = 0; i < lines2.length; i++) {
+    const lineLower = lines2[i].toLowerCase().replace(/[:\-_#]/g, "").trim();
+    if (lineLower.length < 2 || lineLower.length > 35) continue;
+    for (const sec of sectionKeywords) {
+      if (sec.patterns.some((p) => lineLower === p || lineLower.startsWith(p + " ") || lineLower.endsWith(" " + p))) {
+        const charIdx = text.indexOf(lines2[i]);
+        if (charIdx >= 0) {
+          detectedIndices.push({ key: sec.key, index: charIdx + lines2[i].length });
+        }
+        break;
+      }
+    }
+  }
+  detectedIndices.sort((a, b) => a.index - b.index);
+  const sections = {};
+  for (let i = 0; i < detectedIndices.length; i++) {
+    const cur = detectedIndices[i];
+    const next = detectedIndices[i + 1];
+    const content = text.slice(cur.index, next ? next.index : void 0).trim();
+    if (!sections[cur.key]) {
+      sections[cur.key] = content;
+    }
   }
   const extractedSkills = [];
-  skillKeywords.forEach((skill) => {
-    if (matchesSkill(skill, rawText) && !extractedSkills.includes(skill)) {
-      extractedSkills.push(skill);
+  const IGNORED_SECTION_WORDS = /* @__PURE__ */ new Set([
+    "work experience",
+    "experience",
+    "education",
+    "projects",
+    "certifications",
+    "achievements",
+    "summary",
+    "profile",
+    "objective",
+    "languages",
+    "personal information",
+    "contact",
+    "references",
+    "skills"
+  ]);
+  if (sections["skills"]) {
+    const rawSkillSection = sections["skills"];
+    const rawTokens = rawSkillSection.split(/[,•\*\n\|;]/).map((s) => s.replace(/^[•\-\*:]+\s*/, "").trim()).filter((s) => s.length >= 2 && s.length <= 40 && !s.includes(":") && !/\d{4}/.test(s) && !IGNORED_SECTION_WORDS.has(s.toLowerCase()));
+    for (const tok of rawTokens) {
+      if (!extractedSkills.some((es) => es.toLowerCase() === tok.toLowerCase())) {
+        extractedSkills.push(tok);
+      }
+    }
+  }
+  MULTI_INDUSTRY_SKILLS.forEach((skill) => {
+    if (matchesSkillInText(skill, text)) {
+      if (!extractedSkills.some((s) => s.toLowerCase() === skill.toLowerCase())) {
+        extractedSkills.push(skill);
+      }
     }
   });
-  const secLineRegex = /(?:^|\n)[ \t]*([A-Za-z\s]{0,25}?(?:summary|experience|work experience|education|projects|certifications|skills)[A-Za-z\s]{0,25}?)(?::|\n|$)/gi;
-  let sMatch;
-  const indices = [];
-  while ((sMatch = secLineRegex.exec(rawText)) !== null) {
-    const rawHeader = sMatch[1].trim().toLowerCase();
-    let normalizedHeader = "";
-    if (rawHeader.includes("summary") || rawHeader.includes("profile")) normalizedHeader = "summary";
-    else if (rawHeader.includes("experience") || rawHeader.includes("employment")) normalizedHeader = "experience";
-    else if (rawHeader.includes("education") || rawHeader.includes("academic")) normalizedHeader = "education";
-    else if (rawHeader.includes("project")) normalizedHeader = "projects";
-    else if (rawHeader.includes("skill") || rawHeader.includes("competenc")) normalizedHeader = "skills";
-    else if (rawHeader.includes("certificat")) normalizedHeader = "certifications";
-    if (normalizedHeader) {
-      indices.push({ header: normalizedHeader, index: sMatch.index + sMatch[0].length });
+  const experienceText = sections["experience"] || "";
+  const parsedExperience = [];
+  if (experienceText) {
+    const expLines = experienceText.split("\n").map((l) => l.trim()).filter(Boolean);
+    const dateRegex = /(?:19|20)\d{2}\s*[-–—to]+\s*(?:(?:19|20)\d{2}|present|current)|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*\d{4}/i;
+    let currentEntry = null;
+    for (const line of expLines) {
+      const hasDate = dateRegex.test(line);
+      const isBullet = /^[•\-\*]\s*/.test(line);
+      if (hasDate && !isBullet) {
+        if (currentEntry && (currentEntry.bulletPoints.length > 0 || currentEntry.role)) {
+          parsedExperience.push(currentEntry);
+        }
+        currentEntry = {
+          role: line.replace(dateRegex, "").replace(/[|,\-–]/g, "").trim() || "Experience",
+          duration: (line.match(dateRegex) || [])[0] || "",
+          bulletPoints: []
+        };
+      } else if (currentEntry && isBullet) {
+        const cleanBullet = line.replace(/^[•\-\*]\s*/, "").trim();
+        if (cleanBullet.length > 10) {
+          currentEntry.bulletPoints.push(cleanBullet);
+        }
+      } else if (!currentEntry) {
+        currentEntry = {
+          role: line,
+          bulletPoints: []
+        };
+      } else if (isBullet) {
+        const cleanBullet = line.replace(/^[•\-\*]\s*/, "").trim();
+        if (cleanBullet.length > 10) {
+          currentEntry.bulletPoints.push(cleanBullet);
+        }
+      }
+    }
+    if (currentEntry && (currentEntry.bulletPoints.length > 0 || currentEntry.role)) {
+      parsedExperience.push(currentEntry);
     }
   }
-  const detectedSections = {};
-  for (let i = 0; i < indices.length; i++) {
-    const cur = indices[i];
-    const next = indices[i + 1];
-    const content = rawText.slice(cur.index, next ? next.index : void 0);
-    detectedSections[cur.header] = content.split("\n").slice(1).join("\n").trim();
+  const educationText = sections["education"] || "";
+  const parsedEducation = [];
+  if (educationText) {
+    const eduLines = educationText.split("\n").map((l) => l.trim()).filter(Boolean);
+    const degreeKeywords = ["bachelor", "master", "phd", "b.tech", "b.s", "m.s", "m.tech", "b.e", "b.a", "m.a", "mba", "diploma", "associate"];
+    const yearRegex = /\b(19|20)\d{2}\b/;
+    for (const line of eduLines) {
+      const lineLower = line.toLowerCase();
+      const hasDegree = degreeKeywords.some((d) => lineLower.includes(d));
+      const yearMatch = line.match(yearRegex);
+      if (hasDegree || yearMatch || line.length > 10) {
+        parsedEducation.push({
+          degree: hasDegree ? line.replace(/^[•\-\*]\s*/, "") : void 0,
+          institution: !hasDegree ? line.replace(/^[•\-\*]\s*/, "") : void 0,
+          year: yearMatch ? yearMatch[0] : void 0
+        });
+      }
+    }
   }
-  const experienceText = detectedSections["experience"] || detectedSections["work experience"] || "";
-  const educationText = detectedSections["education"] || "";
-  const projectsText = detectedSections["projects"] || "";
-  const summaryText = detectedSections["summary"] || "";
-  const expBullets = experienceText.split("\n").map((l) => l.trim().replace(/^[-*•]\s*/, "")).filter((l) => l.length > 15);
-  const parsedExperience = expBullets.length > 0 ? [{ company: "", role: "Professional Experience", bulletPoints: expBullets.slice(0, 8) }] : [];
-  const eduLines = educationText.split("\n").map((l) => l.trim().replace(/^[-*•]\s*/, "")).filter((l) => l.length > 5);
-  const parsedEducation = eduLines.length > 0 ? eduLines.slice(0, 3).map((line) => ({ institution: line })) : [];
-  const projLines = projectsText.split("\n").map((l) => l.trim().replace(/^[-*•]\s*/, "")).filter((l) => l.length > 10);
-  const parsedProjects = projLines.length > 0 ? projLines.slice(0, 5).map((line) => ({ description: line })) : [];
+  const projectsText = sections["projects"] || "";
+  const parsedProjects = [];
+  if (projectsText) {
+    const projLines = projectsText.split("\n").map((l) => l.trim().replace(/^[•\-\*]\s*/, "")).filter((l) => l.length > 12);
+    for (const line of projLines.slice(0, 6)) {
+      parsedProjects.push({ description: line });
+    }
+  }
   return {
-    extractedText: rawText,
+    extractedText: text,
     structuredData: {
       personal: {
         name: candidateName,
@@ -3655,64 +3776,449 @@ function parseStructuredResume(rawText) {
         github: githubMatch ? githubMatch[0] : "",
         portfolio: isValidPortfolio ? portfolioRaw : ""
       },
-      summary: summaryText.slice(0, 300),
+      summary: (sections["summary"] || "").slice(0, 400),
       skills: extractedSkills,
-      education: parsedEducation,
-      experience: parsedExperience,
+      education: parsedEducation.slice(0, 4),
+      experience: parsedExperience.slice(0, 6),
       projects: parsedProjects,
-      certifications: [],
-      achievements: [],
-      languages: []
+      certifications: sections["certifications"] ? sections["certifications"].split("\n").map((s) => s.trim()).filter((s) => s.length > 5).slice(0, 5) : [],
+      achievements: sections["achievements"] ? sections["achievements"].split("\n").map((s) => s.trim()).filter((s) => s.length > 5).slice(0, 5) : [],
+      languages: sections["languages"] ? sections["languages"].split(/[,\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 6) : []
     }
   };
 }
 
 // src/services/analysis/atsScoringService.ts
+var COMMON_STOP_WORDS = /* @__PURE__ */ new Set([
+  "about",
+  "above",
+  "across",
+  "after",
+  "again",
+  "against",
+  "all",
+  "almost",
+  "alone",
+  "along",
+  "already",
+  "also",
+  "although",
+  "always",
+  "among",
+  "and",
+  "another",
+  "any",
+  "anybody",
+  "anyone",
+  "anything",
+  "anywhere",
+  "are",
+  "area",
+  "areas",
+  "around",
+  "ask",
+  "asked",
+  "asking",
+  "asks",
+  "away",
+  "back",
+  "backed",
+  "backing",
+  "backs",
+  "became",
+  "because",
+  "become",
+  "becomes",
+  "becoming",
+  "been",
+  "before",
+  "began",
+  "behind",
+  "being",
+  "beings",
+  "best",
+  "better",
+  "between",
+  "big",
+  "both",
+  "but",
+  "came",
+  "can",
+  "cannot",
+  "case",
+  "cases",
+  "certain",
+  "certainly",
+  "clear",
+  "clearly",
+  "come",
+  "could",
+  "did",
+  "differ",
+  "different",
+  "differently",
+  "does",
+  "done",
+  "down",
+  "downed",
+  "downing",
+  "downs",
+  "during",
+  "each",
+  "early",
+  "either",
+  "end",
+  "ended",
+  "ending",
+  "ends",
+  "enough",
+  "even",
+  "evenly",
+  "ever",
+  "every",
+  "everybody",
+  "everyone",
+  "everything",
+  "everywhere",
+  "face",
+  "faces",
+  "fact",
+  "facts",
+  "far",
+  "felt",
+  "few",
+  "fewer",
+  "find",
+  "finds",
+  "first",
+  "for",
+  "four",
+  "from",
+  "full",
+  "fully",
+  "further",
+  "furthered",
+  "furthering",
+  "furthers",
+  "gave",
+  "general",
+  "generally",
+  "get",
+  "gets",
+  "give",
+  "given",
+  "gives",
+  "good",
+  "goods",
+  "great",
+  "greater",
+  "greatest",
+  "group",
+  "grouped",
+  "grouping",
+  "groups",
+  "had",
+  "has",
+  "have",
+  "having",
+  "her",
+  "here",
+  "herself",
+  "high",
+  "higher",
+  "highest",
+  "him",
+  "himself",
+  "his",
+  "how",
+  "however",
+  "important",
+  "interest",
+  "interested",
+  "interesting",
+  "interests",
+  "into",
+  "its",
+  "itself",
+  "just",
+  "keep",
+  "keeps",
+  "knew",
+  "know",
+  "known",
+  "knows",
+  "large",
+  "largely",
+  "last",
+  "later",
+  "latest",
+  "least",
+  "less",
+  "let",
+  "lets",
+  "like",
+  "likely",
+  "long",
+  "longer",
+  "longest",
+  "made",
+  "make",
+  "making",
+  "man",
+  "many",
+  "may",
+  "member",
+  "members",
+  "men",
+  "might",
+  "more",
+  "most",
+  "mostly",
+  "much",
+  "must",
+  "myself",
+  "name",
+  "needed",
+  "needing",
+  "needs",
+  "never",
+  "new",
+  "newer",
+  "newest",
+  "next",
+  "nobody",
+  "non",
+  "noone",
+  "not",
+  "nothing",
+  "now",
+  "nowhere",
+  "number",
+  "numbers",
+  "off",
+  "often",
+  "old",
+  "older",
+  "oldest",
+  "once",
+  "one",
+  "only",
+  "open",
+  "opened",
+  "opening",
+  "opens",
+  "order",
+  "ordered",
+  "ordering",
+  "orders",
+  "other",
+  "others",
+  "our",
+  "out",
+  "over",
+  "part",
+  "parted",
+  "parting",
+  "parts",
+  "per",
+  "place",
+  "places",
+  "point",
+  "pointed",
+  "pointing",
+  "points",
+  "possible",
+  "present",
+  "presented",
+  "presenting",
+  "presents",
+  "problem",
+  "problems",
+  "put",
+  "puts",
+  "quite",
+  "rather",
+  "really",
+  "right",
+  "room",
+  "rooms",
+  "said",
+  "same",
+  "saw",
+  "say",
+  "says",
+  "second",
+  "seconds",
+  "see",
+  "seem",
+  "seemed",
+  "seeming",
+  "seems",
+  "sees",
+  "several",
+  "shall",
+  "she",
+  "should",
+  "show",
+  "showed",
+  "showing",
+  "shows",
+  "side",
+  "sides",
+  "since",
+  "small",
+  "smaller",
+  "smallest",
+  "some",
+  "somebody",
+  "someone",
+  "something",
+  "somewhere",
+  "state",
+  "states",
+  "still",
+  "such",
+  "sure",
+  "take",
+  "taken",
+  "than",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "there",
+  "therefore",
+  "these",
+  "they",
+  "thing",
+  "things",
+  "think",
+  "thinks",
+  "this",
+  "those",
+  "though",
+  "thought",
+  "thoughts",
+  "three",
+  "through",
+  "thus",
+  "time",
+  "times",
+  "today",
+  "together",
+  "too",
+  "took",
+  "toward",
+  "turn",
+  "turned",
+  "turning",
+  "turns",
+  "two",
+  "under",
+  "until",
+  "upon",
+  "use",
+  "used",
+  "uses",
+  "very",
+  "want",
+  "wanted",
+  "wanting",
+  "wants",
+  "was",
+  "way",
+  "ways",
+  "well",
+  "wells",
+  "went",
+  "were",
+  "what",
+  "when",
+  "where",
+  "whether",
+  "which",
+  "while",
+  "who",
+  "whole",
+  "whom",
+  "whose",
+  "why",
+  "will",
+  "with",
+  "within",
+  "without",
+  "work",
+  "worked",
+  "working",
+  "works",
+  "would",
+  "year",
+  "years",
+  "yet",
+  "you",
+  "young",
+  "younger",
+  "youngest",
+  "your",
+  "yours",
+  "candidate",
+  "responsibilities",
+  "requirements",
+  "qualifications",
+  "preferred",
+  "duties",
+  "role",
+  "job"
+]);
 function calculateATSScore(input) {
-  const { extractedText, structuredData, jobDescriptionText, aiSemanticScore } = input;
-  const textLower = extractedText.toLowerCase();
+  const {
+    extractedText,
+    structuredData,
+    jobDescriptionText,
+    jobTitle,
+    aiSemanticScore,
+    aiMatchedSkills,
+    aiMissingSkills,
+    aiMatchedKeywords,
+    aiMissingKeywords
+  } = input;
+  const textLower = (extractedText || "").toLowerCase();
   const jdLower = (jobDescriptionText || "").toLowerCase();
+  const titleLower = (jobTitle || "").toLowerCase();
+  const hasTarget = jdLower.trim().length > 0 || titleLower.trim().length > 0;
   const personal = structuredData?.personal || {};
   let contactScore = 0;
-  if (personal.name) contactScore += 30;
-  if (personal.email) contactScore += 35;
-  if (personal.phone) contactScore += 25;
-  if (personal.linkedin || personal.github) contactScore += 10;
+  if (personal.name && personal.name.length > 2) contactScore += 30;
+  if (personal.email && personal.email.includes("@")) contactScore += 35;
+  if (personal.phone && personal.phone.length >= 7) contactScore += 20;
+  if (personal.linkedin || personal.github || personal.portfolio) contactScore += 15;
   contactScore = Math.min(100, contactScore);
-  const requiredSections = [
-    "experience",
-    "work",
-    "employment",
-    "education",
-    "degree",
-    "skills",
-    "projects",
-    "summary",
-    "objective",
-    "cert",
-    "learning",
-    "built",
-    "toolbox",
-    "about"
-  ];
-  let foundSectionsCount = 0;
-  requiredSections.forEach((sec) => {
-    if (textLower.includes(sec)) foundSectionsCount++;
+  const standardSections = ["summary", "profile", "objective", "experience", "education", "skills", "projects"];
+  let foundSections = 0;
+  standardSections.forEach((sec) => {
+    if (new RegExp(`\\b${sec}\\b`, "i").test(textLower)) {
+      foundSections++;
+    }
   });
-  const structureScore = Math.min(100, Math.round(foundSectionsCount / 4 * 100));
+  const structureScore = Math.min(100, Math.round(foundSections / 5 * 100));
   const formattingIssues = [];
   let formattingScore = 100;
-  if (extractedText.length < 200) {
-    formattingIssues.push("Resume contains very little readable text.");
-    formattingScore -= 40;
+  if (extractedText.length < 300) {
+    formattingIssues.push("Resume is very brief (less than 300 characters).");
+    formattingScore -= 45;
   }
-  if (/[\u25A0-\u25FF\u2600-\u26FF]/g.test(extractedText)) {
-    formattingIssues.push("Unusual bullet icons or decorative symbols detected.");
+  if (extractedText.length > 15e3) {
+    formattingIssues.push("Resume is unusually long (>15,000 characters). Aim for 1-2 concise pages.");
     formattingScore -= 15;
   }
-  if ((extractedText.match(/\t/g) || []).length > 20) {
-    formattingIssues.push("Excessive tab characters or potential multi-column formatting detected.");
-    formattingScore -= 20;
+  if (/[\u25A0-\u25FF\u2600-\u26FF]/.test(extractedText)) {
+    formattingIssues.push("Unusual decorative dingbat symbols detected that some legacy ATS parsers reject.");
+    formattingScore -= 10;
+  }
+  if ((extractedText.match(/\t/g) || []).length > 25) {
+    formattingIssues.push("Heavy tab stops or complex multi-column layout detected.");
+    formattingScore -= 15;
   }
   formattingScore = Math.max(0, formattingScore);
   let matchedKeywords = [];
@@ -3722,52 +4228,91 @@ function calculateATSScore(input) {
   let keywordScore = 75;
   let skillsScore = 75;
   let jobAlignmentScore = aiSemanticScore !== void 0 ? aiSemanticScore : 75;
-  let experienceScore = 80;
-  if (jdLower.trim()) {
-    const resumeSkills = structuredData?.skills || [];
-    const jdWords = Array.from(new Set(jdLower.match(/\b[a-z0-9.+]{3,}\b/gi) || []));
-    const sampleTechTerms = [
-      "javascript",
-      "typescript",
-      "react",
-      "node.js",
-      "express",
-      "mongodb",
-      "python",
-      "aws",
-      "docker",
-      "sql",
-      "git",
-      "rest api",
-      "graphql",
-      "ci/cd",
-      "microservices",
-      "etl",
-      "power bi",
-      "pandas",
-      "numpy",
-      "data pipelines",
-      "star schema"
-    ];
-    const jdRequiredSkills = sampleTechTerms.filter((term) => jdLower.includes(term));
-    matchedSkills = resumeSkills.filter((s) => jdLower.includes(s.toLowerCase()));
-    missingSkills = jdRequiredSkills.filter((s) => !resumeSkills.some((rs) => rs.toLowerCase() === s));
-    if (jdRequiredSkills.length > 0) {
-      skillsScore = Math.round(matchedSkills.length / jdRequiredSkills.length * 100);
+  let experienceScore = 75;
+  const candidateSkills = (structuredData?.skills || []).map((s) => s.trim());
+  if (hasTarget) {
+    const combinedTargetText = `${titleLower} ${jdLower}`;
+    const rawTokens = combinedTargetText.match(/\b[a-z0-9#+.]{2,25}\b/gi) || [];
+    const domainTokens = Array.from(
+      new Set(
+        rawTokens.map((t) => t.toLowerCase()).filter((t) => t.length >= 3 && !COMMON_STOP_WORDS.has(t) && !/^\d+$/.test(t))
+      )
+    );
+    if (Array.isArray(aiMatchedKeywords)) {
+      matchedKeywords = aiMatchedKeywords;
     } else {
-      skillsScore = resumeSkills.length > 3 ? 85 : 60;
+      matchedKeywords = domainTokens.filter((kw) => textLower.includes(kw)).slice(0, 20);
     }
-    const jdKeywords = jdWords.filter((w) => w.length > 4).slice(0, 20);
-    matchedKeywords = jdKeywords.filter((kw) => textLower.includes(kw));
-    missingKeywords = jdKeywords.filter((kw) => !textLower.includes(kw));
-    if (jdKeywords.length > 0) {
-      keywordScore = Math.round(matchedKeywords.length / jdKeywords.length * 100);
+    if (Array.isArray(aiMissingKeywords)) {
+      missingKeywords = aiMissingKeywords;
+    } else {
+      missingKeywords = domainTokens.filter((kw) => !textLower.includes(kw)).slice(0, 15);
+    }
+    if (Array.isArray(aiMatchedSkills) && Array.isArray(aiMissingSkills)) {
+      matchedSkills = aiMatchedSkills;
+      missingSkills = aiMissingSkills;
+      const totalRequired = matchedSkills.length + missingSkills.length;
+      if (totalRequired > 0) {
+        skillsScore = Math.round(matchedSkills.length / totalRequired * 100);
+      } else {
+        skillsScore = candidateSkills.length > 0 ? 50 : 20;
+      }
+    } else {
+      matchedSkills = candidateSkills.filter((cs) => combinedTargetText.includes(cs.toLowerCase()));
+      const targetRequiredKeywords = domainTokens.slice(0, 15);
+      missingSkills = targetRequiredKeywords.filter((tk) => !candidateSkills.some((cs) => cs.toLowerCase() === tk));
+      if (targetRequiredKeywords.length > 0) {
+        skillsScore = Math.round(matchedSkills.length / Math.max(targetRequiredKeywords.length, 1) * 100);
+      } else {
+        skillsScore = candidateSkills.length > 0 ? 60 : 30;
+      }
+    }
+    const totalKeywords = matchedKeywords.length + missingKeywords.length;
+    if (totalKeywords > 0) {
+      keywordScore = Math.round(matchedKeywords.length / totalKeywords * 100);
+    } else {
+      keywordScore = 50;
+    }
+    let expPoints = 0;
+    const targetTitleTokens = titleLower.split(/\s+/).filter((t) => t.length > 2 && !COMMON_STOP_WORDS.has(t));
+    let titleOverlapCount = 0;
+    targetTitleTokens.forEach((tok) => {
+      if (textLower.includes(tok)) titleOverlapCount++;
+    });
+    if (targetTitleTokens.length > 0) {
+      const titleRatio = titleOverlapCount / targetTitleTokens.length;
+      expPoints += Math.round(titleRatio * 45);
+    } else {
+      expPoints += 20;
+    }
+    const hasPercentages = /\b\d{1,3}%\b/.test(extractedText);
+    const hasCurrencyOrScale = /\$[\d,]+|\b\d+\s*(?:k|m|million|users|clients|team|engineers|projects)\b/i.test(extractedText);
+    const hasActionVerbs = /\b(developed|engineered|designed|led|built|optimized|implemented|increased|reduced|achieved|delivered)\b/i.test(extractedText);
+    if (hasPercentages) expPoints += 20;
+    if (hasCurrencyOrScale) expPoints += 15;
+    if (hasActionVerbs) expPoints += 20;
+    if (skillsScore === 0 || aiSemanticScore !== void 0 && aiSemanticScore <= 25) {
+      expPoints = Math.min(15, expPoints);
+      keywordScore = Math.min(25, keywordScore);
+    }
+    experienceScore = Math.min(100, Math.max(5, expPoints));
+    if (aiSemanticScore !== void 0) {
+      jobAlignmentScore = aiSemanticScore;
+    } else {
+      jobAlignmentScore = Math.round(skillsScore * 0.5 + keywordScore * 0.3 + experienceScore * 0.2);
     }
   } else {
-    matchedSkills = structuredData?.skills || [];
+    matchedSkills = candidateSkills;
     missingSkills = [];
-    matchedKeywords = (structuredData?.skills || []).slice(0, 10);
+    matchedKeywords = candidateSkills.slice(0, 15);
     missingKeywords = [];
+    skillsScore = Math.min(100, Math.max(40, candidateSkills.length * 8));
+    keywordScore = candidateSkills.length > 5 ? 85 : 65;
+    jobAlignmentScore = aiSemanticScore !== void 0 ? aiSemanticScore : 75;
+    let expPoints = 50;
+    if (/\b\d{1,3}%\b/.test(extractedText)) expPoints += 25;
+    if (/\b(developed|engineered|designed|led|built|optimized)\b/i.test(extractedText)) expPoints += 25;
+    experienceScore = Math.min(100, expPoints);
   }
   const categories = {
     keywordMatch: Math.min(100, Math.max(0, keywordScore)),
@@ -3781,15 +4326,15 @@ function calculateATSScore(input) {
   const atsScore = Math.round(
     categories.keywordMatch * 0.25 + categories.jobAlignment * 0.2 + categories.skillsMatch * 0.2 + categories.experienceRelevance * 0.15 + categories.structure * 0.1 + categories.formatting * 0.05 + categories.contactInformation * 0.05
   );
-  const jobMatchScore = Math.round(
-    categories.keywordMatch * 0.4 + categories.skillsMatch * 0.4 + categories.jobAlignment * 0.2
-  );
+  const jobMatchScore = hasTarget ? Math.round(
+    categories.skillsMatch * 0.4 + categories.jobAlignment * 0.35 + categories.keywordMatch * 0.25
+  ) : categories.jobAlignment;
   return {
-    atsScore,
-    jobMatchScore,
+    atsScore: Math.min(100, Math.max(0, atsScore)),
+    jobMatchScore: Math.min(100, Math.max(0, jobMatchScore)),
     categories,
-    matchedKeywords: matchedKeywords.slice(0, 15),
-    missingKeywords: missingKeywords.slice(0, 15),
+    matchedKeywords,
+    missingKeywords,
     matchedSkills,
     missingSkills,
     formattingIssues
@@ -3805,47 +4350,66 @@ function getGroqKeyPool() {
 async function analyzeResumeWithAI(req) {
   const keys = getGroqKeyPool();
   if (keys.length === 0) {
-    console.warn("[AIAnalysis] No GROQ_API_KEY configured. Falling back to local heuristic analysis.");
+    console.warn("[AIAnalysis] No GROQ_API_KEY configured. Falling back to local domain-aware analysis.");
     return getFallbackAIResponse(req);
   }
-  const hasJd = req.jobDescriptionText && req.jobDescriptionText.trim().length > 0;
-  const systemPrompt = hasJd ? `You are a Senior Technical Recruiter & ATS Auditor.
-Your task is to analyze candidate resumes strictly against a specific TARGET JOB DESCRIPTION and return a JSON evaluation.
-Extract exact matching keywords/skills present in both the resume and the target job description, as well as missing critical keywords/skills required by the job description but omitted from the resume.
+  const effectiveJobTitle = req.jobTitle?.trim() || "";
+  const effectiveCompany = req.companyName?.trim() || "";
+  const effectiveJdText = req.jobDescriptionText?.trim() || "";
+  const hasTargetRole = effectiveJobTitle.length > 0 || effectiveJdText.length > 0;
+  const targetRoleHeader = [
+    effectiveJobTitle ? `Target Role: ${effectiveJobTitle}` : "",
+    effectiveCompany ? `Target Company: ${effectiveCompany}` : ""
+  ].filter(Boolean).join(" | ");
+  const systemPrompt = hasTargetRole ? `You are an expert Technical Recruiter, Hiring Manager & ATS Auditor.
+Your task is to conduct an evidence-based evaluation of a candidate's resume strictly against the specified TARGET ROLE and JOB DESCRIPTION.
 
-Return ONLY a single valid json object with the following schema:
+EVALUATION RULES:
+1. DOMAIN & FIELD VERIFICATION:
+   - Carefully determine the candidate's actual primary domain (e.g., 3D Animation/Art, Software Engineering, Graphic Design, Marketing, Finance, Nursing, etc.).
+   - Compare the candidate's domain with the target role domain.
+   - SEVERE MISMATCH PENALTY: If the candidate's domain DOES NOT MATCH the target job (e.g., an Animation/Art resume evaluated for a Software Engineer role, or a Software Developer applying for a 3D Animator role):
+     * "semanticMatchScore" MUST BE LOW: between 10 and 28 out of 100. NEVER award high scores (e.g. >35) to completely mismatched domains!
+     * "weaknesses" MUST prominently state the fundamental domain mismatch (e.g., "Candidate background is in 3D Art/Animation with zero professional software engineering or full-stack web development credentials required for this role.").
+     * "missingSkills" and "missingKeywords" MUST list the primary core competencies of the target role that are missing.
+     * "matchedSkills" and "matchedKeywords" MUST be empty or only include truly shared transferable skills (e.g., "Git", "Agile"). DO NOT invent fake matches.
+   - STRONG MATCH: If the candidate's background matches the target role, evaluate based on technical depth, metrics, and genuine skill overlap (60-95 score range).
+
+2. EVIDENCE-BASED RECOMMENDATIONS:
+   - Every recommendation MUST be actionable, specific, and cite actual missing skills or gaps relevant to this target role.
+   - Do NOT provide generic platitudes like "add more numbers". Explain WHAT numbers or projects are needed for this specific role.
+
+Return ONLY a single valid JSON object strictly matching this schema:
 {
-  "semanticMatchScore": <number 0-100 based on alignment with target job>,
-  "matchedKeywords": ["<exact keyword 1>", "<exact keyword 2>"],
-  "missingKeywords": ["<required job keyword omitted from resume 1>", "<required job keyword omitted 2>"],
-  "matchedSkills": ["<matched skill 1>", "<matched skill 2>"],
-  "missingSkills": ["<required skill missing from candidate resume 1>", "<missing skill 2>"],
-  "strengths": ["<specific candidate strength aligned with role>", "<strength 2>"],
-  "weaknesses": ["<gap relative to job description>", "<weakness 2>"],
+  "semanticMatchScore": <number 0-100 reflecting true role alignment>,
+  "matchedKeywords": ["<exact keyword from JD found in resume 1>", "<keyword 2>"],
+  "missingKeywords": ["<required keyword from JD omitted from resume 1>", "<keyword 2>"],
+  "matchedSkills": ["<skill present in both resume and target role 1>", "<skill 2>"],
+  "missingSkills": ["<critical required skill missing from resume 1>", "<skill 2>"],
+  "strengths": ["<specific strength aligned with target role>", "<strength 2>"],
+  "weaknesses": ["<specific gap or domain mismatch relative to role>", "<weakness 2>"],
   "recommendations": [
     {
       "priority": "HIGH" | "MEDIUM" | "LOW",
       "category": "<Category Name>",
-      "suggestion": "<Actionable recommendation to tailor resume for this job>",
-      "reason": "<Why ATS/Recruiters need this for this specific role>"
+      "suggestion": "<Specific actionable advice>",
+      "reason": "<Why this matters for this specific role>"
     }
   ],
   "sectionFeedback": {
-    "summary": "<Feedback for summary alignment>",
-    "skills": "<Feedback for skills section>",
-    "experience": "<Feedback for experience>",
-    "projects": "<Feedback for projects>",
-    "education": "<Feedback for education>"
+    "summary": "<Feedback on summary alignment with target role>",
+    "skills": "<Feedback on skills section alignment with target role>",
+    "experience": "<Feedback on experience bullet points alignment with target role>",
+    "projects": "<Feedback on projects alignment with target role>",
+    "education": "<Feedback on education alignment with target role>"
   }
-}` : `You are a Senior Technical Recruiter & General Resume Quality Auditor.
-Your task is to audit candidate resumes for overall quality, technical breadth, section organization, and industry standards (No specific Job Description provided).
-In "matchedKeywords" and "matchedSkills", list all candidate skills/technologies detected in their resume.
-In "missingKeywords" and "missingSkills", leave empty [] as there is no specific job posting to compare against.
+}` : `You are an expert Technical Recruiter & General Resume Quality Auditor.
+Your task is to audit a candidate's resume for overall quality, structure, technical breadth, and industry standards within their own field (No specific Job Description provided).
 
-Return ONLY a single valid json object with the following schema:
+Return ONLY a single valid JSON object strictly matching this schema:
 {
-  "semanticMatchScore": <number 0-100 overall resume quality score>,
-  "matchedKeywords": ["<detected technology/skill 1>", "<detected skill 2>"],
+  "semanticMatchScore": <number 0-100 overall resume quality score in their field>,
+  "matchedKeywords": ["<detected skill or competency 1>", "<detected skill 2>"],
   "missingKeywords": [],
   "matchedSkills": ["<detected skill 1>", "<detected skill 2>"],
   "missingSkills": [],
@@ -3855,138 +4419,230 @@ Return ONLY a single valid json object with the following schema:
     {
       "priority": "HIGH" | "MEDIUM" | "LOW",
       "category": "<Category Name>",
-      "suggestion": "<General resume optimization suggestion>",
+      "suggestion": "<Actionable recommendation>",
       "reason": "<Explanation>"
     }
   ],
   "sectionFeedback": {
-    "summary": "<General feedback for summary>",
-    "skills": "<General feedback for skills>",
-    "experience": "<General feedback for experience>",
-    "projects": "<General feedback for projects>",
-    "education": "<General feedback for education>"
+    "summary": "<General summary feedback>",
+    "skills": "<General skills feedback>",
+    "experience": "<General experience feedback>",
+    "projects": "<General projects feedback>",
+    "education": "<General education feedback>"
   }
 }`;
-  const userPrompt = hasJd ? `<candidate_resume>
-${req.resumeText.slice(0, 4e3)}
-</candidate_resume>
+  const userPrompt = hasTargetRole ? `<target_role_context>
+${targetRoleHeader}
+${effectiveJdText ? `Job Description:
+${effectiveJdText.slice(0, 3500)}` : `Target Position: ${effectiveJobTitle}`}
+</target_role_context>
 
-<target_job_description>
-${req.jobDescriptionText?.slice(0, 3e3)}
-</target_job_description>` : `<candidate_resume>
-${req.resumeText.slice(0, 4e3)}
+<candidate_resume>
+${req.resumeText.slice(0, 4500)}
+</candidate_resume>` : `<candidate_resume>
+${req.resumeText.slice(0, 4500)}
 </candidate_resume>`;
-  const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+  const candidateModels = [
+    process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "qwen/qwen3.8-27b"
+  ];
   let lastError = null;
   const startIdx = Math.floor(Math.random() * keys.length);
   for (let i = 0; i < keys.length; i++) {
     const key = keys[(startIdx + i) % keys.length];
-    try {
-      const groq = new Groq2({ apiKey: key });
-      const completion = await groq.chat.completions.create({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        model,
-        temperature: 0.2,
-        response_format: { type: "json_object" }
-      });
-      const content = completion.choices[0]?.message?.content;
-      if (!content) throw new Error("Empty AI response received.");
-      const parsed = JSON.parse(content);
-      const normalizedRecommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations.map((r, idx) => {
-        if (typeof r === "string") {
+    const groq = new Groq2({ apiKey: key });
+    for (const model of candidateModels) {
+      try {
+        const completion = await groq.chat.completions.create({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          model,
+          temperature: 0.2,
+          response_format: { type: "json_object" }
+        });
+        const content = completion.choices[0]?.message?.content;
+        if (!content) throw new Error("Empty AI response received.");
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("Could not parse JSON from AI response.");
+        const parsed = JSON.parse(jsonMatch[0]);
+        const normalizedRecommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations.map((r, idx) => {
+          if (typeof r === "string") {
+            return {
+              priority: idx === 0 ? "HIGH" : idx < 3 ? "MEDIUM" : "LOW",
+              category: "Role Optimization",
+              suggestion: r,
+              reason: "Directly improves ATS score and recruiter alignment for this target role."
+            };
+          }
           return {
-            priority: idx === 0 ? "HIGH" : idx < 3 ? "MEDIUM" : "LOW",
-            category: "Optimization",
-            suggestion: r,
-            reason: "Improves ATS readability and recruiter alignment."
+            priority: r.priority || (idx === 0 ? "HIGH" : idx < 3 ? "MEDIUM" : "LOW"),
+            category: r.category || "Role Alignment",
+            suggestion: r.suggestion || r.recommendation || String(r),
+            reason: r.reason || "Actionable improvement for standard ATS parsers and hiring managers."
           };
-        }
+        }) : [];
         return {
-          priority: r.priority || (idx === 0 ? "HIGH" : idx < 3 ? "MEDIUM" : "LOW"),
-          category: r.category || "General",
-          suggestion: r.suggestion || r.recommendation || String(r),
-          reason: r.reason || "Actionable improvement for standard ATS parsers."
+          semanticMatchScore: typeof parsed.semanticMatchScore === "number" ? Math.min(100, Math.max(0, parsed.semanticMatchScore)) : 50,
+          matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [],
+          missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords : [],
+          matchedSkills: Array.isArray(parsed.matchedSkills) ? parsed.matchedSkills : [],
+          missingSkills: Array.isArray(parsed.missingSkills) ? parsed.missingSkills : [],
+          strengths: Array.isArray(parsed.strengths) && parsed.strengths.length > 0 ? parsed.strengths : ["Demonstrates clear professional formatting"],
+          weaknesses: Array.isArray(parsed.weaknesses) && parsed.weaknesses.length > 0 ? parsed.weaknesses : ["Could align terminology more closely with target position"],
+          recommendations: normalizedRecommendations,
+          sectionFeedback: parsed.sectionFeedback || {
+            summary: "Ensure summary explicitly highlights alignment with target position.",
+            skills: "Group skills into recognized domain categories.",
+            experience: "Emphasize measurable outcomes and relevant accomplishments.",
+            projects: "Showcase projects directly relevant to target role requirements.",
+            education: "Ensure degree and graduation timeline are clearly stated."
+          }
         };
-      }) : [];
-      return {
-        semanticMatchScore: typeof parsed.semanticMatchScore === "number" ? parsed.semanticMatchScore : 78,
-        matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : void 0,
-        missingKeywords: Array.isArray(parsed.missingKeywords) ? parsed.missingKeywords : void 0,
-        matchedSkills: Array.isArray(parsed.matchedSkills) ? parsed.matchedSkills : void 0,
-        missingSkills: Array.isArray(parsed.missingSkills) ? parsed.missingSkills : void 0,
-        strengths: Array.isArray(parsed.strengths) && parsed.strengths.length > 0 ? parsed.strengths : ["Strong core technical background"],
-        weaknesses: Array.isArray(parsed.weaknesses) && parsed.weaknesses.length > 0 ? parsed.weaknesses : ["Could add more quantifiable metrics"],
-        recommendations: normalizedRecommendations,
-        sectionFeedback: parsed.sectionFeedback || {
-          summary: "Good clear summary",
-          skills: "Well structured skill set",
-          experience: "Highlight measurable business outcomes",
-          projects: "Include live demo or repository links",
-          education: "Clear academic details"
-        }
-      };
-    } catch (err) {
-      lastError = err;
-      console.warn(`[AIAnalysis] Groq key attempt #${i + 1} failed: ${err.message}. Retrying with next key...`);
+      } catch (err) {
+        lastError = err;
+        continue;
+      }
     }
   }
-  console.error("[AIAnalysis] All Groq API keys failed. Reason:", lastError?.message || lastError);
+  console.error("[AIAnalysis] All Groq API attempts failed. Falling back to dynamic domain analysis:", lastError?.message || lastError);
   return getFallbackAIResponse(req);
 }
 function getFallbackAIResponse(req) {
-  const text = req.resumeText || "";
-  const skillsCount = req.structuredData?.skills?.length || 0;
-  const wordCount = text.split(/\s+/).length;
-  const dynamicStrengths = [];
-  const dynamicWeaknesses = [];
-  if (skillsCount > 5) {
-    dynamicStrengths.push(
-      `Extracted ${skillsCount} technical skills (${req.structuredData.skills.slice(0, 4).join(", ")})`
-    );
-  } else {
-    dynamicWeaknesses.push("Technical skills section could be expanded with more modern frameworks & tools.");
+  const text = (req.resumeText || "").toLowerCase();
+  const targetTitle = (req.jobTitle || "").toLowerCase();
+  const jdText = (req.jobDescriptionText || "").toLowerCase();
+  const candidateSkills = req.structuredData?.skills || [];
+  const combinedTarget = `${targetTitle} ${jdText}`.trim();
+  const hasTarget = combinedTarget.length > 0;
+  const domains = [
+    {
+      name: "Software Engineering",
+      keywords: ["software", "developer", "frontend", "backend", "full stack", "react", "typescript", "javascript", "node", "python", "java", "c++", "sql", "api", "docker", "aws"]
+    },
+    {
+      name: "3D Art & Animation",
+      keywords: ["animation", "animator", "3d", "maya", "blender", "rigging", "character", "keyframing", "zbrush", "texturing", "lighting", "vfx", "motion graphics", "after effects", "unreal"]
+    },
+    {
+      name: "UI/UX & Product Design",
+      keywords: ["ui/ux", "designer", "figma", "wireframe", "prototype", "user experience", "user interface", "design system", "adobe xd"]
+    },
+    {
+      name: "Data Science & Analytics",
+      keywords: ["data", "analyst", "analytics", "sql", "pandas", "numpy", "machine learning", "tableau", "power bi", "etl", "spark", "python"]
+    },
+    {
+      name: "Marketing & Growth",
+      keywords: ["marketing", "seo", "sem", "social media", "content", "campaigns", "copywriting", "growth", "google analytics"]
+    },
+    {
+      name: "Finance & Accounting",
+      keywords: ["finance", "financial", "accounting", "accountant", "audit", "tax", "gaap", "quickbooks", "valuation", "modeling"]
+    }
+  ];
+  let resumeDomain = "General Professional";
+  let maxResumeScore = 0;
+  for (const d of domains) {
+    const score = d.keywords.filter((kw) => text.includes(kw)).length;
+    if (score > maxResumeScore) {
+      maxResumeScore = score;
+      resumeDomain = d.name;
+    }
   }
-  if (wordCount > 300) {
-    dynamicStrengths.push(`Comprehensive resume length (${wordCount} words) covering past projects & experience`);
-  } else if (wordCount > 50) {
-    dynamicWeaknesses.push(
-      `Resume content is relatively concise (${wordCount} words). Consider adding details to project descriptions.`
-    );
+  let targetDomain = resumeDomain;
+  let maxTargetScore = 0;
+  if (hasTarget) {
+    for (const d of domains) {
+      const score = d.keywords.filter((kw) => combinedTarget.includes(kw)).length;
+      if (score > maxTargetScore) {
+        maxTargetScore = score;
+        targetDomain = d.name;
+      }
+    }
   }
-  if (req.jobDescriptionText && req.jobDescriptionText.trim().length > 0) {
-    dynamicStrengths.push("Job description target provided for tailored ATS alignment.");
-  } else {
-    dynamicWeaknesses.push(
-      "No specific Job Description provided. Analysis was performed against general industry standards."
-    );
+  const isDomainMismatch = hasTarget && resumeDomain !== targetDomain && maxTargetScore >= 2;
+  if (isDomainMismatch) {
+    const targetKeywords2 = domains.find((d) => d.name === targetDomain)?.keywords || [];
+    const missing2 = targetKeywords2.filter((kw) => !text.includes(kw)).slice(0, 8);
+    const matched2 = targetKeywords2.filter((kw) => text.includes(kw));
+    return {
+      semanticMatchScore: 18,
+      matchedKeywords: matched2,
+      missingKeywords: missing2,
+      matchedSkills: matched2,
+      missingSkills: missing2,
+      strengths: [
+        `Strong credentials in ${resumeDomain}`,
+        "Clear professional formatting and document organization"
+      ],
+      weaknesses: [
+        `Critical domain divergence: Candidate background is centered in ${resumeDomain}, whereas target role requires ${targetDomain}`,
+        `Missing primary technical qualifications required for ${targetDomain} (e.g., ${missing2.slice(0, 4).join(", ")})`
+      ],
+      recommendations: [
+        {
+          priority: "HIGH",
+          category: "Career Alignment",
+          suggestion: `Transitioning to ${targetDomain} requires demonstrating foundational projects or certifications in ${missing2.slice(0, 3).join(", ")}.`,
+          reason: `ATS scanners and hiring managers for ${targetDomain} filter out resumes lacking primary domain credentials.`
+        },
+        {
+          priority: "HIGH",
+          category: "Target Projects",
+          suggestion: `Add 2-3 substantial portfolio projects that directly utilize ${targetDomain} methodologies.`,
+          reason: "Practical evidence is required when transitioning between distinct functional domains."
+        }
+      ],
+      sectionFeedback: {
+        summary: `Current summary reflects ${resumeDomain}. Reframe to highlight transferable skills toward ${targetDomain}.`,
+        skills: `Heavily weighted toward ${resumeDomain}. Needs core ${targetDomain} competencies.`,
+        experience: `Past experience focuses on ${resumeDomain}. Highlight any cross-functional overlap with ${targetDomain}.`,
+        projects: `Add relevant ${targetDomain} projects to demonstrate capability.`,
+        education: "Clear academic credentials provided."
+      }
+    };
   }
+  const words2 = text.split(/\s+/).length;
+  const targetKeywords = domains.find((d) => d.name === targetDomain)?.keywords || [];
+  const matched = targetKeywords.filter((kw) => text.includes(kw));
+  const missing = hasTarget ? targetKeywords.filter((kw) => !text.includes(kw)).slice(0, 6) : [];
   return {
-    semanticMatchScore: Math.min(95, Math.max(50, 65 + skillsCount * 3)),
-    strengths: dynamicStrengths.length > 0 ? dynamicStrengths : ["Solid technical background", "Clear contact information and section structure"],
-    weaknesses: dynamicWeaknesses.length > 0 ? dynamicWeaknesses : ["Bullet points could include more quantified metrics (e.g., % performance increase)"],
+    semanticMatchScore: hasTarget ? Math.min(92, Math.max(65, 50 + matched.length * 6)) : 80,
+    matchedKeywords: matched,
+    missingKeywords: missing,
+    matchedSkills: candidateSkills.filter((s) => text.includes(s.toLowerCase())).slice(0, 10),
+    missingSkills: missing,
+    strengths: [
+      `Strong alignment with ${resumeDomain} competencies (${candidateSkills.slice(0, 4).join(", ") || "core skills"})`,
+      `Comprehensive resume depth with ${words2} words across project & work history`
+    ],
+    weaknesses: [
+      hasTarget && missing.length > 0 ? `Could integrate key role competencies: ${missing.slice(0, 3).join(", ")}` : "Could expand bullet points with more quantifiable outcome metrics (% increase, scale, performance)"
+    ],
     recommendations: [
       {
         priority: "HIGH",
-        category: "Experience & Achievements",
-        suggestion: "Add measurable results (metrics, numbers, or percentages) to your project bullet points.",
-        reason: "Recruiters and ATS systems score bullet points higher when backed by evidence of impact."
+        category: "Role Optimization",
+        suggestion: hasTarget && missing.length > 0 ? `Incorporate required competencies (${missing.slice(0, 3).join(", ")}) into recent project descriptions.` : "Quantify your achievements using specific numbers, percentages, or measurable operational scale.",
+        reason: "Strengthens keyword alignment with ATS filters and proves measurable impact to recruiters."
       },
       {
         priority: "MEDIUM",
-        category: "Keywords",
-        suggestion: "Incorporate missing technical keywords aligned with your target position.",
-        reason: "Aligning terminology directly with the job description improves keyword match score."
+        category: "Action Verbs",
+        suggestion: "Begin every experience bullet point with strong impact verbs (e.g. Architected, Engineered, Optimized, Delivered).",
+        reason: "Improves readability and executive presence during human recruiter review."
       }
     ],
     sectionFeedback: {
-      summary: "Ensure your summary directly highlights your primary technical specialization.",
-      skills: `Extracted skills: ${req.structuredData?.skills?.join(", ") || "None detected"}. Grouping skills into categories improves readability.`,
-      experience: "Use strong action verbs like Developed, Implemented, Optimized, and Engineered.",
-      projects: "Mention tech stack explicitly alongside what was built and the problem solved.",
-      education: "Ensure degree and graduation timeline are clearly stated."
+      summary: `Directly highlights your ${resumeDomain} specialization.`,
+      skills: `Extracted skills: ${candidateSkills.slice(0, 6).join(", ") || "Good core competencies"}. Grouping skills by category improves readability.`,
+      experience: "Focus bullet points on concrete problem-solution-impact narratives.",
+      projects: "Ensure each project lists the exact tools used and measurable outcomes.",
+      education: "Standard academic formatting present."
     }
   };
 }
@@ -4026,7 +4682,8 @@ async function uploadAndParseResume(req, res) {
       console.warn(`[ResumeParser] WARNING: No readable text extracted from file ${req.file.originalname}.`);
       res.status(400).json({
         success: false,
-        message: "Could not extract readable text from this file. If this is a scanned image/photo PDF, please use a text-based PDF or DOCX file."
+        errorType: "SCANNED_OR_EMPTY_PDF",
+        message: "Could not extract readable text from this file. If this is a scanned image, photo, or graphical canvas PDF, please export or save your resume as a standard text-based PDF or DOCX file."
       });
       return;
     }
@@ -4053,6 +4710,14 @@ async function uploadAndParseResume(req, res) {
       }
     });
   } catch (error) {
+    if (error?.name === "ScannedPdfError" || error instanceof ScannedPdfError) {
+      res.status(400).json({
+        success: false,
+        errorType: "SCANNED_OR_GRAPHICAL_PDF",
+        message: error.message
+      });
+      return;
+    }
     console.error("Resume upload error:", error);
     res.status(500).json({
       success: false,
@@ -4076,30 +4741,40 @@ async function analyzeResume(req, res) {
       res.status(404).json({ success: false, message: "Resume not found" });
       return;
     }
+    const effectiveJobTitle = (jobTitle || "").trim();
+    const effectiveCompanyName = (companyName || "").trim();
+    const effectiveJdText = (jobDescriptionText || "").trim();
     let jobDoc = null;
-    if (jobDescriptionText && jobDescriptionText.trim().length > 0) {
+    if (effectiveJdText.length > 0 || effectiveJobTitle.length > 0) {
       jobDoc = await JobDescription.create({
         userId: req.user._id,
-        title: jobTitle || "Target Role",
-        company: companyName || "",
-        description: jobDescriptionText.trim()
+        title: effectiveJobTitle || "Target Role",
+        company: effectiveCompanyName || "",
+        description: effectiveJdText || `Target Position: ${effectiveJobTitle}`
       });
     }
     const aiResult = await analyzeResumeWithAI({
       resumeText: resume.extractedText,
-      jobDescriptionText: jobDescriptionText || "",
+      jobDescriptionText: effectiveJdText,
+      jobTitle: effectiveJobTitle,
+      companyName: effectiveCompanyName,
       structuredData: resume.structuredData
     });
     const atsResult = calculateATSScore({
       extractedText: resume.extractedText,
       structuredData: resume.structuredData,
-      jobDescriptionText: jobDescriptionText || "",
-      aiSemanticScore: aiResult.semanticMatchScore
+      jobDescriptionText: effectiveJdText,
+      jobTitle: effectiveJobTitle,
+      aiSemanticScore: aiResult.semanticMatchScore,
+      aiMatchedKeywords: aiResult.matchedKeywords,
+      aiMissingKeywords: aiResult.missingKeywords,
+      aiMatchedSkills: aiResult.matchedSkills,
+      aiMissingSkills: aiResult.missingSkills
     });
-    const matchedKeywords = aiResult.matchedKeywords && aiResult.matchedKeywords.length > 0 ? aiResult.matchedKeywords : atsResult.matchedKeywords;
-    const missingKeywords = aiResult.missingKeywords && aiResult.missingKeywords.length > 0 ? aiResult.missingKeywords : atsResult.missingKeywords;
-    const matchedSkills = aiResult.matchedSkills && aiResult.matchedSkills.length > 0 ? aiResult.matchedSkills : atsResult.matchedSkills;
-    const missingSkills = aiResult.missingSkills && aiResult.missingSkills.length > 0 ? aiResult.missingSkills : atsResult.missingSkills;
+    const matchedKeywords = atsResult.matchedKeywords;
+    const missingKeywords = atsResult.missingKeywords;
+    const matchedSkills = atsResult.matchedSkills;
+    const missingSkills = atsResult.missingSkills;
     const analysis = await ResumeAnalysis.create({
       userId: req.user._id,
       resumeId: resume._id,

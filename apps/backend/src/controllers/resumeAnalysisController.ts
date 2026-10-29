@@ -3,7 +3,7 @@ import multer from "multer";
 import { Resume } from "../models/Resume";
 import { JobDescription } from "../models/JobDescription";
 import { ResumeAnalysis } from "../models/ResumeAnalysis";
-import { extractTextFromBuffer, parseStructuredResume } from "../services/resume/resumeParserService";
+import { extractTextFromBuffer, parseStructuredResume, ScannedPdfError } from "../services/resume/resumeParserService";
 import { calculateATSScore } from "../services/analysis/atsScoringService";
 import { analyzeResumeWithAI } from "../services/ai/aiAnalysisService";
 import type { AuthRequest } from "../middleware/authMiddleware";
@@ -55,7 +55,8 @@ export async function uploadAndParseResume(req: AuthRequest, res: Response): Pro
       console.warn(`[ResumeParser] WARNING: No readable text extracted from file ${req.file.originalname}.`);
       res.status(400).json({
         success: false,
-        message: "Could not extract readable text from this file. If this is a scanned image/photo PDF, please use a text-based PDF or DOCX file.",
+        errorType: "SCANNED_OR_EMPTY_PDF",
+        message: "Could not extract readable text from this file. If this is a scanned image, photo, or graphical canvas PDF, please export or save your resume as a standard text-based PDF or DOCX file.",
       });
       return;
     }
@@ -86,6 +87,14 @@ export async function uploadAndParseResume(req: AuthRequest, res: Response): Pro
       },
     });
   } catch (error: any) {
+    if (error?.name === "ScannedPdfError" || error instanceof ScannedPdfError) {
+      res.status(400).json({
+        success: false,
+        errorType: "SCANNED_OR_GRAPHICAL_PDF",
+        message: error.message,
+      });
+      return;
+    }
     console.error("Resume upload error:", error);
     res.status(500).json({
       success: false,
@@ -118,21 +127,27 @@ export async function analyzeResume(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    const effectiveJobTitle = (jobTitle || "").trim();
+    const effectiveCompanyName = (companyName || "").trim();
+    const effectiveJdText = (jobDescriptionText || "").trim();
+
     // Optionally save Job Description
     let jobDoc = null;
-    if (jobDescriptionText && jobDescriptionText.trim().length > 0) {
+    if (effectiveJdText.length > 0 || effectiveJobTitle.length > 0) {
       jobDoc = await JobDescription.create({
         userId: req.user._id,
-        title: jobTitle || "Target Role",
-        company: companyName || "",
-        description: jobDescriptionText.trim(),
+        title: effectiveJobTitle || "Target Role",
+        company: effectiveCompanyName || "",
+        description: effectiveJdText || `Target Position: ${effectiveJobTitle}`,
       });
     }
 
-    // Run AI Analysis
+    // Run Evidence-based AI Analysis
     const aiResult = await analyzeResumeWithAI({
       resumeText: resume.extractedText,
-      jobDescriptionText: jobDescriptionText || "",
+      jobDescriptionText: effectiveJdText,
+      jobTitle: effectiveJobTitle,
+      companyName: effectiveCompanyName,
       structuredData: resume.structuredData,
     });
 
@@ -140,15 +155,20 @@ export async function analyzeResume(req: AuthRequest, res: Response): Promise<vo
     const atsResult = calculateATSScore({
       extractedText: resume.extractedText,
       structuredData: resume.structuredData,
-      jobDescriptionText: jobDescriptionText || "",
+      jobDescriptionText: effectiveJdText,
+      jobTitle: effectiveJobTitle,
       aiSemanticScore: aiResult.semanticMatchScore,
+      aiMatchedKeywords: aiResult.matchedKeywords,
+      aiMissingKeywords: aiResult.missingKeywords,
+      aiMatchedSkills: aiResult.matchedSkills,
+      aiMissingSkills: aiResult.missingSkills,
     });
 
-    // Save Analysis to DB (merging AI semantic extraction + deterministic ATS model)
-    const matchedKeywords = aiResult.matchedKeywords && aiResult.matchedKeywords.length > 0 ? aiResult.matchedKeywords : atsResult.matchedKeywords;
-    const missingKeywords = aiResult.missingKeywords && aiResult.missingKeywords.length > 0 ? aiResult.missingKeywords : atsResult.missingKeywords;
-    const matchedSkills = aiResult.matchedSkills && aiResult.matchedSkills.length > 0 ? aiResult.matchedSkills : atsResult.matchedSkills;
-    const missingSkills = aiResult.missingSkills && aiResult.missingSkills.length > 0 ? aiResult.missingSkills : atsResult.missingSkills;
+    // Save Analysis to DB
+    const matchedKeywords = atsResult.matchedKeywords;
+    const missingKeywords = atsResult.missingKeywords;
+    const matchedSkills = atsResult.matchedSkills;
+    const missingSkills = atsResult.missingSkills;
 
     const analysis = await ResumeAnalysis.create({
       userId: req.user._id,

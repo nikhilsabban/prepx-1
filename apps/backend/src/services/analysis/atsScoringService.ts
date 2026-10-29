@@ -2,7 +2,12 @@ export interface ATSScoreInput {
   extractedText: string;
   structuredData: any;
   jobDescriptionText?: string;
-  aiSemanticScore?: number; // Optional 0-100 score from LLM semantic match
+  jobTitle?: string;
+  aiSemanticScore?: number;
+  aiMatchedKeywords?: string[];
+  aiMissingKeywords?: string[];
+  aiMatchedSkills?: string[];
+  aiMissingSkills?: string[];
 }
 
 export interface ATSScoreResult {
@@ -24,8 +29,46 @@ export interface ATSScoreResult {
   formattingIssues: string[];
 }
 
+const COMMON_STOP_WORDS = new Set([
+  "about", "above", "across", "after", "again", "against", "all", "almost", "alone", "along", "already",
+  "also", "although", "always", "among", "and", "another", "any", "anybody", "anyone", "anything",
+  "anywhere", "are", "area", "areas", "around", "ask", "asked", "asking", "asks", "away", "back", "backed",
+  "backing", "backs", "became", "because", "become", "becomes", "becoming", "been", "before", "began",
+  "behind", "being", "beings", "best", "better", "between", "big", "both", "but", "came", "can", "cannot",
+  "case", "cases", "certain", "certainly", "clear", "clearly", "come", "could", "did", "differ", "different",
+  "differently", "does", "done", "down", "downed", "downing", "downs", "during", "each", "early", "either",
+  "end", "ended", "ending", "ends", "enough", "even", "evenly", "ever", "every", "everybody", "everyone",
+  "everything", "everywhere", "face", "faces", "fact", "facts", "far", "felt", "few", "fewer", "find",
+  "finds", "first", "for", "four", "from", "full", "fully", "further", "furthered", "furthering", "furthers",
+  "gave", "general", "generally", "get", "gets", "give", "given", "gives", "good", "goods", "great", "greater",
+  "greatest", "group", "grouped", "grouping", "groups", "had", "has", "have", "having", "her", "here",
+  "herself", "high", "higher", "highest", "him", "himself", "his", "how", "however", "important", "interest",
+  "interested", "interesting", "interests", "into", "its", "itself", "just", "keep", "keeps", "knew", "know",
+  "known", "knows", "large", "largely", "last", "later", "latest", "least", "less", "let", "lets", "like",
+  "likely", "long", "longer", "longest", "made", "make", "making", "man", "many", "may", "member", "members",
+  "men", "might", "more", "most", "mostly", "much", "must", "myself", "name", "needed", "needing", "needs",
+  "never", "new", "newer", "newest", "next", "nobody", "non", "noone", "not", "nothing", "now", "nowhere",
+  "number", "numbers", "off", "often", "old", "older", "oldest", "once", "one", "only", "open", "opened",
+  "opening", "opens", "order", "ordered", "ordering", "orders", "other", "others", "our", "out", "over",
+  "part", "parted", "parting", "parts", "per", "place", "places", "point", "pointed", "pointing", "points",
+  "possible", "present", "presented", "presenting", "presents", "problem", "problems", "put", "puts",
+  "quite", "rather", "really", "right", "room", "rooms", "said", "same", "saw", "say", "says", "second",
+  "seconds", "see", "seem", "seemed", "seeming", "seems", "sees", "several", "shall", "she", "should",
+  "show", "showed", "showing", "shows", "side", "sides", "since", "small", "smaller", "smallest", "some",
+  "somebody", "someone", "something", "somewhere", "state", "states", "still", "such", "sure", "take",
+  "taken", "than", "that", "the", "their", "them", "then", "there", "therefore", "these", "they", "thing",
+  "things", "think", "thinks", "this", "those", "though", "thought", "thoughts", "three", "through", "thus",
+  "time", "times", "today", "together", "too", "took", "toward", "turn", "turned", "turning", "turns", "two",
+  "under", "until", "upon", "use", "used", "uses", "very", "want", "wanted", "wanting", "wants", "was",
+  "way", "ways", "well", "wells", "went", "were", "what", "when", "where", "whether", "which", "while",
+  "who", "whole", "whom", "whose", "why", "will", "with", "within", "without", "work", "worked", "working",
+  "works", "would", "year", "years", "yet", "you", "young", "younger", "youngest", "your", "yours",
+  "candidate", "responsibilities", "requirements", "qualifications", "preferred", "duties", "role", "job"
+]);
+
 /**
- * Transparent ATS Scoring Engine using a 7-category weighted mathematical model:
+ * Transparent, evidence-based ATS Scoring Engine.
+ * Accurately measures:
  * - Keyword Match (25%)
  * - Job Alignment (20%)
  * - Skills Match (20%)
@@ -35,100 +78,192 @@ export interface ATSScoreResult {
  * - Contact Information (5%)
  */
 export function calculateATSScore(input: ATSScoreInput): ATSScoreResult {
-  const { extractedText, structuredData, jobDescriptionText, aiSemanticScore } = input;
-  const textLower = extractedText.toLowerCase();
+  const {
+    extractedText,
+    structuredData,
+    jobDescriptionText,
+    jobTitle,
+    aiSemanticScore,
+    aiMatchedSkills,
+    aiMissingSkills,
+    aiMatchedKeywords,
+    aiMissingKeywords,
+  } = input;
+
+  const textLower = (extractedText || "").toLowerCase();
   const jdLower = (jobDescriptionText || "").toLowerCase();
+  const titleLower = (jobTitle || "").toLowerCase();
+  const hasTarget = jdLower.trim().length > 0 || titleLower.trim().length > 0;
 
   // 1. Contact Information Score (5%)
   const personal = structuredData?.personal || {};
   let contactScore = 0;
-  if (personal.name) contactScore += 30;
-  if (personal.email) contactScore += 35;
-  if (personal.phone) contactScore += 25;
-  if (personal.linkedin || personal.github) contactScore += 10;
+  if (personal.name && personal.name.length > 2) contactScore += 30;
+  if (personal.email && personal.email.includes("@")) contactScore += 35;
+  if (personal.phone && personal.phone.length >= 7) contactScore += 20;
+  if (personal.linkedin || personal.github || personal.portfolio) contactScore += 15;
   contactScore = Math.min(100, contactScore);
 
   // 2. Resume Structure Score (10%)
-  const requiredSections = [
-    "experience", "work", "employment", "education", "degree",
-    "skills", "projects", "summary", "objective", "cert", "learning", "built", "toolbox", "about"
-  ];
-  let foundSectionsCount = 0;
-  requiredSections.forEach((sec) => {
-    if (textLower.includes(sec)) foundSectionsCount++;
+  const standardSections = ["summary", "profile", "objective", "experience", "education", "skills", "projects"];
+  let foundSections = 0;
+  standardSections.forEach((sec) => {
+    if (new RegExp(`\\b${sec}\\b`, "i").test(textLower)) {
+      foundSections++;
+    }
   });
-  const structureScore = Math.min(100, Math.round((foundSectionsCount / 4) * 100));
+  const structureScore = Math.min(100, Math.round((foundSections / 5) * 100));
 
   // 3. Formatting Risk Score (5%)
   const formattingIssues: string[] = [];
   let formattingScore = 100;
 
-  if (extractedText.length < 200) {
-    formattingIssues.push("Resume contains very little readable text.");
-    formattingScore -= 40;
+  if (extractedText.length < 300) {
+    formattingIssues.push("Resume is very brief (less than 300 characters).");
+    formattingScore -= 45;
   }
-  if (/[\u25A0-\u25FF\u2600-\u26FF]/g.test(extractedText)) {
-    formattingIssues.push("Unusual bullet icons or decorative symbols detected.");
+  if (extractedText.length > 15000) {
+    formattingIssues.push("Resume is unusually long (>15,000 characters). Aim for 1-2 concise pages.");
     formattingScore -= 15;
   }
-  if ((extractedText.match(/\t/g) || []).length > 20) {
-    formattingIssues.push("Excessive tab characters or potential multi-column formatting detected.");
-    formattingScore -= 20;
+  if (/[\u25A0-\u25FF\u2600-\u26FF]/.test(extractedText)) {
+    formattingIssues.push("Unusual decorative dingbat symbols detected that some legacy ATS parsers reject.");
+    formattingScore -= 10;
+  }
+  if ((extractedText.match(/\t/g) || []).length > 25) {
+    formattingIssues.push("Heavy tab stops or complex multi-column layout detected.");
+    formattingScore -= 15;
   }
   formattingScore = Math.max(0, formattingScore);
 
-  // 4. Keyword & Skills Matching (25% & 20%)
+  // 4. Role-Specific Keyword & Skills Matching
   let matchedKeywords: string[] = [];
   let missingKeywords: string[] = [];
   let matchedSkills: string[] = [];
   let missingSkills: string[] = [];
 
-  let keywordScore = 75; // Default score if no JD provided
+  let keywordScore = 75;
   let skillsScore = 75;
   let jobAlignmentScore = aiSemanticScore !== undefined ? aiSemanticScore : 75;
-  let experienceScore = 80;
+  let experienceScore = 75;
 
-  if (jdLower.trim()) {
-    // Extract candidate skills & JD keywords
-    const resumeSkills: string[] = structuredData?.skills || [];
-    
-    // Extract terms from JD
-    const jdWords = Array.from(new Set(jdLower.match(/\b[a-z0-9.+]{3,}\b/gi) || []));
+  const candidateSkills: string[] = (structuredData?.skills || []).map((s: string) => s.trim());
 
-    const sampleTechTerms = [
-      "javascript", "typescript", "react", "node.js", "express", "mongodb", "python",
-      "aws", "docker", "sql", "git", "rest api", "graphql", "ci/cd", "microservices",
-      "etl", "power bi", "pandas", "numpy", "data pipelines", "star schema"
-    ];
+  if (hasTarget) {
+    // Extract genuine domain keywords from JD & Title
+    const combinedTargetText = `${titleLower} ${jdLower}`;
+    const rawTokens = combinedTargetText.match(/\b[a-z0-9#+.]{2,25}\b/gi) || [];
 
-    const jdRequiredSkills = sampleTechTerms.filter((term) => jdLower.includes(term));
+    const domainTokens = Array.from(
+      new Set(
+        rawTokens
+          .map((t) => t.toLowerCase())
+          .filter((t) => t.length >= 3 && !COMMON_STOP_WORDS.has(t) && !/^\d+$/.test(t))
+      )
+    );
 
-    matchedSkills = resumeSkills.filter((s) => jdLower.includes(s.toLowerCase()));
-    missingSkills = jdRequiredSkills.filter((s) => !resumeSkills.some((rs) => rs.toLowerCase() === s));
-
-    if (jdRequiredSkills.length > 0) {
-      skillsScore = Math.round((matchedSkills.length / jdRequiredSkills.length) * 100);
+    // If AI provided extracted keywords, prioritize them
+    if (Array.isArray(aiMatchedKeywords)) {
+      matchedKeywords = aiMatchedKeywords;
     } else {
-      skillsScore = resumeSkills.length > 3 ? 85 : 60;
+      matchedKeywords = domainTokens.filter((kw) => textLower.includes(kw)).slice(0, 20);
     }
 
-    // Keyword match against JD
-    const jdKeywords = jdWords.filter((w) => w.length > 4).slice(0, 20);
-    matchedKeywords = jdKeywords.filter((kw) => textLower.includes(kw));
-    missingKeywords = jdKeywords.filter((kw) => !textLower.includes(kw));
+    if (Array.isArray(aiMissingKeywords)) {
+      missingKeywords = aiMissingKeywords;
+    } else {
+      missingKeywords = domainTokens.filter((kw) => !textLower.includes(kw)).slice(0, 15);
+    }
 
-    if (jdKeywords.length > 0) {
-      keywordScore = Math.round((matchedKeywords.length / jdKeywords.length) * 100);
+    // Skills match
+    if (Array.isArray(aiMatchedSkills) && Array.isArray(aiMissingSkills)) {
+      matchedSkills = aiMatchedSkills;
+      missingSkills = aiMissingSkills;
+      const totalRequired = matchedSkills.length + missingSkills.length;
+      if (totalRequired > 0) {
+        skillsScore = Math.round((matchedSkills.length / totalRequired) * 100);
+      } else {
+        skillsScore = candidateSkills.length > 0 ? 50 : 20;
+      }
+    } else {
+      // Deterministic skills check
+      matchedSkills = candidateSkills.filter((cs) => combinedTargetText.includes(cs.toLowerCase()));
+      const targetRequiredKeywords = domainTokens.slice(0, 15);
+      missingSkills = targetRequiredKeywords.filter((tk) => !candidateSkills.some((cs) => cs.toLowerCase() === tk));
+
+      if (targetRequiredKeywords.length > 0) {
+        skillsScore = Math.round((matchedSkills.length / Math.max(targetRequiredKeywords.length, 1)) * 100);
+      } else {
+        skillsScore = candidateSkills.length > 0 ? 60 : 30;
+      }
+    }
+
+    // Keyword score
+    const totalKeywords = matchedKeywords.length + missingKeywords.length;
+    if (totalKeywords > 0) {
+      keywordScore = Math.round((matchedKeywords.length / totalKeywords) * 100);
+    } else {
+      keywordScore = 50;
+    }
+
+    // Experience Relevance: evaluates role title alignment and impact metrics
+    let expPoints = 0;
+
+    // Check if candidate past roles or experience mentions target title words
+    const targetTitleTokens = titleLower.split(/\s+/).filter((t) => t.length > 2 && !COMMON_STOP_WORDS.has(t));
+    let titleOverlapCount = 0;
+    targetTitleTokens.forEach((tok) => {
+      if (textLower.includes(tok)) titleOverlapCount++;
+    });
+
+    if (targetTitleTokens.length > 0) {
+      const titleRatio = titleOverlapCount / targetTitleTokens.length;
+      expPoints += Math.round(titleRatio * 45); // up to 45 pts for direct role title overlap
+    } else {
+      expPoints += 20;
+    }
+
+    // Check for quantifiable impact metrics in text (numbers, percentages, scale)
+    const hasPercentages = /\b\d{1,3}%\b/.test(extractedText);
+    const hasCurrencyOrScale = /\$[\d,]+|\b\d+\s*(?:k|m|million|users|clients|team|engineers|projects)\b/i.test(extractedText);
+    const hasActionVerbs = /\b(developed|engineered|designed|led|built|optimized|implemented|increased|reduced|achieved|delivered)\b/i.test(extractedText);
+
+    if (hasPercentages) expPoints += 20;
+    if (hasCurrencyOrScale) expPoints += 15;
+    if (hasActionVerbs) expPoints += 20;
+
+    // Significant domain mismatch penalty: if zero skills match or AI flags low alignment (<25), experience is in the wrong field
+    if (skillsScore === 0 || (aiSemanticScore !== undefined && aiSemanticScore <= 25)) {
+      expPoints = Math.min(15, expPoints);
+      keywordScore = Math.min(25, keywordScore);
+    }
+
+    experienceScore = Math.min(100, Math.max(5, expPoints));
+
+    // Job alignment integrates AI semantic evaluation
+    if (aiSemanticScore !== undefined) {
+      jobAlignmentScore = aiSemanticScore;
+    } else {
+      jobAlignmentScore = Math.round(skillsScore * 0.5 + keywordScore * 0.3 + experienceScore * 0.2);
     }
   } else {
-    // When no Job Description is provided, display candidate's extracted skills & keywords as matched
-    matchedSkills = structuredData?.skills || [];
+    // General audit when no job description is provided
+    matchedSkills = candidateSkills;
     missingSkills = [];
-    matchedKeywords = (structuredData?.skills || []).slice(0, 10);
+    matchedKeywords = candidateSkills.slice(0, 15);
     missingKeywords = [];
+
+    skillsScore = Math.min(100, Math.max(40, candidateSkills.length * 8));
+    keywordScore = candidateSkills.length > 5 ? 85 : 65;
+    jobAlignmentScore = aiSemanticScore !== undefined ? aiSemanticScore : 75;
+
+    // Check quantifiable metrics
+    let expPoints = 50;
+    if (/\b\d{1,3}%\b/.test(extractedText)) expPoints += 25;
+    if (/\b(developed|engineered|designed|led|built|optimized)\b/i.test(extractedText)) expPoints += 25;
+    experienceScore = Math.min(100, expPoints);
   }
 
-  // Calculate Weighted ATS Score
   const categories = {
     keywordMatch: Math.min(100, Math.max(0, keywordScore)),
     jobAlignment: Math.min(100, Math.max(0, jobAlignmentScore)),
@@ -139,28 +274,32 @@ export function calculateATSScore(input: ATSScoreInput): ATSScoreResult {
     contactInformation: Math.min(100, Math.max(0, contactScore)),
   };
 
+  // Weighted ATS Score
   const atsScore = Math.round(
     categories.keywordMatch * 0.25 +
-      categories.jobAlignment * 0.20 +
-      categories.skillsMatch * 0.20 +
-      categories.experienceRelevance * 0.15 +
-      categories.structure * 0.10 +
-      categories.formatting * 0.05 +
-      categories.contactInformation * 0.05
+    categories.jobAlignment * 0.20 +
+    categories.skillsMatch * 0.20 +
+    categories.experienceRelevance * 0.15 +
+    categories.structure * 0.10 +
+    categories.formatting * 0.05 +
+    categories.contactInformation * 0.05
   );
 
-  const jobMatchScore = Math.round(
-    categories.keywordMatch * 0.40 +
-      categories.skillsMatch * 0.40 +
-      categories.jobAlignment * 0.20
-  );
+  // Job Match Score: focused strictly on role relevance
+  const jobMatchScore = hasTarget
+    ? Math.round(
+        categories.skillsMatch * 0.40 +
+        categories.jobAlignment * 0.35 +
+        categories.keywordMatch * 0.25
+      )
+    : categories.jobAlignment;
 
   return {
-    atsScore,
-    jobMatchScore,
+    atsScore: Math.min(100, Math.max(0, atsScore)),
+    jobMatchScore: Math.min(100, Math.max(0, jobMatchScore)),
     categories,
-    matchedKeywords: matchedKeywords.slice(0, 15),
-    missingKeywords: missingKeywords.slice(0, 15),
+    matchedKeywords,
+    missingKeywords,
     matchedSkills,
     missingSkills,
     formattingIssues,
