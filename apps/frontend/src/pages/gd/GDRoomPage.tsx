@@ -576,7 +576,7 @@ export function GDRoomPage() {
   }
 
   // Resilient transcript dispatcher: sends via WebSocket if connected, otherwise submits via REST API and updates local state optimistically
-  async function dispatchTranscriptSegment(text: string, durationSeconds?: number) {
+  async function dispatchTranscriptSegment(text: string, durationSeconds?: number, segmentIdOverride?: string) {
     const textToSubmit = text.trim();
     if (!textToSubmit || !sessionId) return;
 
@@ -585,8 +585,40 @@ export function GDRoomPage() {
 
     const calculatedDuration = durationSeconds || Math.max(2, Math.round(textToSubmit.split(/\s+/).filter(Boolean).length / 2.5));
     const language = sessionRef.current?.expectedLanguage || "en";
+    const segmentId = segmentIdOverride || `seg-${sessionId}-${participant.id}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+
+    const optimisticSeg: IGDTranscriptSegment = {
+      id: segmentId,
+      participantId: participant.id,
+      participantName: participant.name,
+      username: participant.username,
+      text: textToSubmit,
+      timestamp: new Date(),
+      durationSeconds: calculatedDuration,
+      isInterruption: false,
+      language,
+    };
+
+    // 1. Optimistically append to local session state immediately so UI updates with 0ms latency
+    setSession((prev) => {
+      if (!prev) return prev;
+      const exists = prev.transcript.some(
+        (s) =>
+          s.id === segmentId ||
+          (s.text.trim().toLowerCase() === textToSubmit.toLowerCase() &&
+            s.participantId === participant.id &&
+            Math.abs(new Date(s.timestamp || "").getTime() - Date.now()) < 5000)
+      );
+      if (exists) return prev;
+      return {
+        ...prev,
+        transcript: [...prev.transcript, optimisticSeg],
+      };
+    });
 
     const payload = {
+      id: segmentId,
+      segmentId,
       participantId: participant.id,
       participantName: participant.name,
       username: participant.username,
@@ -618,13 +650,13 @@ export function GDRoomPage() {
         if (res?.lastSegment) {
           setSession((prev) => {
             if (!prev) return prev;
-            const exists = prev.transcript.some(
-              (s) => s.id === res.lastSegment.id || (s.text === res.lastSegment.text && Math.abs(new Date(s.timestamp || "").getTime() - new Date(res.lastSegment.timestamp || "").getTime()) < 3000)
+            const updatedTranscript = prev.transcript.map((s) =>
+              s.id === segmentId ? { ...res.lastSegment, timestamp: new Date(res.lastSegment.timestamp) } : s
             );
-            if (exists) return prev;
+            const hasSegment = updatedTranscript.some((s) => s.id === res.lastSegment.id);
             return {
               ...prev,
-              transcript: [...prev.transcript, res.lastSegment],
+              transcript: hasSegment ? updatedTranscript : [...updatedTranscript, res.lastSegment],
               participants: res.participants || prev.participants,
             };
           });
@@ -691,6 +723,9 @@ export function GDRoomPage() {
               })
             );
           } catch { }
+        }
+        if (event?.text && event.text.trim().length >= 2) {
+          dispatchTranscriptSegment(event.text.trim(), undefined, event.segmentId);
         }
       },
       onStatusChange: (status) => {

@@ -19417,10 +19417,19 @@ async function appendTranscriptSegment(req, res) {
       res.status(404).json({ success: false, message: "Session not found" });
       return;
     }
+    const lastSeg = session.transcript.slice(-1)[0];
+    broadcastToGDRoom(sessionId, {
+      type: "new_transcript_segment",
+      payload: {
+        segment: lastSeg,
+        participants: session.participants,
+        currentTurn: session.currentTurn
+      }
+    });
     res.json({
       success: true,
       participants: session.participants,
-      lastSegment: session.transcript.slice(-1)[0]
+      lastSegment: lastSeg
     });
   } catch (error) {
     console.error("[GD Controller] Append transcript error:", error);

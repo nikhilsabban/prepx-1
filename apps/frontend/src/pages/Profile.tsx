@@ -457,7 +457,7 @@ export function Profile() {
                     {user.fullName.charAt(0).toUpperCase()}
                   </div>
                 )}
-                
+
                 <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white">
                   {uploadingAvatar ? (
                     <Loader2 className="size-6 animate-spin" />

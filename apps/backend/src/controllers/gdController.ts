@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import { gdTopicDiscoveryService } from "../services/gd/gdTopicDiscoveryService";
-import { gdSessionService } from "../services/gd/gdSessionService";
+import { gdSessionService, broadcastToGDRoom } from "../services/gd/gdSessionService";
 import { GroupDiscussion } from "../models/GroupDiscussion";
 import { User } from "../models/User";
 
@@ -462,10 +462,20 @@ export async function appendTranscriptSegment(req: AuthRequest, res: Response): 
       return;
     }
 
+    const lastSeg = session.transcript.slice(-1)[0];
+    broadcastToGDRoom(sessionId, {
+      type: "new_transcript_segment",
+      payload: {
+        segment: lastSeg,
+        participants: session.participants,
+        currentTurn: session.currentTurn,
+      },
+    });
+
     res.json({
       success: true,
       participants: session.participants,
-      lastSegment: session.transcript.slice(-1)[0],
+      lastSegment: lastSeg,
     });
   } catch (error: any) {
     console.error("[GD Controller] Append transcript error:", error);
