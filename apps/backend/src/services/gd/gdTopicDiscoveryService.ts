@@ -197,9 +197,9 @@ class GDTopicDiscoveryService {
   }
 
   /**
-   * Cleans HTML markup, unescapes entities, and trims text.
+   * Cleans HTML markup, unescapes decimal/hex/named entities, and trims text.
    */
-  private sanitizeText(raw: any): string {
+  public sanitizeText(raw: any): string {
     if (!raw) return "";
     let str = "";
     if (typeof raw === "string") {
@@ -209,17 +209,75 @@ class GDTopicDiscoveryService {
     } else {
       str = String(raw);
     }
-    return str
+
+    // 1. Strip CDATA wrappers and HTML tags
+    str = str
       .replace(/<!\[CDATA\[(.*?)\]\]>/gs, "$1")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
+      .replace(/<[^>]*>/g, " ");
+
+    // 2. Decode numeric decimal and hex entities (e.g., &#8216; -> ‘, &#x2018; -> ‘)
+    const decodeEntities = (input: string): string => {
+      return input
+        .replace(/&#(\d+);/g, (_, dec) => {
+          try {
+            return String.fromCodePoint(parseInt(dec, 10));
+          } catch {
+            return "";
+          }
+        })
+        .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+          try {
+            return String.fromCodePoint(parseInt(hex, 16));
+          } catch {
+            return "";
+          }
+        });
+    };
+
+    str = decodeEntities(str);
+
+    // 3. Decode common named HTML entities
+    const namedEntities: Record<string, string> = {
+      "&amp;": "&",
+      "&lt;": "<",
+      "&gt;": ">",
+      "&quot;": '"',
+      "&apos;": "'",
+      "&#39;": "'",
+      "&nbsp;": " ",
+      "&lsquo;": "‘",
+      "&rsquo;": "’",
+      "&ldquo;": "“",
+      "&rdquo;": "”",
+      "&ndash;": "–",
+      "&mdash;": "—",
+      "&hellip;": "…",
+      "&bull;": "•",
+      "&copy;": "©",
+      "&reg;": "®",
+      "&trade;": "™",
+      "&pound;": "£",
+      "&euro;": "€",
+    };
+
+    for (const [entity, replacement] of Object.entries(namedEntities)) {
+      str = str.split(entity).join(replacement);
+    }
+
+    // 4. Secondary pass for nested/double-encoded entities (e.g., &amp;#8216;)
+    if (str.includes("&#")) {
+      str = decodeEntities(str);
+    }
+
+    // 5. Normalize quotation marks, dashes, and whitespace
+    str = str
+      .replace(/[‘’]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/[—–]/g, " - ")
       .replace(/\s+/g, " ")
       .trim();
+
+    return str;
   }
 
   /**
@@ -378,20 +436,42 @@ class GDTopicDiscoveryService {
 
   /**
    * Deterministic template transformation when Groq is unavailable.
-   * Grounded in article headline, framing it into a neutral discussion debate.
+   * Grounded in article headline, framing it into a neutral discussion debate without nested quotes or conversational clickbait prefixes.
    */
   public transformWithTemplate(headline: string, category: string): string {
-    const clean = headline.replace(/[?.!]+$/, "").trim();
+    const sanitized = this.sanitizeText(headline);
+    const clean = sanitized.replace(/[?.!]+$/, "").trim();
 
-    if (clean.toLowerCase().startsWith("should") || clean.toLowerCase().startsWith("is ") || clean.toLowerCase().startsWith("can ") || clean.toLowerCase().startsWith("will ")) {
+    // If headline is already a well-formed debate question, return cleanly
+    if (
+      clean.toLowerCase().startsWith("should ") ||
+      clean.toLowerCase().startsWith("is ") ||
+      clean.toLowerCase().startsWith("can ") ||
+      clean.toLowerCase().startsWith("will ") ||
+      clean.toLowerCase().startsWith("how should ") ||
+      clean.toLowerCase().startsWith("how does ") ||
+      clean.toLowerCase().startsWith("why does ")
+    ) {
       return `${clean}?`;
     }
 
+    // Strip clickbait and conversational headline prefixes/suffixes
+    let subject = clean
+      .replace(/^(watch|live|opinion|analysis|explained|report|exclusive|video|podcast|feature|review):\s*/i, "")
+      .replace(/^here'?s\s+(what|why|how|the)\s+/i, "")
+      .replace(/^(what|why|how)\s+(you\s+need\s+to\s+know\s+about|to\s+know\s+about)\s+/i, "")
+      .replace(/\s*-\s*feels\s+like\s*$/i, "")
+      .replace(/\s*-\s*explained\s*$/i, "")
+      .replace(/^["'“‘]+|["'”’]+$/g, "")
+      .trim();
+
+    if (!subject) subject = clean;
+
     const templates = [
-      `Should modern organizations and policymakers adapt rapidly to "${clean}"?`,
-      `How does "${clean}" influence future industry opportunities and ethical responsibilities?`,
-      `Is the trend towards "${clean}" a net positive or a disruption that requires stricter regulation?`,
-      `In the context of ${category}, how should candidates and companies address "${clean}"?`,
+      `Should industry leaders and policymakers accelerate the adoption of ${subject}, or are the risks too substantial?`,
+      `How does ${subject} impact future workforce opportunities, ethics, and economic growth?`,
+      `Is the emergence of ${subject} a transformative positive development or a disruption requiring stricter oversight?`,
+      `In the context of ${category}, how should candidates and companies strategically address ${subject}?`,
     ];
 
     // Select deterministic template based on headline length hash
@@ -416,16 +496,19 @@ class GDTopicDiscoveryService {
     }
 
     try {
+      const sanitizedHeadline = this.sanitizeText(article.headline);
+      const sanitizedDescription = this.sanitizeText(article.description);
+
       const prompt = `You are a placement committee director formulating a balanced, provocative, placement-grade Group Discussion (GD) question for college engineering and MBA graduates based on this recent news article.
 
-Article Headline: "${article.headline}"
-Short Summary: "${article.description}"
+Article Headline: "${sanitizedHeadline}"
+Short Summary: "${sanitizedDescription}"
 Category: "${article.category}"
 
 REQUIREMENTS:
 1. Formulate ONE neutral, open-ended discussion question (10-25 words) that invites balanced debate with valid points on both sides.
 2. Ground the question strictly in the article's theme. Do NOT hallucinate unsupported facts.
-3. Do NOT present the question as a direct quotation.
+3. Do NOT wrap the entire question in quotation marks.
 4. Output JSON strictly matching: {"question": "string"}
 
 JSON Output:`;
@@ -444,8 +527,12 @@ JSON Output:`;
       );
 
       if (result?.question && result.question.trim().endsWith("?")) {
+        const cleanQuestion = this.sanitizeText(result.question)
+          .replace(/^["'“‘]+|["'”’]+$/g, "")
+          .trim();
+
         return {
-          question: result.question.trim(),
+          question: cleanQuestion,
           isAiGenerated: true,
         };
       }

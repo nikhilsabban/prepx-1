@@ -16919,7 +16919,7 @@ var GDTopicDiscoveryService = class {
     }
   }
   /**
-   * Cleans HTML markup, unescapes entities, and trims text.
+   * Cleans HTML markup, unescapes decimal/hex/named entities, and trims text.
    */
   sanitizeText(raw) {
     if (!raw) return "";
@@ -16931,7 +16931,53 @@ var GDTopicDiscoveryService = class {
     } else {
       str = String(raw);
     }
-    return str.replace(/<!\[CDATA\[(.*?)\]\]>/gs, "$1").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+    str = str.replace(/<!\[CDATA\[(.*?)\]\]>/gs, "$1").replace(/<[^>]*>/g, " ");
+    const decodeEntities = (input) => {
+      return input.replace(/&#(\d+);/g, (_, dec) => {
+        try {
+          return String.fromCodePoint(parseInt(dec, 10));
+        } catch {
+          return "";
+        }
+      }).replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+        try {
+          return String.fromCodePoint(parseInt(hex, 16));
+        } catch {
+          return "";
+        }
+      });
+    };
+    str = decodeEntities(str);
+    const namedEntities = {
+      "&amp;": "&",
+      "&lt;": "<",
+      "&gt;": ">",
+      "&quot;": '"',
+      "&apos;": "'",
+      "&#39;": "'",
+      "&nbsp;": " ",
+      "&lsquo;": "\u2018",
+      "&rsquo;": "\u2019",
+      "&ldquo;": "\u201C",
+      "&rdquo;": "\u201D",
+      "&ndash;": "\u2013",
+      "&mdash;": "\u2014",
+      "&hellip;": "\u2026",
+      "&bull;": "\u2022",
+      "&copy;": "\xA9",
+      "&reg;": "\xAE",
+      "&trade;": "\u2122",
+      "&pound;": "\xA3",
+      "&euro;": "\u20AC"
+    };
+    for (const [entity, replacement] of Object.entries(namedEntities)) {
+      str = str.split(entity).join(replacement);
+    }
+    if (str.includes("&#")) {
+      str = decodeEntities(str);
+    }
+    str = str.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[—–]/g, " - ").replace(/\s+/g, " ").trim();
+    return str;
   }
   /**
    * Infers category based on keywords in headline and description.
@@ -17056,18 +17102,21 @@ var GDTopicDiscoveryService = class {
   }
   /**
    * Deterministic template transformation when Groq is unavailable.
-   * Grounded in article headline, framing it into a neutral discussion debate.
+   * Grounded in article headline, framing it into a neutral discussion debate without nested quotes or conversational clickbait prefixes.
    */
   transformWithTemplate(headline, category) {
-    const clean = headline.replace(/[?.!]+$/, "").trim();
-    if (clean.toLowerCase().startsWith("should") || clean.toLowerCase().startsWith("is ") || clean.toLowerCase().startsWith("can ") || clean.toLowerCase().startsWith("will ")) {
+    const sanitized = this.sanitizeText(headline);
+    const clean = sanitized.replace(/[?.!]+$/, "").trim();
+    if (clean.toLowerCase().startsWith("should ") || clean.toLowerCase().startsWith("is ") || clean.toLowerCase().startsWith("can ") || clean.toLowerCase().startsWith("will ") || clean.toLowerCase().startsWith("how should ") || clean.toLowerCase().startsWith("how does ") || clean.toLowerCase().startsWith("why does ")) {
       return `${clean}?`;
     }
+    let subject = clean.replace(/^(watch|live|opinion|analysis|explained|report|exclusive|video|podcast|feature|review):\s*/i, "").replace(/^here'?s\s+(what|why|how|the)\s+/i, "").replace(/^(what|why|how)\s+(you\s+need\s+to\s+know\s+about|to\s+know\s+about)\s+/i, "").replace(/\s*-\s*feels\s+like\s*$/i, "").replace(/\s*-\s*explained\s*$/i, "").replace(/^["'“‘]+|["'”’]+$/g, "").trim();
+    if (!subject) subject = clean;
     const templates = [
-      `Should modern organizations and policymakers adapt rapidly to "${clean}"?`,
-      `How does "${clean}" influence future industry opportunities and ethical responsibilities?`,
-      `Is the trend towards "${clean}" a net positive or a disruption that requires stricter regulation?`,
-      `In the context of ${category}, how should candidates and companies address "${clean}"?`
+      `Should industry leaders and policymakers accelerate the adoption of ${subject}, or are the risks too substantial?`,
+      `How does ${subject} impact future workforce opportunities, ethics, and economic growth?`,
+      `Is the emergence of ${subject} a transformative positive development or a disruption requiring stricter oversight?`,
+      `In the context of ${category}, how should candidates and companies strategically address ${subject}?`
     ];
     const index = Math.abs(clean.length + category.length) % templates.length;
     return templates[index];
@@ -17085,16 +17134,18 @@ var GDTopicDiscoveryService = class {
       };
     }
     try {
+      const sanitizedHeadline = this.sanitizeText(article.headline);
+      const sanitizedDescription = this.sanitizeText(article.description);
       const prompt = `You are a placement committee director formulating a balanced, provocative, placement-grade Group Discussion (GD) question for college engineering and MBA graduates based on this recent news article.
 
-Article Headline: "${article.headline}"
-Short Summary: "${article.description}"
+Article Headline: "${sanitizedHeadline}"
+Short Summary: "${sanitizedDescription}"
 Category: "${article.category}"
 
 REQUIREMENTS:
 1. Formulate ONE neutral, open-ended discussion question (10-25 words) that invites balanced debate with valid points on both sides.
 2. Ground the question strictly in the article's theme. Do NOT hallucinate unsupported facts.
-3. Do NOT present the question as a direct quotation.
+3. Do NOT wrap the entire question in quotation marks.
 4. Output JSON strictly matching: {"question": "string"}
 
 JSON Output:`;
@@ -17111,8 +17162,9 @@ JSON Output:`;
         }
       );
       if (result?.question && result.question.trim().endsWith("?")) {
+        const cleanQuestion = this.sanitizeText(result.question).replace(/^["'“‘]+|["'”’]+$/g, "").trim();
         return {
-          question: result.question.trim(),
+          question: cleanQuestion,
           isAiGenerated: true
         };
       }
@@ -18269,7 +18321,16 @@ var GDSessionService = class {
   async createRoom(params) {
     let topic;
     if (params.topicOverride) {
-      topic = params.topicOverride;
+      topic = {
+        ...params.topicOverride,
+        question: gdTopicDiscoveryService.sanitizeText(params.topicOverride.question || "").replace(/^["'“‘]+|["'”’]+$/g, "").trim(),
+        originalTitle: gdTopicDiscoveryService.sanitizeText(
+          params.topicOverride.originalTitle || ""
+        ),
+        description: gdTopicDiscoveryService.sanitizeText(
+          params.topicOverride.description || ""
+        )
+      };
     } else {
       topic = await gdTopicDiscoveryService.getRandomTopic({
         category: params.category

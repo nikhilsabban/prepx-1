@@ -103,7 +103,19 @@ class GDSessionService {
     // 1. Resolve Discussion Topic
     let topic: IGDTopicMetadata;
     if (params.topicOverride) {
-      topic = params.topicOverride;
+      topic = {
+        ...params.topicOverride,
+        question: gdTopicDiscoveryService
+          .sanitizeText(params.topicOverride.question || "")
+          .replace(/^["'“‘]+|["'”’]+$/g, "")
+          .trim(),
+        originalTitle: gdTopicDiscoveryService.sanitizeText(
+          params.topicOverride.originalTitle || ""
+        ),
+        description: gdTopicDiscoveryService.sanitizeText(
+          params.topicOverride.description || ""
+        ),
+      };
     } else {
       topic = await gdTopicDiscoveryService.getRandomTopic({
         category: params.category,

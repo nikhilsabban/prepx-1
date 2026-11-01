@@ -39,6 +39,7 @@ import {
   type InvitationStatus,
 } from "../../services/gdService";
 import { toast } from "react-toastify";
+import { formatTopicDisplay } from "./GDRoomPage";
 
 const CATEGORIES = [
   "All",
@@ -500,7 +501,7 @@ export function GDHubPage() {
                   </div>
 
                   <h4 className="font-bold text-white text-sm line-clamp-2">
-                    "{inv.topic.question}"
+                    {formatTopicDisplay(inv.topic.question)}
                   </h4>
 
                   <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/80">
@@ -606,7 +607,7 @@ export function GDHubPage() {
             <div className="space-y-6">
               <div className="space-y-3">
                 <h3 className="text-xl sm:text-2xl font-black text-white leading-snug">
-                  "{topic.question}"
+                  {formatTopicDisplay(topic.question)}
                 </h3>
 
                 <p className="text-sm text-zinc-400 leading-relaxed max-w-4xl">
@@ -737,7 +738,7 @@ export function GDHubPage() {
                   </div>
 
                   <h4 className="font-bold text-white text-sm line-clamp-2">
-                    "{s.topic?.question}"
+                    {formatTopicDisplay(s.topic?.question || "")}
                   </h4>
 
                   <div className="flex items-center justify-between text-xs text-zinc-500 pt-2 border-t border-zinc-800/80">

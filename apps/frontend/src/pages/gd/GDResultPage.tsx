@@ -25,6 +25,7 @@ import {
   BookmarkCheck,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
+import { formatTopicDisplay } from "./GDRoomPage";
 import {
   fetchGDSession,
   toggleGDBookmark,
@@ -190,7 +191,7 @@ export function GDResultPage() {
             )}
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-white leading-tight">
-            "{session.topic.question}"
+            {formatTopicDisplay(session.topic.question)}
           </h1>
         </div>
 

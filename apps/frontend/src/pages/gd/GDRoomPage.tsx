@@ -63,6 +63,43 @@ const RTC_CONFIG: RTCConfiguration = {
   ],
 };
 
+export function formatTopicDisplay(raw: string): string {
+  if (!raw) return "";
+  let str = raw
+    .replace(/&#(\d+);/g, (_, dec) => {
+      try {
+        return String.fromCodePoint(parseInt(dec, 10));
+      } catch {
+        return "";
+      }
+    })
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+      try {
+        return String.fromCodePoint(parseInt(hex, 16));
+      } catch {
+        return "";
+      }
+    })
+    .replace(/&lsquo;/g, "‘")
+    .replace(/&rsquo;/g, "’")
+    .replace(/&ldquo;/g, "“")
+    .replace(/&rdquo;/g, "”")
+    .replace(/&ndash;/g, " - ")
+    .replace(/&mdash;/g, " - ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Strip leading and trailing quotation marks so it never double-quotes
+  str = str.replace(/^["'“‘]+|["'”’]+$/g, "").trim();
+  return `"${str}"`;
+}
+
 export function GDRoomPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
@@ -793,10 +830,11 @@ export function GDRoomPage() {
       }
     } catch (err: any) {
       console.warn("Failed to fetch moderator speech, falling back:", err);
-      const topicTitle =
+      const rawTitle =
         (session?.topic as any)?.question ||
         (session?.topic as any)?.originalTitle ||
         "Today's Discussion";
+      const topicTitle = formatTopicDisplay(rawTitle).replace(/^["']+|["']+$/g, "");
       const fallbackText = `Welcome to today's Group Discussion on ${topicTitle}. Each participant will have dedicated speaking turns to share their perspective. Please maintain constructive dialogue and professional decorum. Let us begin.`;
       speakBrowserFallback(fallbackText);
     }
@@ -1865,9 +1903,9 @@ export function GDRoomPage() {
 
             <h1
               className="text-sm sm:text-base font-bold text-white leading-snug break-words whitespace-normal"
-              title={session.topic.question}
+              title={formatTopicDisplay(session.topic.question).replace(/^["']+|["']+$/g, "")}
             >
-              "{session.topic.question}"
+              {formatTopicDisplay(session.topic.question)}
             </h1>
           </div>
 
