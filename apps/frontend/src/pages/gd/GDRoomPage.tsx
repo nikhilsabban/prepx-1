@@ -1843,8 +1843,8 @@ export function GDRoomPage() {
       <div className="border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md px-4 sm:px-8 py-3 sticky top-16 z-30">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           {/* Discussion Topic & Language Banner */}
-          <div className="space-y-1 max-w-3xl">
-            <div className="flex items-center gap-2">
+          <div className="space-y-1.5 flex-1 min-w-[280px]">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                 {session.topic.category}
               </span>
@@ -1863,7 +1863,10 @@ export function GDRoomPage() {
               )}
             </div>
 
-            <h1 className="text-sm sm:text-base font-bold text-white line-clamp-1">
+            <h1
+              className="text-sm sm:text-base font-bold text-white leading-snug break-words whitespace-normal"
+              title={session.topic.question}
+            >
               "{session.topic.question}"
             </h1>
           </div>
