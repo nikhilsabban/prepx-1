@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 import { gdTopicDiscoveryService } from "../services/gd/gdTopicDiscoveryService";
 import { gdSessionService } from "../services/gd/gdSessionService";
 import { GroupDiscussion } from "../models/GroupDiscussion";
@@ -660,5 +661,56 @@ export async function getModeratorSpeech(req: Request, res: Response): Promise<v
       success: false,
       message: error.message || "Failed to synthesize moderator speech",
     });
+  }
+}
+
+/**
+ * Issues short-lived, authenticated GD streaming STT tickets and configuration.
+ */
+export async function getGDTranscriptionCredentials(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const hasDeepgram = !!process.env.DEEPGRAM_API_KEY?.trim();
+    const hasMurf = !!process.env.MURF_API_KEY?.trim();
+    const isConfigured = hasDeepgram || hasMurf;
+
+    const defaultModel = process.env.DEEPGRAM_MODEL || "nova-3";
+    const defaultLanguage = process.env.DEEPGRAM_LANGUAGE || "en-IN";
+
+    if (!isConfigured) {
+      res.json({
+        configured: false,
+        proxyUrl: "",
+        token: "",
+        model: defaultModel,
+        language: defaultLanguage,
+        provider: "native",
+      });
+      return;
+    }
+
+    const payload = {
+      sub: req.user?._id || "gd-participant",
+      userId: req.user?._id || "gd-participant",
+      username: (req.user as any)?.username || "participant",
+      role: (req.user as any)?.role || "student",
+      purpose: "gd_transcription",
+    };
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET || "fallback_secret", {
+      expiresIn: "60m",
+    });
+
+    res.json({
+      configured: true,
+      proxyUrl: "/api/v1/gd/transcription/stream",
+      token,
+      model: defaultModel,
+      language: defaultLanguage,
+      provider: hasDeepgram ? "deepgram" : "murf",
+      sampleRate: 16000,
+      encoding: "linear16",
+    });
+  } catch (error: any) {
+    res.status(500).json({ configured: false, message: error.message });
   }
 }

@@ -1136,7 +1136,7 @@ var init_sttVerificationService = __esm({
 // src/index.ts
 import express from "express";
 import cors from "cors";
-import mongoose14 from "mongoose";
+import mongoose15 from "mongoose";
 
 // src/config/db.ts
 import mongoose from "mongoose";
@@ -9991,9 +9991,9 @@ var stacksQueues = [
     tags: ["stack", "string"],
     starterCode: buildStarter("string", "string", "simplifyPath"),
     reference: (input) => {
-      const path2 = lines(input)[0] ?? "";
+      const path3 = lines(input)[0] ?? "";
       const st = [];
-      for (const seg of path2.split("/")) {
+      for (const seg of path3.split("/")) {
         if (seg === "" || seg === ".") continue;
         if (seg === "..") st.pop();
         else st.push(seg);
@@ -12365,13 +12365,13 @@ var backtracking = [
     reference: (input) => {
       const nums = first8(input).sort((a, b) => a - b);
       const rows = [];
-      const path2 = [];
+      const path3 = [];
       const dfs = (i) => {
-        rows.push([...path2]);
+        rows.push([...path3]);
         for (let j = i; j < nums.length; j++) {
-          path2.push(nums[j]);
+          path3.push(nums[j]);
           dfs(j + 1);
-          path2.pop();
+          path3.pop();
         }
       };
       dfs(0);
@@ -12412,18 +12412,18 @@ var backtracking = [
       const nums = first8(input);
       const rows = [];
       const used = new Array(nums.length).fill(false);
-      const path2 = [];
+      const path3 = [];
       const dfs = () => {
-        if (path2.length === nums.length) {
-          rows.push([...path2]);
+        if (path3.length === nums.length) {
+          rows.push([...path3]);
           return;
         }
         for (let i = 0; i < nums.length; i++) {
           if (used[i]) continue;
           used[i] = true;
-          path2.push(nums[i]);
+          path3.push(nums[i]);
           dfs();
-          path2.pop();
+          path3.pop();
           used[i] = false;
         }
       };
@@ -12472,17 +12472,17 @@ var backtracking = [
       const cands = ints(l0).sort((a, b) => a - b);
       const target = int(l1);
       const rows = [];
-      const path2 = [];
+      const path3 = [];
       const dfs = (start, rem) => {
         if (rem === 0) {
-          rows.push([...path2]);
+          rows.push([...path3]);
           return;
         }
         for (let i = start; i < cands.length; i++) {
           if (cands[i] > rem) break;
-          path2.push(cands[i]);
+          path3.push(cands[i]);
           dfs(i, rem - cands[i]);
-          path2.pop();
+          path3.pop();
         }
       };
       dfs(0, target);
@@ -12530,18 +12530,18 @@ var backtracking = [
       const cands = ints(l0).sort((a, b) => a - b);
       const target = int(l1);
       const rows = [];
-      const path2 = [];
+      const path3 = [];
       const dfs = (start, rem) => {
         if (rem === 0) {
-          rows.push([...path2]);
+          rows.push([...path3]);
           return;
         }
         for (let i = start; i < cands.length; i++) {
           if (i > start && cands[i] === cands[i - 1]) continue;
           if (cands[i] > rem) break;
-          path2.push(cands[i]);
+          path3.push(cands[i]);
           dfs(i + 1, rem - cands[i]);
-          path2.pop();
+          path3.pop();
         }
       };
       dfs(0, target);
@@ -12679,7 +12679,7 @@ var backtracking = [
     reference: (input) => {
       const s = (lines(input)[0] ?? "").trim();
       const res = [];
-      const path2 = [];
+      const path3 = [];
       const isPal = (a, b) => {
         while (a < b) {
           if (s[a] !== s[b]) return false;
@@ -12690,14 +12690,14 @@ var backtracking = [
       };
       const dfs = (i) => {
         if (i === s.length) {
-          res.push(path2.join(" "));
+          res.push(path3.join(" "));
           return;
         }
         for (let j = i; j < s.length; j++) {
           if (isPal(i, j)) {
-            path2.push(s.slice(i, j + 1));
+            path3.push(s.slice(i, j + 1));
             dfs(j + 1);
-            path2.pop();
+            path3.pop();
           }
         }
       };
@@ -12810,14 +12810,14 @@ var backtracking = [
     reference: (input) => {
       const nums = first8(input).sort((a, b) => a - b);
       const rows = [];
-      const path2 = [];
+      const path3 = [];
       const dfs = (i) => {
-        rows.push([...path2]);
+        rows.push([...path3]);
         for (let j = i; j < nums.length; j++) {
           if (j > i && nums[j] === nums[j - 1]) continue;
-          path2.push(nums[j]);
+          path3.push(nums[j]);
           dfs(j + 1);
-          path2.pop();
+          path3.pop();
         }
       };
       dfs(0);
@@ -16560,7 +16560,8 @@ var codingRoutes_default = router4;
 import { Router as Router5 } from "express";
 
 // src/controllers/gdController.ts
-import mongoose13 from "mongoose";
+import mongoose14 from "mongoose";
+import jwt4 from "jsonwebtoken";
 
 // src/services/gd/gdTopicDiscoveryService.ts
 import { XMLParser } from "fast-xml-parser";
@@ -17292,7 +17293,7 @@ JSON Output:`;
 var gdTopicDiscoveryService = new GDTopicDiscoveryService();
 
 // src/services/gd/gdSessionService.ts
-import mongoose12 from "mongoose";
+import mongoose13 from "mongoose";
 
 // src/models/GroupDiscussion.ts
 import mongoose11, { Schema as Schema9 } from "mongoose";
@@ -17365,7 +17366,12 @@ var GDTranscriptSegmentSchema = new Schema9(
     durationSeconds: { type: Number, default: 0 },
     isInterruption: { type: Boolean, default: false },
     language: { type: String, default: "en" },
-    confidence: { type: Number, default: 1 }
+    confidence: { type: Number, default: 1 },
+    sequenceNumber: { type: Number },
+    isFinal: { type: Boolean, default: true },
+    turnId: { type: String },
+    startTime: { type: Number, default: 0 },
+    endTime: { type: Number, default: 0 }
   },
   { _id: false }
 );
@@ -17550,6 +17556,62 @@ var GroupDiscussion = mongoose11.model(
   "GroupDiscussion",
   GroupDiscussionSchema
 );
+
+// src/models/GDTranscript.ts
+import mongoose12, { Schema as Schema10 } from "mongoose";
+var GDTranscriptItemSchema = new Schema10(
+  {
+    segmentId: { type: String, required: true },
+    sequenceNumber: { type: Number, required: true },
+    text: { type: String, required: true },
+    startTime: { type: Number, default: 0 },
+    endTime: { type: Number, default: 0 },
+    confidence: { type: Number, default: 1 },
+    isFinal: { type: Boolean, default: true },
+    turnId: { type: String },
+    timestamp: { type: Date, default: Date.now }
+  },
+  { _id: false }
+);
+var GDTranscriptSchema = new Schema10(
+  {
+    sessionId: {
+      type: Schema10.Types.ObjectId,
+      ref: "GroupDiscussion",
+      required: true,
+      index: true
+    },
+    participantId: {
+      type: String,
+      required: true,
+      index: true
+    },
+    username: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      default: ""
+    },
+    segments: {
+      type: [GDTranscriptItemSchema],
+      default: []
+    },
+    totalSpeakingDuration: {
+      type: Number,
+      default: 0
+    },
+    wordCount: {
+      type: Number,
+      default: 0
+    }
+  },
+  {
+    timestamps: true
+  }
+);
+GDTranscriptSchema.index({ sessionId: 1, participantId: 1 }, { unique: true });
+GDTranscriptSchema.index({ sessionId: 1, createdAt: -1 });
+var GDTranscript = mongoose12.model("GDTranscript", GDTranscriptSchema);
 
 // src/services/gd/gdSessionService.ts
 init_User();
@@ -18213,7 +18275,7 @@ var GDSessionService = class {
         category: params.category
       });
     }
-    const adminObjectId = new mongoose12.Types.ObjectId(params.adminId);
+    const adminObjectId = new mongoose13.Types.ObjectId(params.adminId);
     const adminParticipant = {
       id: params.adminId,
       userId: adminObjectId,
@@ -18563,7 +18625,7 @@ var GDSessionService = class {
     if (isAdmin) {
       participant = {
         id: params.userId,
-        userId: new mongoose12.Types.ObjectId(params.userId),
+        userId: new mongoose13.Types.ObjectId(params.userId),
         username: cleanUsername,
         name: params.name || session.adminFullName || cleanUsername,
         role: "admin",
@@ -18593,7 +18655,7 @@ var GDSessionService = class {
     }
     participant = {
       id: params.userId,
-      userId: new mongoose12.Types.ObjectId(params.userId),
+      userId: new mongoose13.Types.ObjectId(params.userId),
       username: cleanUsername,
       name: params.name || cleanUsername,
       role: "student",
@@ -18621,7 +18683,7 @@ var GDSessionService = class {
    * Retrieves session by ID.
    */
   async getSessionById(sessionId) {
-    if (!mongoose12.Types.ObjectId.isValid(sessionId)) return null;
+    if (!mongoose13.Types.ObjectId.isValid(sessionId)) return null;
     return GroupDiscussion.findById(sessionId);
   }
   /**
@@ -18789,45 +18851,91 @@ var GDSessionService = class {
   }
   /**
    * Appends attributed transcript segment and updates participant metrics.
+   * Atomically and idempotently persists to MongoDB so concurrent speech events never collide.
    */
   async addTranscriptSegment(sessionId, segment) {
-    const session = await this.getSessionById(sessionId);
-    if (!session) return null;
+    if (!mongoose13.Types.ObjectId.isValid(sessionId)) return null;
     const words2 = segment.text ? segment.text.trim().split(/\s+/).filter(Boolean).length : 0;
+    const segId = segment.segmentId || segment.id || `seg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const duration = Math.max(1, segment.durationSeconds || Math.round(words2 / 2.5));
     const newSegment = {
-      id: `seg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: segId,
       participantId: segment.participantId,
       participantName: segment.participantName,
       username: segment.username?.toLowerCase().trim(),
       text: segment.text.trim(),
       timestamp: /* @__PURE__ */ new Date(),
-      durationSeconds: Math.max(1, segment.durationSeconds || Math.round(words2 / 2.5)),
+      durationSeconds: duration,
       isInterruption: segment.isInterruption || false,
       language: segment.language || "en",
-      confidence: segment.confidence || 1
+      confidence: segment.confidence || 1,
+      sequenceNumber: segment.sequenceNumber,
+      isFinal: segment.isFinal !== false,
+      turnId: segment.turnId,
+      startTime: segment.startTime,
+      endTime: segment.endTime
     };
-    session.transcript.push(newSegment);
-    const p = session.participants.find((part) => part.id === segment.participantId);
-    if (p) {
-      p.speakingTimeSeconds += newSegment.durationSeconds;
-      p.segmentCount += 1;
-      p.wordCount += words2;
-    }
-    const totalSpeaking = session.participants.reduce((sum, part) => sum + part.speakingTimeSeconds, 0);
-    if (totalSpeaking > 0) {
-      for (const part of session.participants) {
-        part.percentSpeakingTime = Math.round(part.speakingTimeSeconds / totalSpeaking * 100);
+    await GroupDiscussion.updateOne(
+      { _id: sessionId, "transcript.id": { $ne: segId } },
+      {
+        $push: { transcript: newSegment },
+        $inc: {
+          "metrics.totalWords": words2,
+          "metrics.totalDurationSeconds": duration
+        },
+        $set: {
+          status: "in_progress"
+        }
       }
+    );
+    await GroupDiscussion.updateOne(
+      { _id: sessionId, "participants.id": segment.participantId },
+      {
+        $inc: {
+          "participants.$.speakingTimeSeconds": duration,
+          "participants.$.segmentCount": 1,
+          "participants.$.wordCount": words2
+        }
+      }
+    );
+    GDTranscript.findOneAndUpdate(
+      { sessionId, participantId: segment.participantId },
+      {
+        $setOnInsert: {
+          sessionId,
+          participantId: segment.participantId,
+          username: segment.username?.toLowerCase().trim() || ""
+        },
+        $push: {
+          segments: {
+            segmentId: segId,
+            sequenceNumber: segment.sequenceNumber || 1,
+            text: newSegment.text,
+            startTime: newSegment.startTime || 0,
+            endTime: newSegment.endTime || 0,
+            confidence: newSegment.confidence || 1,
+            isFinal: true,
+            turnId: newSegment.turnId,
+            timestamp: newSegment.timestamp
+          }
+        },
+        $inc: {
+          totalSpeakingDuration: duration,
+          wordCount: words2
+        }
+      },
+      { upsert: true, new: true }
+    ).catch((err) => {
+      console.warn("[GDTranscript] Upsert error:", err.message);
+    });
+    const updated = await this.getSessionById(sessionId);
+    if (!updated) return null;
+    if (updated.currentTurn && updated.currentTurn.participantId === segment.participantId) {
+      updated.currentTurn.lastSpokeAt = /* @__PURE__ */ new Date();
+      updated.currentTurn.warningEmitted = false;
+      await updated.save();
     }
-    if (session.currentTurn && session.currentTurn.participantId === segment.participantId) {
-      session.currentTurn.lastSpokeAt = /* @__PURE__ */ new Date();
-      session.currentTurn.warningEmitted = false;
-    }
-    if (session.status === "preparing") {
-      session.status = "in_progress";
-    }
-    await session.save();
-    return session;
+    return updated;
   }
   /**
    * Concludes discussion session, computes metrics, generates individual student evaluations,
@@ -19330,7 +19438,7 @@ async function toggleGDBookmark(req, res) {
     }
     const currentBookmarks = (user.gdBookmarks || []).map((id) => id.toString());
     const isBookmarked = currentBookmarks.includes(roomId);
-    const objId = new mongoose13.Types.ObjectId(roomId);
+    const objId = new mongoose14.Types.ObjectId(roomId);
     const updated = await User.findByIdAndUpdate(
       userId,
       isBookmarked ? { $pull: { gdBookmarks: objId } } : { $addToSet: { gdBookmarks: objId } },
@@ -19400,6 +19508,48 @@ async function getModeratorSpeech(req, res) {
     });
   }
 }
+async function getGDTranscriptionCredentials(req, res) {
+  try {
+    const hasDeepgram = !!process.env.DEEPGRAM_API_KEY?.trim();
+    const hasMurf = !!process.env.MURF_API_KEY?.trim();
+    const isConfigured = hasDeepgram || hasMurf;
+    const defaultModel = process.env.DEEPGRAM_MODEL || "nova-3";
+    const defaultLanguage = process.env.DEEPGRAM_LANGUAGE || "en-IN";
+    if (!isConfigured) {
+      res.json({
+        configured: false,
+        proxyUrl: "",
+        token: "",
+        model: defaultModel,
+        language: defaultLanguage,
+        provider: "native"
+      });
+      return;
+    }
+    const payload = {
+      sub: req.user?._id || "gd-participant",
+      userId: req.user?._id || "gd-participant",
+      username: req.user?.username || "participant",
+      role: req.user?.role || "student",
+      purpose: "gd_transcription"
+    };
+    const token = jwt4.sign(payload, process.env.JWT_SECRET || "fallback_secret", {
+      expiresIn: "60m"
+    });
+    res.json({
+      configured: true,
+      proxyUrl: "/api/v1/gd/transcription/stream",
+      token,
+      model: defaultModel,
+      language: defaultLanguage,
+      provider: hasDeepgram ? "deepgram" : "murf",
+      sampleRate: 16e3,
+      encoding: "linear16"
+    });
+  } catch (error) {
+    res.status(500).json({ configured: false, message: error.message });
+  }
+}
 
 // src/routes/gdRoutes.ts
 var router5 = Router5();
@@ -19427,6 +19577,9 @@ router5.post("/rooms/:roomId/turns/pass", protect, passStudentTurn);
 router5.post("/rooms/:roomId/turns/skip", protect, skipStudentTurn);
 router5.post("/rooms/:roomId/moderator-speech", optionalAuth, getModeratorSpeech);
 router5.post("/sessions/:sessionId/moderator-speech", optionalAuth, getModeratorSpeech);
+router5.get("/transcription/credentials", optionalAuth, getGDTranscriptionCredentials);
+router5.get("/rooms/:roomId/stt-credentials", optionalAuth, getGDTranscriptionCredentials);
+router5.get("/sessions/:sessionId/stt-credentials", optionalAuth, getGDTranscriptionCredentials);
 router5.post("/sessions/:sessionId/transcript", optionalAuth, appendTranscriptSegment);
 router5.post("/rooms/:roomId/transcript", optionalAuth, appendTranscriptSegment);
 router5.post("/rooms/:roomId/end", protect, endGDSession);
@@ -19987,23 +20140,22 @@ function initGDWebSocketServer(server) {
             if (payload?.text && payload.text.trim()) {
               const currentSess = await gdSessionService.getSessionById(sessionId);
               const senderPartId = payload.participantId || ws.participantId;
-              if (currentSess && currentSess.status === "in_progress" && currentSess.currentTurn && currentSess.currentTurn.participantId && senderPartId && currentSess.currentTurn.participantId !== senderPartId) {
-                console.warn(
-                  `[GD WS] Ignored transcript from non-active speaker ${senderPartId}. Active turn: ${currentSess.currentTurn.participantId}`
-                );
-                break;
-              }
+              const isTurnSpeaker = currentSess?.currentTurn?.participantId === senderPartId;
+              const isInterruption = !isTurnSpeaker && currentSess?.status === "in_progress";
               const updatedSession = await gdSessionService.addTranscriptSegment(
                 sessionId,
                 {
+                  id: payload.id || payload.segmentId,
                   participantId: senderPartId || "candidate",
                   participantName: payload.participantName || ws.participantName || "Candidate",
                   username: payload.username || ws.username,
                   text: payload.text,
                   durationSeconds: payload.durationSeconds || 4,
-                  isInterruption: payload.isInterruption || false,
+                  isInterruption: payload.isInterruption ?? isInterruption,
                   language: payload.language || "en",
-                  confidence: payload.confidence || 1
+                  confidence: payload.confidence || 1,
+                  sequenceNumber: payload.sequenceNumber,
+                  turnId: currentSess?.currentTurn ? `${currentSess.currentTurn.participantId}-${currentSess.currentTurn.round}` : void 0
                 }
               );
               const lastSeg = updatedSession?.transcript.slice(-1)[0];
@@ -20185,19 +20337,383 @@ function initGDWebSocketServer(server) {
   return wss;
 }
 
-// src/services/sttProxyService.ts
-init_sttKeytermsService();
+// src/services/gd/gdTranscriptionGateway.ts
 import { WebSocketServer as WebSocketServer2, WebSocket as WebSocket2 } from "ws";
-import jwt4 from "jsonwebtoken";
+import jwt5 from "jsonwebtoken";
 import dotenv3 from "dotenv";
-dotenv3.config();
-var MURF_API_KEY = process.env.MURF_API_KEY || "";
+import path2 from "path";
+dotenv3.config({ path: path2.resolve(process.cwd(), ".env") });
+if (!process.env.DEEPGRAM_API_KEY) {
+  dotenv3.config({ path: path2.resolve(process.cwd(), "backend/.env") });
+}
 var DEEPGRAM_API_KEY2 = process.env.DEEPGRAM_API_KEY || "";
+var MURF_API_KEY = process.env.MURF_API_KEY || "";
 var JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
 var DEEPGRAM_MODEL2 = process.env.DEEPGRAM_MODEL || "nova-3";
 var DEEPGRAM_LANGUAGE2 = process.env.DEEPGRAM_LANGUAGE || "en-IN";
-function initSTTWebSocketServer(server) {
+function initGDTranscriptionGateway(server) {
   const wss = new WebSocketServer2({ noServer: true });
+  const activeStreams = /* @__PURE__ */ new Map();
+  server.on("upgrade", (request, socket, head) => {
+    const { pathname, searchParams } = new URL(request.url || "", `http://${request.headers.host}`);
+    if (pathname === "/api/v1/gd/transcription/stream" || pathname === "/ws/gd-transcription") {
+      let token = searchParams.get("token");
+      if (!token && request.headers.authorization) {
+        token = request.headers.authorization.replace(/^Bearer\s+/i, "");
+      }
+      const protocols = request.headers["sec-websocket-protocol"]?.split(",").map((p) => p.trim());
+      if (!token && protocols && protocols.length >= 2 && protocols[0] === "access_token") {
+        token = protocols[1];
+      }
+      let authedUserId = "";
+      if (token) {
+        try {
+          const decoded = jwt5.verify(token, JWT_SECRET);
+          authedUserId = decoded.id || decoded.userId || decoded._id || decoded.sub || "";
+        } catch {
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+      }
+      const sessionId = searchParams.get("sessionId") || searchParams.get("roomId") || "";
+      const participantId = searchParams.get("participantId") || authedUserId || "";
+      const username = searchParams.get("username") || "";
+      const participantName = searchParams.get("participantName") || username || "Participant";
+      const language = searchParams.get("language") || DEEPGRAM_LANGUAGE2;
+      const model = searchParams.get("model") || DEEPGRAM_MODEL2;
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        const client = ws;
+        client.sessionId = sessionId;
+        client.participantId = participantId;
+        client.participantName = participantName;
+        client.username = username.toLowerCase().trim();
+        client.language = language;
+        client.model = model;
+        client.sequenceCounter = 0;
+        client.isActive = true;
+        client.reconnectAttempts = 0;
+        client.lastActiveAt = Date.now();
+        wss.emit("connection", client, request);
+      });
+    }
+  });
+  wss.on("connection", async (client) => {
+    client.isAlive = true;
+    client.audioQueue = [];
+    const streamKey = `${client.sessionId}:${client.participantId}`;
+    const existing = activeStreams.get(streamKey);
+    if (existing && existing !== client && existing.readyState === WebSocket2.OPEN) {
+      try {
+        existing.close(1e3, "Replaced by newer participant stream connection");
+      } catch {
+      }
+    }
+    activeStreams.set(streamKey, client);
+    client.on("pong", () => {
+      client.isAlive = true;
+      client.lastActiveAt = Date.now();
+    });
+    const hasDeepgram = !!DEEPGRAM_API_KEY2.trim();
+    const hasMurf = !!MURF_API_KEY.trim();
+    if (!hasDeepgram && !hasMurf) {
+      console.error("[GD Transcription Gateway] Neither DEEPGRAM_API_KEY nor MURF_API_KEY is configured.");
+      if (client.readyState === WebSocket2.OPEN) {
+        client.send(
+          JSON.stringify({
+            type: "gd:transcription:error",
+            message: "Speech recognition service is not configured on server."
+          })
+        );
+        client.close(1011, "STT server configuration missing");
+      }
+      return;
+    }
+    await setupUpstream(client);
+    client.on("message", (data, isBinary) => {
+      client.lastActiveAt = Date.now();
+      if (isBinary) {
+        if (!client.isActive) return;
+        const chunk = Buffer.from(data);
+        const upstream = client.upstreamSocket;
+        if (upstream && upstream.readyState === WebSocket2.OPEN) {
+          upstream.send(chunk);
+        } else {
+          if (client.audioQueue && client.audioQueue.length < 250) {
+            client.audioQueue.push(chunk);
+          }
+        }
+      } else {
+        try {
+          const str = data.toString();
+          const parsed = JSON.parse(str);
+          const type = parsed.type;
+          if (type === "ping") {
+            client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+          } else if (type === "gd:transcription:start" || type === "start") {
+            client.isActive = true;
+            client.send(JSON.stringify({ type: "gd:transcription:resumed", participantId: client.participantId }));
+          } else if (type === "gd:transcription:stop" || type === "stop" || type === "Finalize") {
+            client.isActive = false;
+            if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket2.OPEN) {
+              client.upstreamSocket.send(JSON.stringify({ type: "Finalize" }));
+            }
+          }
+        } catch {
+        }
+      }
+    });
+    client.on("close", () => {
+      activeStreams.delete(streamKey);
+      client.audioQueue = [];
+      teardownUpstream(client);
+    });
+    client.on("error", (err) => {
+      console.warn(`[GD Transcription Gateway] Client socket error for ${streamKey}:`, err.message);
+      teardownUpstream(client);
+    });
+  });
+  const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      const client = ws;
+      if (client.isAlive === false) {
+        teardownUpstream(client);
+        return client.terminate();
+      }
+      client.isAlive = false;
+      client.ping();
+    });
+  }, 15e3);
+  wss.on("close", () => {
+    clearInterval(heartbeatInterval);
+  });
+  async function setupUpstream(client) {
+    teardownUpstream(client);
+    try {
+      let topicKeyterms = [];
+      if (client.sessionId) {
+        try {
+          const session = await gdSessionService.getSessionById(client.sessionId);
+          if (session?.topic) {
+            const rawText = `${session.topic.question} ${session.topic.originalTitle || ""} ${session.topic.category || ""} ${session.topic.description || ""}`;
+            topicKeyterms = Array.from(
+              new Set(
+                rawText.replace(/[^a-zA-Z0-9\s-]/g, " ").split(/\s+/).filter((w) => w.length >= 3 && !["and", "the", "for", "with", "this", "that", "from"].includes(w.toLowerCase()))
+              )
+            ).slice(0, 30);
+          }
+        } catch {
+        }
+      }
+      const dgModel = DEEPGRAM_MODEL2 || client.model || "nova-3";
+      const dgLang = DEEPGRAM_LANGUAGE2 || client.language || "en-IN";
+      const urlObj = new URL("wss://api.deepgram.com/v1/listen");
+      urlObj.searchParams.set("model", dgModel);
+      urlObj.searchParams.set("language", dgLang);
+      urlObj.searchParams.set("encoding", "linear16");
+      urlObj.searchParams.set("sample_rate", "16000");
+      urlObj.searchParams.set("channels", "1");
+      urlObj.searchParams.set("smart_format", "true");
+      urlObj.searchParams.set("punctuate", "true");
+      urlObj.searchParams.set("interim_results", "true");
+      urlObj.searchParams.set("no_delay", "true");
+      urlObj.searchParams.set("endpointing", "300");
+      urlObj.searchParams.set("utterance_end_ms", "1000");
+      urlObj.searchParams.set("filler_words", "true");
+      for (const kt of topicKeyterms) {
+        if (kt.trim()) {
+          urlObj.searchParams.append("keyterm", kt.trim());
+        }
+      }
+      const upstreamSocket = new WebSocket2(urlObj.toString(), {
+        headers: {
+          Authorization: `Token ${DEEPGRAM_API_KEY2.trim()}`
+        }
+      });
+      client.upstreamSocket = upstreamSocket;
+      upstreamSocket.on("open", () => {
+        client.reconnectAttempts = 0;
+        if (client.readyState === WebSocket2.OPEN) {
+          client.send(
+            JSON.stringify({
+              type: "gd:transcription:connected",
+              status: "listening",
+              provider: "deepgram",
+              model: dgModel,
+              language: dgLang,
+              participantId: client.participantId,
+              sessionId: client.sessionId,
+              message: "Deepgram Nova-3 PCM stream established."
+            })
+          );
+        }
+        if (client.audioQueue && client.audioQueue.length > 0) {
+          for (const frame of client.audioQueue) {
+            if (upstreamSocket.readyState === WebSocket2.OPEN) {
+              upstreamSocket.send(frame);
+            }
+          }
+          client.audioQueue = [];
+        }
+      });
+      upstreamSocket.on("message", async (data) => {
+        try {
+          const raw = data.toString();
+          const parsed = JSON.parse(raw);
+          const alt = parsed.channel?.alternatives?.[0];
+          const transcriptText = (alt?.transcript || parsed.transcript || parsed.text || "").trim();
+          if (!transcriptText) return;
+          const isFinal = parsed.is_final === true || parsed.speech_final === true;
+          const confidence = alt?.confidence ?? (isFinal ? 0.98 : 0.85);
+          client.sequenceCounter = (client.sequenceCounter || 0) + 1;
+          const segmentId = `seg-${client.sessionId}-${client.participantId}-${client.sequenceCounter}-${Date.now().toString(36)}`;
+          const normalizedEvent = {
+            type: isFinal ? "gd:transcription:final" : "gd:transcription:interim",
+            sessionId: client.sessionId || "",
+            participantId: client.participantId || "candidate",
+            participantName: client.participantName || "Candidate",
+            username: client.username || "candidate",
+            segmentId,
+            sequenceNumber: client.sequenceCounter,
+            text: transcriptText,
+            isFinal,
+            startTime: parsed.start,
+            endTime: parsed.start !== void 0 && parsed.duration !== void 0 ? parsed.start + parsed.duration : void 0,
+            confidence,
+            provider: "deepgram",
+            timestamp: (/* @__PURE__ */ new Date()).toISOString()
+          };
+          if (client.readyState === WebSocket2.OPEN) {
+            client.send(JSON.stringify(normalizedEvent));
+          }
+          if (isFinal) {
+            let savedSession = null;
+            if (client.sessionId) {
+              savedSession = await gdSessionService.addTranscriptSegment(client.sessionId, {
+                segmentId,
+                participantId: client.participantId || "candidate",
+                participantName: client.participantName || "Candidate",
+                username: client.username,
+                text: transcriptText,
+                durationSeconds: parsed.duration ? Math.max(1, Math.round(parsed.duration)) : Math.max(1, Math.round(transcriptText.split(/\s+/).length / 2.5)),
+                isInterruption: false,
+                confidence,
+                sequenceNumber: client.sequenceCounter,
+                startTime: parsed.start,
+                endTime: parsed.start !== void 0 && parsed.duration !== void 0 ? parsed.start + parsed.duration : void 0
+              });
+            }
+            const payload = {
+              segment: savedSession?.transcript.slice(-1)[0] || {
+                id: segmentId,
+                participantId: client.participantId,
+                participantName: client.participantName,
+                username: client.username,
+                text: transcriptText,
+                durationSeconds: parsed.duration || 3,
+                confidence,
+                timestamp: /* @__PURE__ */ new Date()
+              },
+              participants: savedSession?.participants,
+              currentTurn: savedSession?.currentTurn
+            };
+            broadcastToGDRoom(client.sessionId || "", {
+              type: "gd:transcription:final",
+              payload: normalizedEvent
+            });
+            broadcastToGDRoom(client.sessionId || "", {
+              type: "new_transcript_segment",
+              payload
+            });
+          } else {
+            broadcastToGDRoom(client.sessionId || "", {
+              type: "gd:transcription:interim",
+              payload: normalizedEvent
+            });
+            broadcastToGDRoom(client.sessionId || "", {
+              type: "participant_interim_transcript",
+              payload: {
+                participantId: client.participantId,
+                username: client.username,
+                participantName: client.participantName,
+                text: transcriptText
+              }
+            });
+          }
+        } catch (err) {
+          console.warn("[GD Transcription Gateway] Error processing transcript packet:", err.message);
+        }
+      });
+      upstreamSocket.on("error", (err) => {
+        console.warn(`[GD Transcription Gateway] Deepgram upstream error for participant ${client.participantId}:`, err.message);
+        handleUpstreamReconnect(client);
+      });
+      upstreamSocket.on("close", () => {
+        if (client.readyState === WebSocket2.OPEN && client.isActive) {
+          handleUpstreamReconnect(client);
+        }
+      });
+    } catch (err) {
+      console.error("[GD Transcription Gateway] Upstream initialization failed:", err.message);
+      handleUpstreamReconnect(client);
+    }
+  }
+  function handleUpstreamReconnect(client) {
+    teardownUpstream(client);
+    if (client.readyState !== WebSocket2.OPEN) return;
+    client.reconnectAttempts = (client.reconnectAttempts || 0) + 1;
+    if (client.reconnectAttempts > 5) {
+      client.send(
+        JSON.stringify({
+          type: "gd:transcription:error",
+          message: "Unable to maintain speech recognition connection. Please check your network."
+        })
+      );
+      return;
+    }
+    const delay = Math.min(5e3, 500 * Math.pow(2, client.reconnectAttempts - 1) + Math.random() * 300);
+    client.send(
+      JSON.stringify({
+        type: "gd:transcription:reconnecting",
+        attempt: client.reconnectAttempts,
+        message: "Reconnecting speech recognition engine..."
+      })
+    );
+    setTimeout(() => {
+      if (client.readyState === WebSocket2.OPEN) {
+        setupUpstream(client);
+      }
+    }, delay);
+  }
+  function teardownUpstream(client) {
+    const upstream = client.upstreamSocket;
+    if (upstream) {
+      try {
+        if (upstream.readyState === WebSocket2.OPEN) {
+          upstream.send(JSON.stringify({ type: "CloseStream" }));
+        }
+        upstream.close();
+      } catch {
+      }
+      client.upstreamSocket = null;
+    }
+  }
+  return wss;
+}
+
+// src/services/sttProxyService.ts
+init_sttKeytermsService();
+import { WebSocketServer as WebSocketServer3, WebSocket as WebSocket3 } from "ws";
+import jwt6 from "jsonwebtoken";
+import dotenv4 from "dotenv";
+dotenv4.config();
+var MURF_API_KEY2 = process.env.MURF_API_KEY || "";
+var DEEPGRAM_API_KEY3 = process.env.DEEPGRAM_API_KEY || "";
+var JWT_SECRET2 = process.env.JWT_SECRET || "fallback_secret";
+var DEEPGRAM_MODEL3 = process.env.DEEPGRAM_MODEL || "nova-3";
+var DEEPGRAM_LANGUAGE3 = process.env.DEEPGRAM_LANGUAGE || "en-IN";
+function initSTTWebSocketServer(server) {
+  const wss = new WebSocketServer3({ noServer: true });
   server.on("upgrade", (request, socket, head) => {
     const { pathname, searchParams } = new URL(request.url || "", `http://${request.headers.host}`);
     if (pathname === "/api/v1/interview/stt-stream" || pathname === "/ws/interview-stt") {
@@ -20212,7 +20728,7 @@ function initSTTWebSocketServer(server) {
       let userId = "";
       if (token) {
         try {
-          const decoded = jwt4.verify(token, JWT_SECRET);
+          const decoded = jwt6.verify(token, JWT_SECRET2);
           userId = decoded.id || decoded.userId || decoded._id || "";
         } catch {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -20226,8 +20742,8 @@ function initSTTWebSocketServer(server) {
         client.interviewId = searchParams.get("interviewId") || "";
         client.participantId = searchParams.get("participantId") || userId || "speaker";
         client.username = searchParams.get("username") || "";
-        client.requestedLang = searchParams.get("language") || DEEPGRAM_LANGUAGE2;
-        client.requestedModel = searchParams.get("model") || DEEPGRAM_MODEL2;
+        client.requestedLang = searchParams.get("language") || DEEPGRAM_LANGUAGE3;
+        client.requestedModel = searchParams.get("model") || DEEPGRAM_MODEL3;
         wss.emit("connection", client, request);
       });
     }
@@ -20238,11 +20754,11 @@ function initSTTWebSocketServer(server) {
     client.on("pong", () => {
       client.isAlive = true;
     });
-    const hasMurf = !!MURF_API_KEY.trim();
-    const hasDeepgram = !!DEEPGRAM_API_KEY2.trim();
+    const hasMurf = !!MURF_API_KEY2.trim();
+    const hasDeepgram = !!DEEPGRAM_API_KEY3.trim();
     if (!hasMurf && !hasDeepgram) {
       console.error("[STT Gateway] Neither MURF_API_KEY nor DEEPGRAM_API_KEY configured on backend server.");
-      if (client.readyState === WebSocket2.OPEN) {
+      if (client.readyState === WebSocket3.OPEN) {
         client.send(
           JSON.stringify({
             type: "error",
@@ -20258,7 +20774,7 @@ function initSTTWebSocketServer(server) {
       const upstream = client.upstreamSocket;
       if (isBinary) {
         const chunk = Buffer.from(data);
-        if (upstream && upstream.readyState === WebSocket2.OPEN) {
+        if (upstream && upstream.readyState === WebSocket3.OPEN) {
           upstream.send(chunk);
         } else {
           if (client.audioQueue && client.audioQueue.length < 250) {
@@ -20272,14 +20788,14 @@ function initSTTWebSocketServer(server) {
           if (parsed.type === "ping") {
             client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
           } else if (parsed.type === "Finalize" || parsed.type === "finalize") {
-            if (upstream && upstream.readyState === WebSocket2.OPEN) {
+            if (upstream && upstream.readyState === WebSocket3.OPEN) {
               upstream.send(JSON.stringify({ type: "Finalize" }));
             }
-          } else if (upstream && upstream.readyState === WebSocket2.OPEN) {
+          } else if (upstream && upstream.readyState === WebSocket3.OPEN) {
             upstream.send(str);
           }
         } catch {
-          if (upstream && upstream.readyState === WebSocket2.OPEN) {
+          if (upstream && upstream.readyState === WebSocket3.OPEN) {
             upstream.send(data.toString());
           }
         }
@@ -20290,7 +20806,7 @@ function initSTTWebSocketServer(server) {
       const upstream = client.upstreamSocket;
       if (upstream) {
         try {
-          if (upstream.readyState === WebSocket2.OPEN) {
+          if (upstream.readyState === WebSocket3.OPEN) {
             upstream.send(JSON.stringify({ type: client.provider === "murf" ? "Finalize" : "CloseStream" }));
           }
           upstream.close();
@@ -20315,16 +20831,16 @@ function initSTTWebSocketServer(server) {
         if (provider2 === "murf") {
           const murfLang = (client.requestedLang || "en-IN").replace("-", "_");
           const murfUrl = `wss://in.api.murf.ai/v1/transcription/stream-input?api_key=${encodeURIComponent(
-            MURF_API_KEY.trim()
+            MURF_API_KEY2.trim()
           )}&language=${encodeURIComponent(murfLang)}&text_formatting=true`;
-          upstreamSocket = new WebSocket2(murfUrl, {
+          upstreamSocket = new WebSocket3(murfUrl, {
             headers: {
-              "api-key": MURF_API_KEY.trim()
+              "api-key": MURF_API_KEY2.trim()
             }
           });
         } else {
-          const dgModel = DEEPGRAM_MODEL2 || client.requestedModel || "nova-3";
-          const dgLang = DEEPGRAM_LANGUAGE2 || client.requestedLang || "en-IN";
+          const dgModel = DEEPGRAM_MODEL3 || client.requestedModel || "nova-3";
+          const dgLang = DEEPGRAM_LANGUAGE3 || client.requestedLang || "en-IN";
           const urlObj = new URL("wss://api.deepgram.com/v1/listen");
           urlObj.searchParams.set("model", dgModel);
           urlObj.searchParams.set("language", dgLang);
@@ -20342,9 +20858,9 @@ function initSTTWebSocketServer(server) {
               }
             }
           }
-          upstreamSocket = new WebSocket2(urlObj.toString(), {
+          upstreamSocket = new WebSocket3(urlObj.toString(), {
             headers: {
-              Authorization: `Token ${DEEPGRAM_API_KEY2.trim()}`
+              Authorization: `Token ${DEEPGRAM_API_KEY3.trim()}`
             }
           });
         }
@@ -20360,7 +20876,7 @@ function initSTTWebSocketServer(server) {
           connectUpstream("deepgram");
           return;
         }
-        if (client.readyState === WebSocket2.OPEN) {
+        if (client.readyState === WebSocket3.OPEN) {
           client.send(
             JSON.stringify({
               type: "error",
@@ -20373,13 +20889,13 @@ function initSTTWebSocketServer(server) {
         return;
       }
       upstreamSocket.on("open", () => {
-        if (client.readyState === WebSocket2.OPEN) {
+        if (client.readyState === WebSocket3.OPEN) {
           client.send(
             JSON.stringify({
               type: "ready",
               status: "listening",
               provider: provider2,
-              model: provider2 === "murf" ? "murf-stt" : DEEPGRAM_MODEL2,
+              model: provider2 === "murf" ? "murf-stt" : DEEPGRAM_MODEL3,
               language: client.requestedLang,
               participantId: client.participantId,
               username: client.username,
@@ -20390,7 +20906,7 @@ function initSTTWebSocketServer(server) {
         }
         if (client.audioQueue && client.audioQueue.length > 0) {
           for (const chunk of client.audioQueue) {
-            if (upstreamSocket && upstreamSocket.readyState === WebSocket2.OPEN) {
+            if (upstreamSocket && upstreamSocket.readyState === WebSocket3.OPEN) {
               upstreamSocket.send(chunk);
             }
           }
@@ -20398,7 +20914,7 @@ function initSTTWebSocketServer(server) {
         }
       });
       upstreamSocket.on("message", (data) => {
-        if (client.readyState !== WebSocket2.OPEN) return;
+        if (client.readyState !== WebSocket3.OPEN) return;
         try {
           const rawStr = data.toString();
           const parsed = JSON.parse(rawStr);
@@ -20452,7 +20968,7 @@ function initSTTWebSocketServer(server) {
       });
       upstreamSocket.on("error", (err) => {
         console.error(`[STT Gateway] ${provider2} socket error:`, err.message);
-        if (provider2 === "deepgram" && hasMurf && client.readyState === WebSocket2.OPEN) {
+        if (provider2 === "deepgram" && hasMurf && client.readyState === WebSocket3.OPEN) {
           console.warn("[STT Gateway] Switching upstream from Deepgram to Murf AI fallback...");
           client.send(
             JSON.stringify({
@@ -20467,7 +20983,7 @@ function initSTTWebSocketServer(server) {
           }
           connectUpstream("murf");
           return;
-        } else if (provider2 === "murf" && hasDeepgram && client.readyState === WebSocket2.OPEN) {
+        } else if (provider2 === "murf" && hasDeepgram && client.readyState === WebSocket3.OPEN) {
           console.warn("[STT Gateway] Switching upstream from Murf to Deepgram fallback...");
           client.send(
             JSON.stringify({
@@ -20483,7 +20999,7 @@ function initSTTWebSocketServer(server) {
           connectUpstream("deepgram");
           return;
         }
-        if (client.readyState === WebSocket2.OPEN) {
+        if (client.readyState === WebSocket3.OPEN) {
           client.send(
             JSON.stringify({
               type: "error",
@@ -20494,7 +21010,7 @@ function initSTTWebSocketServer(server) {
         }
       });
       upstreamSocket.on("close", (code, reason) => {
-        if (client.readyState === WebSocket2.OPEN) {
+        if (client.readyState === WebSocket3.OPEN) {
           client.close(code, reason.toString());
         }
       });
@@ -20578,7 +21094,7 @@ app.use(
   })
 );
 app.use((_req, _res, next) => {
-  if (mongoose14.connection.readyState === 1) {
+  if (mongoose15.connection.readyState === 1) {
     return next();
   }
   connectDB().then(() => next()).catch((err) => {
@@ -20635,6 +21151,7 @@ if (!process.env.VERCEL) {
   const server = app.listen(PORT, () => {
     console.log(`\u{1F680} Server running on port ${PORT}`);
     initGDWebSocketServer(server);
+    initGDTranscriptionGateway(server);
     initSTTWebSocketServer(server);
     const hasGroq = !!process.env.GROQ_API_KEY?.trim();
     const hasMurf = !!process.env.MURF_API_KEY?.trim();

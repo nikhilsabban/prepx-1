@@ -348,34 +348,23 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
             if (payload?.text && payload.text.trim()) {
               const currentSess = await gdSessionService.getSessionById(sessionId);
               const senderPartId = payload.participantId || ws.participantId;
-
-              // If discussion is actively in progress with an assigned speaker,
-              // prevent non-designated speakers from polluting the room transcript
-              if (
-                currentSess &&
-                currentSess.status === "in_progress" &&
-                currentSess.currentTurn &&
-                currentSess.currentTurn.participantId &&
-                senderPartId &&
-                currentSess.currentTurn.participantId !== senderPartId
-              ) {
-                console.warn(
-                  `[GD WS] Ignored transcript from non-active speaker ${senderPartId}. Active turn: ${currentSess.currentTurn.participantId}`
-                );
-                break;
-              }
+              const isTurnSpeaker = currentSess?.currentTurn?.participantId === senderPartId;
+              const isInterruption = !isTurnSpeaker && currentSess?.status === "in_progress";
 
               const updatedSession = await gdSessionService.addTranscriptSegment(
                 sessionId,
                 {
+                  id: payload.id || payload.segmentId,
                   participantId: senderPartId || "candidate",
                   participantName: payload.participantName || ws.participantName || "Candidate",
                   username: payload.username || ws.username,
                   text: payload.text,
                   durationSeconds: payload.durationSeconds || 4,
-                  isInterruption: payload.isInterruption || false,
+                  isInterruption: payload.isInterruption ?? isInterruption,
                   language: payload.language || "en",
                   confidence: payload.confidence || 1.0,
+                  sequenceNumber: payload.sequenceNumber,
+                  turnId: currentSess?.currentTurn ? `${currentSess.currentTurn.participantId}-${currentSess.currentTurn.round}` : undefined,
                 }
               );
 

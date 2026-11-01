@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { GroupDiscussion } from "../../models/GroupDiscussion";
+import { GDTranscript } from "../../models/GDTranscript";
 import { User } from "../../models/User";
 import type {
   IGroupDiscussion,
@@ -887,10 +888,13 @@ class GDSessionService {
 
   /**
    * Appends attributed transcript segment and updates participant metrics.
+   * Atomically and idempotently persists to MongoDB so concurrent speech events never collide.
    */
   public async addTranscriptSegment(
     sessionId: string,
     segment: {
+      id?: string;
+      segmentId?: string;
       participantId: string;
       participantName: string;
       username?: string;
@@ -899,56 +903,108 @@ class GDSessionService {
       isInterruption?: boolean;
       language?: string;
       confidence?: number;
+      sequenceNumber?: number;
+      isFinal?: boolean;
+      turnId?: string;
+      startTime?: number;
+      endTime?: number;
     }
   ): Promise<IGroupDiscussion | null> {
-    const session = await this.getSessionById(sessionId);
-    if (!session) return null;
+    if (!mongoose.Types.ObjectId.isValid(sessionId)) return null;
 
     const words = segment.text ? segment.text.trim().split(/\s+/).filter(Boolean).length : 0;
+    const segId = segment.segmentId || segment.id || `seg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const duration = Math.max(1, segment.durationSeconds || Math.round(words / 2.5));
 
     const newSegment: IGDTranscriptSegment = {
-      id: `seg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: segId,
       participantId: segment.participantId,
       participantName: segment.participantName,
       username: segment.username?.toLowerCase().trim(),
       text: segment.text.trim(),
       timestamp: new Date(),
-      durationSeconds: Math.max(1, segment.durationSeconds || Math.round(words / 2.5)),
+      durationSeconds: duration,
       isInterruption: segment.isInterruption || false,
       language: segment.language || "en",
       confidence: segment.confidence || 1.0,
+      sequenceNumber: segment.sequenceNumber,
+      isFinal: segment.isFinal !== false,
+      turnId: segment.turnId,
+      startTime: segment.startTime,
+      endTime: segment.endTime,
     };
 
-    session.transcript.push(newSegment);
-
-    // Update participant metrics
-    const p = session.participants.find((part) => part.id === segment.participantId);
-    if (p) {
-      p.speakingTimeSeconds += newSegment.durationSeconds;
-      p.segmentCount += 1;
-      p.wordCount += words;
-    }
-
-    // Recompute speaking percentages
-    const totalSpeaking = session.participants.reduce((sum, part) => sum + part.speakingTimeSeconds, 0);
-    if (totalSpeaking > 0) {
-      for (const part of session.participants) {
-        part.percentSpeakingTime = Math.round((part.speakingTimeSeconds / totalSpeaking) * 100);
+    // 1. Idempotent atomic push to GroupDiscussion document
+    await GroupDiscussion.updateOne(
+      { _id: sessionId, "transcript.id": { $ne: segId } },
+      {
+        $push: { transcript: newSegment },
+        $inc: {
+          "metrics.totalWords": words,
+          "metrics.totalDurationSeconds": duration,
+        },
+        $set: {
+          status: "in_progress",
+        },
       }
+    );
+
+    // 2. Increment participant speaking metrics atomically
+    await GroupDiscussion.updateOne(
+      { _id: sessionId, "participants.id": segment.participantId },
+      {
+        $inc: {
+          "participants.$.speakingTimeSeconds": duration,
+          "participants.$.segmentCount": 1,
+          "participants.$.wordCount": words,
+        },
+      }
+    );
+
+    // 3. Atomically persist to dedicated GDTranscript collection
+    GDTranscript.findOneAndUpdate(
+      { sessionId, participantId: segment.participantId },
+      {
+        $setOnInsert: {
+          sessionId,
+          participantId: segment.participantId,
+          username: segment.username?.toLowerCase().trim() || "",
+        },
+        $push: {
+          segments: {
+            segmentId: segId,
+            sequenceNumber: segment.sequenceNumber || 1,
+            text: newSegment.text,
+            startTime: newSegment.startTime || 0,
+            endTime: newSegment.endTime || 0,
+            confidence: newSegment.confidence || 1.0,
+            isFinal: true,
+            turnId: newSegment.turnId,
+            timestamp: newSegment.timestamp,
+          },
+        },
+        $inc: {
+          totalSpeakingDuration: duration,
+          wordCount: words,
+        },
+      },
+      { upsert: true, new: true }
+    ).catch((err: any) => {
+      console.warn("[GDTranscript] Upsert error:", err.message);
+    });
+
+    // 4. Retrieve fresh authoritative session state to recompute percentage speaking time
+    const updated = await this.getSessionById(sessionId);
+    if (!updated) return null;
+
+    // Reset silence monitor if speaker is on current turn
+    if (updated.currentTurn && updated.currentTurn.participantId === segment.participantId) {
+      updated.currentTurn.lastSpokeAt = new Date();
+      updated.currentTurn.warningEmitted = false;
+      await updated.save();
     }
 
-    // Reset silence timer on the current turn if speaker is active
-    if (session.currentTurn && session.currentTurn.participantId === segment.participantId) {
-      session.currentTurn.lastSpokeAt = new Date();
-      session.currentTurn.warningEmitted = false;
-    }
-
-    if (session.status === "preparing") {
-      session.status = "in_progress";
-    }
-
-    await session.save();
-    return session;
+    return updated;
   }
 
   /**

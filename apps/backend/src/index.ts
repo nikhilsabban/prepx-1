@@ -19,6 +19,7 @@ import codingRoutes from "./routes/codingRoutes";
 import gdRoutes from "./routes/gdRoutes";
 import gamificationRoutes from "./routes/gamificationRoutes";
 import { initGDWebSocketServer } from "./services/gd/gdWebSocketService";
+import { initGDTranscriptionGateway } from "./services/gd/gdTranscriptionGateway";
 import { initSTTWebSocketServer } from "./services/sttProxyService";
 
 const app = express();
@@ -147,6 +148,9 @@ if (!process.env.VERCEL) {
     
     // Attach Group Discussion real-time WebSocket server
     initGDWebSocketServer(server);
+
+    // Attach Group Discussion real-time transcription gateway
+    initGDTranscriptionGateway(server);
 
     // Attach Secure STT Streaming WebSocket server
     initSTTWebSocketServer(server);

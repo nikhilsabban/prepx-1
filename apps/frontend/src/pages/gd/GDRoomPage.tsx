@@ -48,6 +48,7 @@ import {
   type IGDTranscriptSegment,
   type IGDCurrentTurn,
 } from "../../services/gdService";
+import { GDAudioCaptureSession } from "../../services/gdAudioCaptureService";
 import { fetchSTTCredentials } from "../../services/interviewService";
 import { toast } from "react-toastify";
 import { getErrorMessage } from "../../lib/utils";
@@ -129,13 +130,14 @@ export function GDRoomPage() {
   const [liveTranscriptPreview, setLiveTranscriptPreview] = useState("");
   const [remoteInterimTranscripts, setRemoteInterimTranscripts] = useState<Record<string, string>>({});
 
-  // Murf AI Speech & Moderator state
-  const [sttEngine, setSttEngine] = useState<"murf" | "native" | "none">("none");
+  // Speech-to-Text & Moderator state
+  const [sttEngine, setSttEngine] = useState<"deepgram" | "murf" | "native" | "none">("none");
   const [isModeratorPlaying, setIsModeratorPlaying] = useState(false);
   const [moderatorText, setModeratorText] = useState("");
   const moderatorAudioRef = useRef<HTMLAudioElement | null>(null);
   const murfSocketRef = useRef<WebSocket | null>(null);
   const murfRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioCaptureSessionRef = useRef<GDAudioCaptureSession | null>(null);
 
   // Refs
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -593,144 +595,91 @@ export function GDRoomPage() {
     }
   }
 
-  // 4. Murf Streaming STT with Web Speech API fallback
+  // 4. Distributed, Participant-Isolated Real-Time AudioWorklet & Deepgram Nova-3 PCM Capture
   function startMurfOrNativeSTT() {
     if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
     if (!isMicOnRef.current || !localStreamRef.current) return;
 
-    if (murfSocketRef.current && murfSocketRef.current.readyState === WebSocket.OPEN) {
+    const participant = currentParticipantRef.current || currentParticipant;
+    if (!participant || !sessionId) return;
+
+    if (audioCaptureSessionRef.current) {
+      audioCaptureSessionRef.current.resume();
+      setSttEngine("deepgram");
       return;
     }
 
-    fetchSTTCredentials()
-      .then((creds) => {
-        if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
-        if (creds.configured && localStreamRef.current && isMicOnRef.current) {
-          let wsBase = BACKEND_URL;
-          if (!wsBase.startsWith("http")) wsBase = window.location.origin;
-          const wsProtocol = wsBase.startsWith("https") ? "wss:" : "ws:";
-          const wsHost = wsBase.replace(/^https?:\/\//i, "");
-
-          const participant = currentParticipantRef.current || currentParticipant;
-          const expectedLang = "en_IN";
-          const modelParam = creds.recommendedModel || (creds.provider === "murf" ? "murf-stt" : "nova-3");
-
-          const wsUrl = `${wsProtocol}//${wsHost}${creds.proxyUrl}?token=${encodeURIComponent(
-            creds.token || ""
-          )}&model=${encodeURIComponent(modelParam)}&language=${encodeURIComponent(expectedLang)}&interviewId=${encodeURIComponent(sessionId || "")}&participantId=${encodeURIComponent(participant?.id || "")}&username=${encodeURIComponent(participant?.username || "")}`;
-
-          const socket = new WebSocket(wsUrl);
-          murfSocketRef.current = socket;
-
-          socket.onopen = () => {
-            setSttEngine("murf");
-            const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-              ? "audio/webm;codecs=opus"
-              : MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
-                ? "audio/ogg;codecs=opus"
-                : undefined;
-
-            try {
-              const recorder = new MediaRecorder(localStreamRef.current!, mime ? { mimeType: mime } : undefined);
-              murfRecorderRef.current = recorder;
-              recorder.start(250);
-
-              recorder.ondataavailable = (e) => {
-                if (socket.readyState === WebSocket.OPEN && e.data.size > 0 && isMicOnRef.current) {
-                  socket.send(e.data);
-                }
-              };
-            } catch (recErr) {
-              console.warn("Murf MediaRecorder error, using native STT fallback:", recErr);
-              startSpeechRecognition();
-            }
-          };
-
-          socket.onmessage = (event) => {
-            try {
-              const data = JSON.parse(event.data);
-              if (data.type === "ready") return;
-
-              const transcript = data.transcript || data.channel?.alternatives?.[0]?.transcript;
-              if (!transcript) return;
-
-              const isFinal = data.is_final === true || data.type === "final";
-              if (isFinal) {
-                setLiveTranscriptPreview("");
-                // Clear provisional broadcast
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  try {
-                    wsRef.current.send(
-                      JSON.stringify({
-                        type: "interim_transcript",
-                        sessionId,
-                        payload: {
-                          text: "",
-                          participantId: participant?.id,
-                          username: participant?.username,
-                        },
-                      })
-                    );
-                  } catch { }
-                }
-                if (transcript.trim().length >= 2) {
-                  dispatchTranscriptSegment(transcript.trim());
-                }
-              } else {
-                setLiveTranscriptPreview(transcript);
-                // Broadcast live provisional speech to other participants
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  try {
-                    wsRef.current.send(
-                      JSON.stringify({
-                        type: "interim_transcript",
-                        sessionId,
-                        payload: {
-                          text: transcript,
-                          participantId: participant?.id,
-                          username: participant?.username,
-                        },
-                      })
-                    );
-                  } catch { }
-                }
-              }
-            } catch { }
-          };
-
-          socket.onerror = () => {
-            stopMurfSTT();
-            startSpeechRecognition();
-          };
-
-          socket.onclose = () => {
-            stopMurfSTT();
-          };
-          return;
-        } else {
+    const sessionCapture = new GDAudioCaptureSession({
+      sessionId,
+      participantId: participant.id,
+      participantName: participant.name,
+      username: participant.username || "participant",
+      language: "en-IN",
+      onInterim: (event) => {
+        setLiveTranscriptPreview(event.text);
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          try {
+            wsRef.current.send(
+              JSON.stringify({
+                type: "interim_transcript",
+                sessionId,
+                payload: {
+                  participantId: participant.id,
+                  username: participant.username,
+                  participantName: participant.name,
+                  text: event.text,
+                },
+              })
+            );
+          } catch { }
+        }
+      },
+      onFinal: (event) => {
+        setLiveTranscriptPreview("");
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          try {
+            wsRef.current.send(
+              JSON.stringify({
+                type: "interim_transcript",
+                sessionId,
+                payload: {
+                  participantId: participant.id,
+                  username: participant.username,
+                  participantName: participant.name,
+                  text: "",
+                },
+              })
+            );
+          } catch { }
+        }
+      },
+      onStatusChange: (status) => {
+        if (status === "listening") {
+          setSttEngine("deepgram");
+        } else if (status === "paused") {
+          setLiveTranscriptPreview("");
+        } else if (status === "error") {
           startSpeechRecognition();
         }
-      })
-      .catch(() => {
+      },
+      onError: (err) => {
+        console.warn("[GDRoom] AudioWorklet PCM streaming notice:", err.message);
         startSpeechRecognition();
-      });
+      },
+    });
+
+    audioCaptureSessionRef.current = sessionCapture;
+    sessionCapture.start(localStreamRef.current).catch((err) => {
+      console.warn("[GDRoom] AudioWorklet start failed, using native fallback:", err);
+      startSpeechRecognition();
+    });
   }
 
   function stopMurfSTT() {
-    if (murfRecorderRef.current) {
-      try {
-        if (murfRecorderRef.current.state !== "inactive") {
-          murfRecorderRef.current.stop();
-        }
-      } catch { }
-      murfRecorderRef.current = null;
+    if (audioCaptureSessionRef.current) {
+      audioCaptureSessionRef.current.pause();
     }
-    if (murfSocketRef.current) {
-      try {
-        murfSocketRef.current.close();
-      } catch { }
-      murfSocketRef.current = null;
-    }
+    setLiveTranscriptPreview("");
     setSttEngine("none");
   }
 
@@ -1209,36 +1158,63 @@ export function GDRoomPage() {
             break;
           }
 
+          case "gd:transcription:interim":
           case "participant_interim_transcript": {
-            if (payload?.participantId) {
+            const partId = payload?.participantId;
+            if (partId) {
               setRemoteInterimTranscripts((prev) => {
                 if (!payload.text) {
                   const copy = { ...prev };
-                  delete copy[payload.participantId];
+                  delete copy[partId];
                   return copy;
                 }
-                return { ...prev, [payload.participantId]: payload.text };
+                return { ...prev, [partId]: payload.text };
               });
             }
             break;
           }
 
+          case "gd:transcription:final":
           case "new_transcript_segment": {
-            if (payload?.segment?.participantId) {
+            const seg = payload?.segment || payload;
+            if (seg?.participantId) {
               setRemoteInterimTranscripts((prev) => {
                 const copy = { ...prev };
-                delete copy[payload.segment.participantId];
+                delete copy[seg.participantId];
                 return copy;
               });
+              if (seg.participantId === currentParticipant?.id) {
+                setLiveTranscriptPreview("");
+              }
             }
             setSession((prev) => {
-              if (!prev || !payload.segment) return prev;
+              if (!prev || !seg || !seg.text) return prev;
               const exists = prev.transcript.some(
-                (s) => s.id === payload.segment.id || (s.text === payload.segment.text && Math.abs(new Date(s.timestamp || "").getTime() - new Date(payload.segment.timestamp || "").getTime()) < 3000)
+                (s) =>
+                  s.id === seg.id ||
+                  s.id === seg.segmentId ||
+                  (s.text.trim() === seg.text.trim() &&
+                    s.participantId === seg.participantId &&
+                    Math.abs(new Date(s.timestamp || "").getTime() - new Date(seg.timestamp || "").getTime()) < 3000)
               );
+              if (exists) return prev;
+              const formattedSeg: IGDTranscriptSegment = {
+                id: seg.id || seg.segmentId || `seg-${Date.now()}`,
+                participantId: seg.participantId,
+                participantName: seg.participantName || seg.username || "Participant",
+                username: seg.username,
+                text: seg.text,
+                timestamp: seg.timestamp ? new Date(seg.timestamp) : new Date(),
+                durationSeconds: seg.durationSeconds || Math.max(1, Math.round(seg.text.split(/\s+/).length / 2.5)),
+                isInterruption: seg.isInterruption || false,
+                language: seg.language || "en",
+                confidence: seg.confidence || 0.98,
+                sequenceNumber: seg.sequenceNumber,
+                isFinal: true,
+              };
               return {
                 ...prev,
-                transcript: exists ? prev.transcript : [...prev.transcript, payload.segment],
+                transcript: [...prev.transcript, formattedSeg],
                 participants: payload.participants || prev.participants,
                 currentTurn: payload.currentTurn || prev.currentTurn,
               };
@@ -1516,6 +1492,12 @@ export function GDRoomPage() {
 
   // Cleanup on unmount
   function cleanupResources() {
+    if (audioCaptureSessionRef.current) {
+      try {
+        audioCaptureSessionRef.current.destroy();
+      } catch { }
+      audioCaptureSessionRef.current = null;
+    }
     if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
     if (speechRestartTimeoutRef.current) {
       clearTimeout(speechRestartTimeoutRef.current);

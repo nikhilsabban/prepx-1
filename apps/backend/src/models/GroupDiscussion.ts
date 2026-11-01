@@ -58,6 +58,11 @@ export interface IGDTranscriptSegment {
   isInterruption?: boolean;
   language?: string;
   confidence?: number;
+  sequenceNumber?: number;
+  isFinal?: boolean;
+  turnId?: string;
+  startTime?: number;
+  endTime?: number;
 }
 
 export interface IGDParticipantMetrics {
@@ -273,6 +278,11 @@ const GDTranscriptSegmentSchema = new Schema<IGDTranscriptSegment>(
     isInterruption: { type: Boolean, default: false },
     language: { type: String, default: "en" },
     confidence: { type: Number, default: 1.0 },
+    sequenceNumber: { type: Number },
+    isFinal: { type: Boolean, default: true },
+    turnId: { type: String },
+    startTime: { type: Number, default: 0 },
+    endTime: { type: Number, default: 0 },
   },
   { _id: false }
 );

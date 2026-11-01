@@ -20,6 +20,7 @@ import {
   toggleGDBookmark,
   getGDBookmarks,
   getModeratorSpeech,
+  getGDTranscriptionCredentials,
 } from "../controllers/gdController";
 import { protect, optionalAuth } from "../middleware/authMiddleware";
 
@@ -60,6 +61,9 @@ router.post("/rooms/:roomId/moderator-speech", optionalAuth as any, getModerator
 router.post("/sessions/:sessionId/moderator-speech", optionalAuth as any, getModeratorSpeech as any);
 
 // Transcript & End discussion
+router.get("/transcription/credentials", optionalAuth as any, getGDTranscriptionCredentials as any);
+router.get("/rooms/:roomId/stt-credentials", optionalAuth as any, getGDTranscriptionCredentials as any);
+router.get("/sessions/:sessionId/stt-credentials", optionalAuth as any, getGDTranscriptionCredentials as any);
 router.post("/sessions/:sessionId/transcript", optionalAuth as any, appendTranscriptSegment as any);
 router.post("/rooms/:roomId/transcript", optionalAuth as any, appendTranscriptSegment as any);
 router.post("/rooms/:roomId/end", protect as any, endGDSession as any);
