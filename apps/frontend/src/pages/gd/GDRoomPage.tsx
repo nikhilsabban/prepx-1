@@ -1310,7 +1310,7 @@ export function GDRoomPage() {
           }
 
           case "gd:transcript": {
-            const rawEvent = (data as any)?.type === "gd:transcript" ? data : payload;
+            const rawEvent = msg?.type === "gd:transcript" ? msg : payload;
             const partId = rawEvent?.participantId || rawEvent?.speakerId;
             const isFinal = rawEvent?.isFinal !== false;
 
@@ -1338,7 +1338,7 @@ export function GDRoomPage() {
                 if (exists) return prev;
                 const formattedSeg: IGDTranscriptSegment = {
                   id: rawEvent.id || `seg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                  roomId: rawEvent.roomId || prev.id,
+                  roomId: rawEvent.roomId || prev._id,
                   participantId: partId,
                   participantName: rawEvent.participantName || "Participant",
                   speakerId: rawEvent.speakerId || partId,
