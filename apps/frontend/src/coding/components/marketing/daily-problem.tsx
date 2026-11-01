@@ -59,7 +59,8 @@ export function dailySet(
     const fallback = problems.filter((p) => !picks.includes(p));
     const from = pool.length > 0 ? pool : fallback;
     if (from.length === 0) break;
-    picks.push(from[dailyIndex(`${day}:${difficulty}`, from.length)]);
+    const item = from[dailyIndex(`${day}:${difficulty}`, from.length)];
+    if (item) picks.push(item);
   }
   return picks;
 }

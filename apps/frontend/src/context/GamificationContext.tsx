@@ -231,12 +231,13 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
   const lastFetchedUserRef = React.useRef<string | null>(null);
 
   useEffect(() => {
-    const currentKey = user?._id ? String(user._id) : isAuthenticated ? "authed" : "guest";
+    const userId = user?.id || (user as any)?._id;
+    const currentKey = userId ? String(userId) : isAuthenticated ? "authed" : "guest";
     if (lastFetchedUserRef.current === currentKey) return;
     lastFetchedUserRef.current = currentKey;
     fetchStatus();
     fetchLeaderboard();
-  }, [fetchStatus, fetchLeaderboard, isAuthenticated, user?._id]);
+  }, [fetchStatus, fetchLeaderboard, isAuthenticated, user?.id, (user as any)?._id]);
 
   const triggerCelebration = useCallback((data: CelebrationData) => {
     setCelebration(data);

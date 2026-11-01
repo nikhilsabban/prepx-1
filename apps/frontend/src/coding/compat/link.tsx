@@ -9,7 +9,7 @@ export interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement>
   children?: React.ReactNode;
 }
 
-export default function Link({ href, replace, children, className, ...props }: LinkProps) {
+export default function Link({ href, replace, scroll, prefetch, children, className, ...props }: LinkProps) {
   const location = useLocation();
   const userPrefixMatch = location.pathname.match(/^(\/[a-f0-9]{24})\/coding/);
   const userPrefix = userPrefixMatch ? userPrefixMatch[1] : "";

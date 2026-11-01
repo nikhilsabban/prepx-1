@@ -275,7 +275,9 @@ export class GDAudioCaptureSession {
         const indexFloor = Math.floor(srcIndex);
         const indexCeil = Math.min(channelData.length - 1, Math.ceil(srcIndex));
         const fraction = srcIndex - indexFloor;
-        const sample = channelData[indexFloor] * (1 - fraction) + channelData[indexCeil] * fraction;
+        const floorSample = channelData[indexFloor] ?? 0;
+        const ceilSample = channelData[indexCeil] ?? 0;
+        const sample = floorSample * (1 - fraction) + ceilSample * fraction;
 
         const s = Math.max(-1, Math.min(1, sample));
         const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;

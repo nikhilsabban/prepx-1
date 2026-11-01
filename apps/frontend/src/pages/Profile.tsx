@@ -685,7 +685,7 @@ export function Profile() {
                     <Input
                       id="edit-username"
                       placeholder="john_doe"
-                      value={profileForm.username}
+                      value={profileForm.username || ""}
                       onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value.toLowerCase().replace(/\s+/g, "") })}
                       disabled={updatingProfile}
                       className="bg-background/50 text-sm pl-7 font-mono"
@@ -696,7 +696,7 @@ export function Profile() {
                   <Label htmlFor="edit-name" className="text-xs font-medium">Full Name</Label>
                   <Input
                     id="edit-name"
-                    value={profileForm.fullName}
+                    value={profileForm.fullName || ""}
                     onChange={(e) => setProfileForm({ ...profileForm, fullName: e.target.value })}
                     disabled={updatingProfile}
                     className="bg-background/50 text-sm"
@@ -710,7 +710,7 @@ export function Profile() {
                     <Input
                       id="edit-college"
                       placeholder="Search college or university (e.g. Stanford, MIT, IIT)..."
-                      value={profileForm.college}
+                      value={profileForm.college || ""}
                       onChange={(e) => {
                         setProfileForm({ ...profileForm, college: e.target.value });
                         handleCollegeInputChange(e.target.value);
@@ -769,7 +769,7 @@ export function Profile() {
                     <Input
                       id="edit-branch"
                       placeholder="Search branch or department (e.g. Computer Science)..."
-                      value={profileForm.branch}
+                      value={profileForm.branch || ""}
                       onChange={(e) => {
                         setProfileForm({ ...profileForm, branch: e.target.value });
                         handleBranchInputChange(e.target.value);
@@ -826,7 +826,7 @@ export function Profile() {
                     <Input
                       id="edit-degree"
                       placeholder="Search degree (e.g. B.Tech, M.S., Ph.D.)..."
-                      value={profileForm.degree}
+                      value={profileForm.degree || ""}
                       onChange={(e) => {
                         setProfileForm({ ...profileForm, degree: e.target.value });
                         handleDegreeInputChange(e.target.value);
@@ -885,7 +885,7 @@ export function Profile() {
                     id="edit-grad"
                     type="date"
                     placeholder="Select graduation date"
-                    value={profileForm.graduationYear}
+                    value={profileForm.graduationYear || ""}
                     onChange={(e) => setProfileForm({ ...profileForm, graduationYear: e.target.value })}
                     disabled={updatingProfile}
                     className="bg-background/50 text-sm"
@@ -899,7 +899,7 @@ export function Profile() {
                   <Input
                     id="edit-cgpa"
                     placeholder="e.g. 8.5"
-                    value={profileForm.cgpa}
+                    value={profileForm.cgpa || ""}
                     onChange={(e) => setProfileForm({ ...profileForm, cgpa: e.target.value })}
                     disabled={updatingProfile}
                     className="bg-background/50 text-sm font-mono"
@@ -912,7 +912,7 @@ export function Profile() {
                   <Label htmlFor="edit-phone" className="text-xs font-medium">Phone Number</Label>
                   <Input
                     id="edit-phone"
-                    value={profileForm.phoneNumber}
+                    value={profileForm.phoneNumber || ""}
                     onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
                     disabled={updatingProfile}
                     className="bg-background/50 text-sm"
@@ -922,7 +922,7 @@ export function Profile() {
                   <Label htmlFor="edit-linkedin" className="text-xs font-medium">LinkedIn URL</Label>
                   <Input
                     id="edit-linkedin"
-                    value={profileForm.linkedinUrl}
+                    value={profileForm.linkedinUrl || ""}
                     onChange={(e) => setProfileForm({ ...profileForm, linkedinUrl: e.target.value })}
                     disabled={updatingProfile}
                     className="bg-background/50 text-sm"
@@ -935,7 +935,7 @@ export function Profile() {
                   <Label htmlFor="edit-github" className="text-xs font-medium">GitHub URL</Label>
                   <Input
                     id="edit-github"
-                    value={profileForm.githubUrl}
+                    value={profileForm.githubUrl || ""}
                     onChange={(e) => setProfileForm({ ...profileForm, githubUrl: e.target.value })}
                     disabled={updatingProfile}
                     className="bg-background/50 text-sm"

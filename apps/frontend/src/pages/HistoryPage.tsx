@@ -65,11 +65,11 @@ export function HistoryPage() {
             </p>
           </div>
 
-          <Link to="/ai-interview">
-            <Button className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold h-10 px-5 rounded-xl transition flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-500/20">
+          <Button asChild className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold h-10 px-5 rounded-xl transition flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-500/20">
+            <Link to="/ai-interview">
               <Play className="size-3.5 fill-white" /> Start New Interview
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
 
         {/* Skeleton Loading State */}
@@ -208,17 +208,17 @@ export function HistoryPage() {
                       )}
 
                       {isDone ? (
-                        <Link to={`/result/${item._id}`}>
-                          <Button className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-semibold h-10 px-4 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+                        <Button asChild className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-semibold h-10 px-4 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+                          <Link to={`/result/${item._id}`}>
                             <BarChart3 className="size-4" /> View Full Analytics <ArrowRight className="size-3.5" />
-                          </Button>
-                        </Link>
+                          </Link>
+                        </Button>
                       ) : (
-                        <Link to={`/interview/${item._id}`}>
-                          <Button className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs h-10 px-5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20">
+                        <Button asChild className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-xs h-10 px-5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20">
+                          <Link to={`/interview/${item._id}`}>
                             <Play className="size-3.5 fill-white" /> Resume Interview <ArrowRight className="size-3.5" />
-                          </Button>
-                        </Link>
+                          </Link>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -293,11 +293,11 @@ export function HistoryPage() {
 
                         {!isDone && (
                           <div className="pt-2 flex justify-end">
-                            <Link to={`/interview/${item._id}`}>
-                              <Button size="sm" className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold h-8 px-4 rounded-lg flex items-center gap-1.5">
+                            <Button asChild size="sm" className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold h-8 px-4 rounded-lg flex items-center gap-1.5">
+                              <Link to={`/interview/${item._id}`}>
                                 <Play className="size-3 fill-white" /> Resume From Here <ArrowRight className="size-3" />
-                              </Button>
-                            </Link>
+                              </Link>
+                            </Button>
                           </div>
                         )}
                       </div>

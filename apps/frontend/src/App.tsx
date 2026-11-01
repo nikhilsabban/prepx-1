@@ -141,6 +141,14 @@ export function App() {
                     }
                   />
                   <Route
+                    path="/interview/:interviewId/result"
+                    element={
+                      <ProtectedRoute>
+                        <Result />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
                     path="/:userId"
                     element={
                       <ProtectedRoute>

@@ -54,6 +54,9 @@ export interface UserProfile {
   phoneNumber?: string;
   xp?: number;
   streakDays?: number;
+  codingStreak?: number;
+  rating?: number;
+  solved?: number;
   badges?: string[];
   createdAt?: string;
 }

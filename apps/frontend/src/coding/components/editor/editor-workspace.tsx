@@ -216,7 +216,7 @@ export function EditorWorkspace({
         typeof window !== "undefined"
           ? (localStorage.getItem("token") || localStorage.getItem("prepx_token") || sessionStorage.getItem("prepx_token"))
           : null;
-      const backendUrl = process.env.NEXT_PUBLIC_PREPX_BACKEND_URL || "";
+      const backendUrl = BACKEND_URL || "";
 
       if (prepxToken) {
         fetch(`${backendUrl}/api/v1/coding/record-activity`, {

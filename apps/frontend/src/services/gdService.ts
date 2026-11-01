@@ -2,6 +2,7 @@ import { api } from "./api";
 
 export interface IGDTopicMetadata {
   id?: string;
+  title?: string;
   question: string;
   originalTitle: string;
   description: string;
@@ -55,6 +56,11 @@ export interface IGDTranscriptSegment {
   text: string;
   timestamp: string | Date;
   durationSeconds: number;
+  sequenceNumber?: number;
+  isFinal?: boolean;
+  turnId?: string;
+  startTime?: number;
+  endTime?: number;
   isInterruption?: boolean;
   language?: string;
   confidence?: number;
@@ -157,11 +163,14 @@ export interface IGDCurrentTurn {
 
 export interface IGDSession {
   _id: string;
+  roomId?: string;
   userId?: string;
   adminId: string;
   adminUsername: string;
   adminFullName?: string;
   expectedLanguage: string;
+  topicTitle?: string;
+  mode?: "voice" | "text" | string;
   status: "preparing" | "in_progress" | "paused" | "completed" | "abandoned";
   topic: IGDTopicMetadata;
   invitations: IGDInvitation[];

@@ -292,9 +292,9 @@ export function GDRoomPage() {
             let sumLuma = 0;
 
             for (let i = 0; i < data.length; i += 16) {
-              const r = data[i];
-              const g = data[i + 1];
-              const b = data[i + 2];
+              const r = data[i] ?? 0;
+              const g = data[i + 1] ?? 0;
+              const b = data[i + 2] ?? 0;
               totalSampled++;
               const luma = 0.299 * r + 0.587 * g + 0.114 * b;
               sumLuma += luma;
@@ -315,7 +315,10 @@ export function GDRoomPage() {
             const meanLuma = sumLuma / (totalSampled || 1);
             let varianceSum = 0;
             for (let i = 0; i < data.length; i += 16) {
-              const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              const r = data[i] ?? 0;
+              const g = data[i + 1] ?? 0;
+              const b = data[i + 2] ?? 0;
+              const luma = 0.299 * r + 0.587 * g + 0.114 * b;
               varianceSum += (luma - meanLuma) * (luma - meanLuma);
             }
             const lumaVariance = varianceSum / (totalSampled || 1);

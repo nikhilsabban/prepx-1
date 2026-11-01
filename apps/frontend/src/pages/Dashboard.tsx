@@ -163,11 +163,11 @@ export function Dashboard() {
               </div>
 
               {/* Quick Action Button */}
-              <Link to="/ai-interview">
-                <Button className="h-12 px-7 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold rounded-xl shadow-xl shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer border border-white/10">
+              <Button asChild className="h-12 px-7 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold rounded-xl shadow-xl shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer border border-white/10">
+                <Link to="/ai-interview">
                   <Play className="size-4 fill-white" /> Start interview
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
 
             {/* Quick Metrics Bar - 100% Realtime Dynamic */}
@@ -288,11 +288,11 @@ export function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <Link to="/ai-interview" className="mt-6">
-                  <Button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2">
+                <Button asChild className="w-full mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2">
+                  <Link to="/ai-interview">
                     Enter AI Interview <ArrowRight className="size-3.5" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
 
               {/* Card 2: AI Assisted Coding */}
@@ -316,11 +316,11 @@ export function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <Link to={`/${userId}/coding`} className="mt-6">
-                  <Button className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center justify-center gap-2">
+                <Button asChild className="w-full mt-6 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center justify-center gap-2">
+                  <Link to={`/${userId}/coding`}>
                     Open Coding Platform <ArrowRight className="size-3.5" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
 
               {/* Card 3: ATS Resume Analyze */}
@@ -344,11 +344,11 @@ export function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <Link to={`/${userId}/resume`} className="mt-6">
-                  <Button className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2">
+                <Button asChild className="w-full mt-6 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2">
+                  <Link to={`/${userId}/resume`}>
                     Analyze Resume <ArrowRight className="size-3.5" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
 
               {/* Card 4: AI Group Discussion */}
@@ -372,11 +372,11 @@ export function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <Link to="/group-discussion" className="mt-6">
-                  <Button className="w-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-pink-500/20 flex items-center justify-center gap-2">
+                <Button asChild className="w-full mt-6 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-semibold h-10 rounded-xl transition-all shadow-md shadow-pink-500/20 flex items-center justify-center gap-2">
+                  <Link to="/group-discussion">
                     Enter GD Arena <ArrowRight className="size-3.5" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
 
             </div>
@@ -590,17 +590,17 @@ export function Dashboard() {
                         </div>
 
                         {isDone ? (
-                          <Link to={`/result/${item._id}`}>
-                            <Button className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 text-[11px] font-bold h-8 px-3 rounded-lg flex items-center gap-1 cursor-pointer">
+                          <Button asChild className="bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 text-[11px] font-bold h-8 px-3 rounded-lg flex items-center gap-1 cursor-pointer">
+                            <Link to={`/result/${item._id}`}>
                               Result <ArrowRight className="size-3" />
-                            </Button>
-                          </Link>
+                            </Link>
+                          </Button>
                         ) : (
-                          <Link to={`/interview/${item._id}`}>
-                            <Button className="bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white border border-amber-500/30 text-[11px] font-bold h-8 px-3 rounded-lg flex items-center gap-1 cursor-pointer">
+                          <Button asChild className="bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white border border-amber-500/30 text-[11px] font-bold h-8 px-3 rounded-lg flex items-center gap-1 cursor-pointer">
+                            <Link to={`/interview/${item._id}`}>
                               Resume <Play className="size-3 fill-amber-300 hover:fill-white" />
-                            </Button>
-                          </Link>
+                            </Link>
+                          </Button>
                         )}
                       </div>
                     );
@@ -652,11 +652,11 @@ export function Dashboard() {
                           </div>
                         </div>
 
-                        <Link to={item.status === "Done" ? `/result/${item._id}` : `/interview/${item._id}`}>
-                          <Button className="bg-purple-500/10 hover:bg-purple-500 text-purple-300 hover:text-white border border-purple-500/20 text-[11px] font-bold h-8 px-3 rounded-lg flex items-center gap-1 cursor-pointer">
+                        <Button asChild className="bg-purple-500/10 hover:bg-purple-500 text-purple-300 hover:text-white border border-purple-500/20 text-[11px] font-bold h-8 px-3 rounded-lg flex items-center gap-1 cursor-pointer">
+                          <Link to={item.status === "Done" ? `/result/${item._id}` : `/interview/${item._id}`}>
                             Practice <Play className="size-3 fill-purple-300 hover:fill-white" />
-                          </Button>
-                        </Link>
+                          </Link>
+                        </Button>
                       </div>
                     );
                   })}

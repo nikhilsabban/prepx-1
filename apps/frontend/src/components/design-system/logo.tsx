@@ -1,7 +1,1 @@
-export function LogoMark() {
-  return null;
-}
-
-export function Logo() {
-  return null;
-}
+export { Logo, LogoMark } from "@/coding/components/design-system/logo";

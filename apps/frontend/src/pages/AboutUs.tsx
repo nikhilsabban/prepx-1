@@ -140,12 +140,12 @@ export function AboutUs() {
             Start a free mock interview session tailored to your role, GitHub repository, or job description.
           </p>
           <div className="pt-2 flex flex-wrap justify-center gap-4">
-            <Link to="/ai-interview">
-              <Button className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-sm px-6 h-11 rounded-xl shadow-lg shadow-violet-500/25 gap-2">
+            <Button asChild className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-sm px-6 h-11 rounded-xl shadow-lg shadow-violet-500/25 gap-2">
+              <Link to="/ai-interview">
                 <span>Start AI Interview</span>
                 <ArrowRight className="size-4" />
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </section>
       </main>

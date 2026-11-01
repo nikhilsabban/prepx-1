@@ -16,8 +16,8 @@ function buildLines(expected: string, actual: string): DiffLine[] {
   const act = actual.replace(/\r\n/g, "\n").split("\n");
   const rows: DiffLine[] = [];
   for (let i = 0; i < Math.max(exp.length, act.length); i++) {
-    const e = i < exp.length ? exp[i] : null;
-    const a = i < act.length ? act[i] : null;
+    const e = i < exp.length ? (exp[i] ?? "") : null;
+    const a = i < act.length ? (act[i] ?? "") : null;
     rows.push({ expected: e, actual: a, same: e !== null && e === a });
   }
   return rows;

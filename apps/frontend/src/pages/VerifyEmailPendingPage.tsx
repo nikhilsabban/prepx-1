@@ -37,11 +37,11 @@ export const VerifyEmailPendingPage: React.FC = () => {
         </div>
 
         <div className="pt-2 space-y-3">
-          <Link to="/login">
-            <Button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 rounded-xl shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer">
+          <Button asChild className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 rounded-xl shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer">
+            <Link to="/login">
               Sign In to Your Account <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
 
       </div>

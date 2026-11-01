@@ -98,7 +98,7 @@ export function BookmarksPage() {
       const res = await toggleGDBookmark(roomId);
       if (res.success) {
         toast.success(res.message || "GD bookmark removed");
-        setGdSessions((prev) => prev.filter((b) => b.roomId !== roomId && b._id !== roomId));
+        setGdSessions((prev) => prev.filter((b) => (b.roomId || b._id) !== roomId));
       }
     } catch (err: any) {
       toast.error("Failed to update bookmark status");
@@ -130,21 +130,21 @@ export function BookmarksPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <Link to="/coding">
-            <Button variant="outline" className="text-xs font-semibold border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800/80 rounded-xl h-9">
+          <Button asChild variant="outline" className="text-xs font-semibold border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800/80 rounded-xl h-9">
+            <Link to="/coding">
               <Code2 className="size-3.5 mr-1 text-emerald-400" /> Solve Coding
-            </Button>
-          </Link>
-          <Link to="/group-discussion">
-            <Button variant="outline" className="text-xs font-semibold border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800/80 rounded-xl h-9">
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="text-xs font-semibold border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800/80 rounded-xl h-9">
+            <Link to="/group-discussion">
               <Users2 className="size-3.5 mr-1 text-cyan-400" /> Join GD
-            </Button>
-          </Link>
-          <Link to="/ai-interview">
-            <Button className="gap-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl h-9 px-4 shadow-lg shadow-purple-500/20 cursor-pointer">
+            </Link>
+          </Button>
+          <Button asChild className="gap-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl h-9 px-4 shadow-lg shadow-purple-500/20 cursor-pointer">
+            <Link to="/ai-interview">
               <Sparkles className="size-3.5" /> Start Interview
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -224,16 +224,16 @@ export function BookmarksPage() {
             </p>
           </div>
           <div className="flex gap-3 pt-2">
-            <Link to="/coding">
-              <Button variant="outline" className="text-xs font-semibold border-zinc-700 text-white hover:bg-zinc-800">
+            <Button asChild variant="outline" className="text-xs font-semibold border-zinc-700 text-white hover:bg-zinc-800">
+              <Link to="/coding">
                 Explore Coding
-              </Button>
-            </Link>
-            <Link to="/gd">
-              <Button variant="outline" className="text-xs font-semibold border-zinc-700 text-white hover:bg-zinc-800">
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="text-xs font-semibold border-zinc-700 text-white hover:bg-zinc-800">
+              <Link to="/group-discussion">
                 Explore GD
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </div>
       )}
@@ -303,11 +303,11 @@ export function BookmarksPage() {
                   <span className="text-[11px] text-zinc-400">
                     {problem.acceptance ? `${problem.acceptance}% acceptance` : "Standard LeetCode"}
                   </span>
-                  <Link to={`/coding/${problem.slug}`}>
-                    <Button size="sm" className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg gap-1.5">
+                  <Button asChild size="sm" className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg gap-1.5">
+                    <Link to={`/coding/${problem.slug}`}>
                       Solve <ArrowRight className="size-3" />
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               </div>
             );
@@ -316,12 +316,13 @@ export function BookmarksPage() {
         {/* Group Discussions */}
         {(activeTab === "all" || activeTab === "gd") &&
           gdSessions.map((gd) => {
-            const isToggling = togglingId === `gd_${gd.roomId || gd._id}`;
-            const isEnded = gd.status === "completed" || gd.status === "ended";
+            const targetId = gd.roomId || gd._id;
+            const isToggling = togglingId === `gd_${targetId}`;
+            const isEnded = gd.status === "completed" || (gd.status as string) === "ended";
 
             return (
               <div
-                key={`gd_${gd.roomId || gd._id}`}
+                key={`gd_${targetId}`}
                 className="group relative p-5 sm:p-6 rounded-2xl bg-[#0D0D14] border border-zinc-800/80 hover:border-cyan-500/40 transition-all shadow-xl flex flex-col justify-between space-y-4"
               >
                 <div className="space-y-3">
@@ -331,7 +332,7 @@ export function BookmarksPage() {
                     </span>
 
                     <button
-                      onClick={() => handleToggleGD(gd.roomId || gd._id)}
+                      onClick={() => handleToggleGD(targetId)}
                       disabled={isToggling}
                       className="p-1.5 rounded-lg text-cyan-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                       title="Remove bookmark"
@@ -345,7 +346,7 @@ export function BookmarksPage() {
                   </div>
 
                   <h3 className="text-base font-bold text-white group-hover:text-cyan-300 transition-colors line-clamp-2">
-                    {gd.topic?.title || gd.topicTitle || "Collaborative Group Discussion"}
+                    {gd.topic?.question || gd.topic?.title || gd.topicTitle || "Collaborative Group Discussion"}
                   </h3>
 
                   <div className="flex items-center gap-3 text-xs text-zinc-400">
@@ -363,11 +364,11 @@ export function BookmarksPage() {
                   <span className="text-[11px] font-medium text-cyan-400">
                     {isEnded ? "Analysis Ready" : "In Progress"}
                   </span>
-                  <Link to={isEnded ? `/gd/result/${gd.roomId}` : `/gd/room/${gd.roomId}`}>
-                    <Button size="sm" className="h-8 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg gap-1.5">
+                  <Button asChild size="sm" className="h-8 text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg gap-1.5">
+                    <Link to={isEnded ? `/group-discussion/result/${targetId}` : `/group-discussion/${targetId}`}>
                       {isEnded ? "Review Result" : "Re-enter"} <ArrowRight className="size-3" />
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               </div>
             );
@@ -437,14 +438,15 @@ export function BookmarksPage() {
                     )}
                   </div>
 
-                  <Link to={isDone ? `/interview/${item._id}/result` : `/interview/${item._id}`}>
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-lg gap-1.5"
-                    >
+                  <Button
+                    asChild
+                    size="sm"
+                    className="h-8 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-lg gap-1.5"
+                  >
+                    <Link to={isDone ? `/result/${item._id}` : `/interview/${item._id}`}>
                       {isDone ? "View Feedback" : "Continue"} <ArrowRight className="size-3" />
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               </div>
             );

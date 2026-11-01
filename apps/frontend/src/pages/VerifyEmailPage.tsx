@@ -59,11 +59,11 @@ export const VerifyEmailPage: React.FC = () => {
             <h2 className="text-2xl font-extrabold text-white tracking-tight">Email Verified!</h2>
             <p className="text-sm text-zinc-300 leading-relaxed">{message}</p>
             <div className="pt-4">
-              <Link to="/login">
-                <Button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 rounded-xl shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer">
+              <Button asChild className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 rounded-xl shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer">
+                <Link to="/login">
                   Sign In to PrepX <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </div>
         ) : (
@@ -74,11 +74,11 @@ export const VerifyEmailPage: React.FC = () => {
             <h2 className="text-2xl font-extrabold text-white tracking-tight">Verification Failed</h2>
             <p className="text-sm text-rose-300 leading-relaxed">{message}</p>
             <div className="pt-4">
-              <Link to="/login">
-                <Button variant="outline" className="w-full border-zinc-700 bg-zinc-800/60 text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-xl h-11 transition-all">
+              <Button asChild variant="outline" className="w-full border-zinc-700 bg-zinc-800/60 text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-xl h-11 transition-all">
+                <Link to="/login">
                   Back to Sign In
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </div>
         )}
