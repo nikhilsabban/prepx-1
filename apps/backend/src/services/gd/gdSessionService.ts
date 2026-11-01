@@ -216,8 +216,13 @@ class GDSessionService {
     const escapedQuery = cleanQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
     const users = await User.find({
-      username: { $regex: escapedQuery, $options: "i" },
-      ...(lowerExcluded.length > 0 ? { username: { $nin: lowerExcluded } } : {}),
+      username: { 
+        $regex: escapedQuery, 
+        $options: "i",
+        $not: /^(student_\d+|gd_admin_)/i 
+      },
+      email: { $not: /@prepx\.com$/i },
+      ...(lowerExcluded.length > 0 ? { username: { $nin: lowerExcluded, $not: /^(student_\d+|gd_admin_)/i } } : {}),
     })
       .select("username fullName profilePicture")
       .limit(10)

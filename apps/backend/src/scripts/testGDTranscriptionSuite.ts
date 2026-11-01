@@ -82,24 +82,29 @@ async function runGDTranscriptionSuite() {
   const passwordHash = await bcrypt.hash("pass12345", salt);
 
   const timestamp = Date.now();
-  const adminUser = await User.create({
-    username: `gd_admin_${timestamp}`,
-    fullName: "Moderator Admin",
-    email: `gd_admin_${timestamp}@prepx.com`,
-    password: passwordHash,
-  });
+  let adminUser: any = null;
+  const studentUsers: any[] = [];
+  let roomId = "";
+  let roomBId = "";
 
-  const studentUsers = [];
-  for (let i = 1; i <= 5; i++) {
-    const u = await User.create({
-      username: `student_${i}_${timestamp}`,
-      fullName: `Student Candidate ${i}`,
-      email: `student_${i}_${timestamp}@prepx.com`,
+  try {
+    adminUser = await User.create({
+      username: `gd_admin_${timestamp}`,
+      fullName: "Moderator Admin",
+      email: `gd_admin_${timestamp}@prepx.com`,
       password: passwordHash,
     });
-    studentUsers.push(u);
-  }
-  assert(studentUsers.length === 5, "Created 5 unique student users and 1 moderator");
+
+    for (let i = 1; i <= 5; i++) {
+      const u = await User.create({
+        username: `student_${i}_${timestamp}`,
+        fullName: `Student Candidate ${i}`,
+        email: `student_${i}_${timestamp}@prepx.com`,
+        password: passwordHash,
+      });
+      studentUsers.push(u);
+    }
+    assert(studentUsers.length === 5, "Created 5 unique student users and 1 moderator");
 
   // Create GD Room
   const room = await gdSessionService.createRoom({
@@ -120,7 +125,7 @@ async function runGDTranscriptionSuite() {
     },
     invitees: studentUsers.map((s) => s.username!),
   });
-  const roomId = room._id.toString();
+    roomId = room._id.toString();
   assert(!!room._id, "Created GD Discussion room", `Room ID: ${roomId}`);
 
   // Join all 5 students
@@ -305,7 +310,7 @@ async function runGDTranscriptionSuite() {
     adminUsername: adminUser.username!,
     category: "General",
   });
-  const roomBId = roomB._id.toString();
+  roomBId = roomB._id.toString();
 
   await gdSessionService.addTranscriptSegment(roomBId, {
     segmentId: `roomB-seg-${timestamp}`,
@@ -350,18 +355,33 @@ async function runGDTranscriptionSuite() {
   assert(evalSample.overallScore >= 0 && evalSample.overallScore <= 100, "Student overall score bounded between 0 and 100", `Score: ${evalSample.overallScore}`);
   assert(!!evalSample.topicRelevanceExplanation, "Evaluation contains evidence-based transcript observations");
 
-  // -----------------------------------------------------------------
-  // Cleanup test resources
-  // -----------------------------------------------------------------
-  console.log("\n--- Cleaning up Test Artifacts ---");
-  wsClient1.close();
-  clientSockets.forEach((s) => s.close());
-  server.close();
+  } finally {
+    // -----------------------------------------------------------------
+    // Cleanup test resources (always runs even if test fails)
+    // -----------------------------------------------------------------
+    console.log("\n--- Cleaning up Test Artifacts ---");
+    try {
+      wsClient1.close();
+      clientSockets.forEach((s) => s.close());
+      server.close();
+    } catch {}
 
-  await User.deleteMany({ _id: { $in: [adminUser._id, ...studentUsers.map((s) => s._id)] } });
-  await GroupDiscussion.deleteMany({ _id: { $in: [roomId, roomBId] } });
-  await GDTranscript.deleteMany({ sessionId: { $in: [roomId, roomBId] } });
-  console.log("  ✓ Test users, rooms, and transcripts cleanly removed.");
+    const deleteUserIds = [];
+    if (adminUser?._id) deleteUserIds.push(adminUser._id);
+    studentUsers.forEach((s) => {
+      if (s?._id) deleteUserIds.push(s._id);
+    });
+
+    if (deleteUserIds.length > 0) {
+      await User.deleteMany({ _id: { $in: deleteUserIds } });
+    }
+    const cleanRooms = [roomId, roomBId].filter(Boolean);
+    if (cleanRooms.length > 0) {
+      await GroupDiscussion.deleteMany({ _id: { $in: cleanRooms } });
+      await GDTranscript.deleteMany({ sessionId: { $in: cleanRooms } });
+    }
+    console.log("  ✓ Test users, rooms, and transcripts cleanly removed.");
+  }
 
   console.log("\n==================================================================");
   console.log(`TEST RESULTS: ${testPassed} Passed, ${testFailed} Failed`);
