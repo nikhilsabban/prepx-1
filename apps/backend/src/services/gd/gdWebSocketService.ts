@@ -344,54 +344,131 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
             break;
           }
 
+          case "gd:transcript":
           case "transcript_segment": {
-            if (payload?.text && payload.text.trim()) {
-              const currentSess = await gdSessionService.getSessionById(sessionId);
-              const senderPartId = payload.participantId || ws.participantId;
-              const isTurnSpeaker = currentSess?.currentTurn?.participantId === senderPartId;
-              const isInterruption = !isTurnSpeaker && currentSess?.status === "in_progress";
+            const rawEvent = type === "gd:transcript" ? message : payload;
+            const textToSave = rawEvent?.text?.trim() || payload?.text?.trim();
+            const isFinal = rawEvent?.isFinal !== false;
 
-              const updatedSession = await gdSessionService.addTranscriptSegment(
-                sessionId,
-                {
-                  id: payload.id || payload.segmentId,
-                  participantId: senderPartId || "candidate",
-                  participantName: payload.participantName || ws.participantName || "Candidate",
-                  username: payload.username || ws.username,
-                  text: payload.text,
-                  durationSeconds: payload.durationSeconds || 4,
-                  isInterruption: payload.isInterruption ?? isInterruption,
-                  language: payload.language || "en",
-                  confidence: payload.confidence || 1.0,
-                  sequenceNumber: payload.sequenceNumber,
-                  turnId: currentSess?.currentTurn ? `${currentSess.currentTurn.participantId}-${currentSess.currentTurn.round}` : undefined,
-                }
-              );
+            if (textToSave) {
+              if (isFinal) {
+                const currentSess = await gdSessionService.getSessionById(sessionId);
+                // Authenticated participant identity from WebSocket connection
+                const senderPartId = ws.participantId || rawEvent.participantId || rawEvent.speakerId || payload?.participantId;
+                const senderPartName = ws.participantName || rawEvent.participantName || payload?.participantName || "Candidate";
+                const isTurnSpeaker = currentSess?.currentTurn?.participantId === senderPartId;
+                const isInterruption = !isTurnSpeaker && currentSess?.status === "in_progress";
+                const segDuration = rawEvent.durationSeconds || payload?.durationSeconds || Math.max(2, Math.round(textToSave.split(/\s+/).length / 2.5));
 
-              const lastSeg = updatedSession?.transcript.slice(-1)[0];
+                const updatedSession = await gdSessionService.addTranscriptSegment(
+                  sessionId,
+                  {
+                    id: rawEvent.id || payload?.id || payload?.segmentId,
+                    roomId: sessionId,
+                    participantId: senderPartId || "candidate",
+                    participantName: senderPartName,
+                    speakerId: senderPartId || "candidate",
+                    username: ws.username || rawEvent.username || payload?.username,
+                    text: textToSave,
+                    durationSeconds: segDuration,
+                    isInterruption: rawEvent.isInterruption ?? payload?.isInterruption ?? isInterruption,
+                    language: rawEvent.language || payload?.language || "en",
+                    confidence: rawEvent.confidence || payload?.confidence || 1.0,
+                    sequenceNumber: rawEvent.sequenceNumber || payload?.sequenceNumber,
+                    startTime: rawEvent.startTime,
+                    endTime: rawEvent.endTime,
+                    turnId: currentSess?.currentTurn ? `${currentSess.currentTurn.participantId}-${currentSess.currentTurn.round}` : undefined,
+                  }
+                );
 
-              broadcastToEveryoneInRoom(sessionId, {
-                type: "new_transcript_segment",
-                payload: {
-                  segment: lastSeg,
-                  participants: updatedSession?.participants,
-                  currentTurn: updatedSession?.currentTurn,
-                },
-              });
+                const lastSeg = updatedSession?.transcript.slice(-1)[0];
+
+                // Broadcast standard gd:transcript event to everyone in the room
+                broadcastToEveryoneInRoom(sessionId, {
+                  type: "gd:transcript",
+                  roomId: sessionId,
+                  participantId: senderPartId,
+                  participantName: senderPartName,
+                  speakerId: senderPartId,
+                  text: textToSave,
+                  isFinal: true,
+                  startTime: rawEvent.startTime ?? 0,
+                  endTime: rawEvent.endTime ?? segDuration,
+                  timestamp: Date.now(),
+                  durationSeconds: segDuration,
+                });
+
+                // Backward-compatible event
+                broadcastToEveryoneInRoom(sessionId, {
+                  type: "new_transcript_segment",
+                  payload: {
+                    segment: lastSeg,
+                    participants: updatedSession?.participants,
+                    currentTurn: updatedSession?.currentTurn,
+                  },
+                });
+              } else {
+                // Interim broadcast from participant
+                const senderPartId = ws.participantId || rawEvent.participantId || rawEvent.speakerId;
+                const senderPartName = ws.participantName || rawEvent.participantName || "Candidate";
+
+                broadcastToEveryoneInRoom(sessionId, {
+                  type: "gd:transcript",
+                  roomId: sessionId,
+                  participantId: senderPartId,
+                  participantName: senderPartName,
+                  speakerId: senderPartId,
+                  text: textToSave,
+                  isFinal: false,
+                  startTime: rawEvent.startTime ?? 0,
+                  endTime: rawEvent.endTime,
+                  timestamp: Date.now(),
+                });
+
+                broadcastToRoom(
+                  sessionId,
+                  {
+                    type: "participant_interim_transcript",
+                    payload: {
+                      participantId: senderPartId,
+                      username: ws.username,
+                      participantName: senderPartName,
+                      text: textToSave,
+                    },
+                  },
+                  ws
+                );
+              }
             }
             break;
           }
 
           case "interim_transcript": {
             if (payload?.text !== undefined) {
+              const senderPartId = ws.participantId || payload.participantId;
+              const senderPartName = ws.participantName || payload.participantName || "Candidate";
+
+              // Emit standard gd:transcript interim event
+              broadcastToEveryoneInRoom(sessionId, {
+                type: "gd:transcript",
+                roomId: sessionId,
+                participantId: senderPartId,
+                participantName: senderPartName,
+                speakerId: senderPartId,
+                text: payload.text,
+                isFinal: false,
+                startTime: 0,
+                timestamp: Date.now(),
+              });
+
               broadcastToRoom(
                 sessionId,
                 {
                   type: "participant_interim_transcript",
                   payload: {
-                    participantId: ws.participantId,
+                    participantId: senderPartId,
                     username: ws.username,
-                    participantName: ws.participantName,
+                    participantName: senderPartName,
                     text: payload.text,
                   },
                 },

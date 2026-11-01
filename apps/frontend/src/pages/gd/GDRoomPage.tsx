@@ -373,28 +373,23 @@ export function GDRoomPage() {
     }
   }
 
-  // Turn-controlled audio and STT synchronization:
-  // When active speaker: unmute audio track & initialize STT
-  // When listening peer: mute audio track & stop local STT to prevent acoustic loop
+  // Audio & STT streaming synchronization:
+  // When session is in progress and mic is enabled, keep audio track live and STT streaming
+  // so each participant's contributions are captured with accurate individual speaker attribution.
   useEffect(() => {
     if (!session || session.status !== "in_progress") return;
 
-    if (isMyTurn) {
-      const audioTrack = localStreamRef.current?.getAudioTracks()[0];
-      if (audioTrack && isMicOnRef.current) {
-        audioTrack.enabled = true;
-      }
+    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+    if (isMicOnRef.current && audioTrack) {
+      audioTrack.enabled = true;
       startMurfOrNativeSTT();
-    } else {
-      const audioTrack = localStreamRef.current?.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = false;
-      }
+    } else if (!isMicOnRef.current && audioTrack) {
+      audioTrack.enabled = false;
       stopMurfSTT();
       stopSpeechRecognition();
       setLiveTranscriptPreview("");
     }
-  }, [isMyTurn, session?.status]);
+  }, [session?.status, isMicOn]);
 
   // 1. Initialize Room & Join via backend
   useEffect(() => {
@@ -589,8 +584,10 @@ export function GDRoomPage() {
 
     const optimisticSeg: IGDTranscriptSegment = {
       id: segmentId,
+      roomId: sessionId,
       participantId: participant.id,
       participantName: participant.name,
+      speakerId: participant.id,
       username: participant.username,
       text: textToSubmit,
       timestamp: new Date(),
@@ -619,12 +616,18 @@ export function GDRoomPage() {
     const payload = {
       id: segmentId,
       segmentId,
+      roomId: sessionId,
       participantId: participant.id,
       participantName: participant.name,
+      speakerId: participant.id,
       username: participant.username,
       text: textToSubmit,
       durationSeconds: calculatedDuration,
       language,
+      startTime: 0,
+      endTime: calculatedDuration,
+      timestamp: Date.now(),
+      isFinal: true,
     };
 
     let sentViaWs = false;
@@ -632,8 +635,18 @@ export function GDRoomPage() {
       try {
         wsRef.current.send(
           JSON.stringify({
-            type: "transcript_segment",
+            type: "gd:transcript",
+            roomId: sessionId,
             sessionId,
+            participantId: participant.id,
+            participantName: participant.name,
+            speakerId: participant.id,
+            text: textToSubmit,
+            durationSeconds: calculatedDuration,
+            startTime: 0,
+            endTime: calculatedDuration,
+            timestamp: Date.now(),
+            isFinal: true,
             payload,
           })
         );
@@ -669,7 +682,6 @@ export function GDRoomPage() {
 
   // 4. Distributed, Participant-Isolated Real-Time AudioWorklet & Deepgram Nova-3 PCM Capture
   function startMurfOrNativeSTT() {
-    if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
     if (!isMicOnRef.current || !localStreamRef.current) return;
 
     const participant = currentParticipantRef.current || currentParticipant;
@@ -880,7 +892,7 @@ export function GDRoomPage() {
 
   // 4b. Speech Recognition (Web Speech API) fallback
   function startSpeechRecognition() {
-    if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
+    if (!isMicOnRef.current) return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn("Web Speech API not supported in this browser. Use manual contribution input.");
@@ -1231,6 +1243,66 @@ export function GDRoomPage() {
 
           case "participant_stopped_speaking": {
             setSpeakingPeers((prev) => ({ ...prev, [payload.participantId]: false }));
+            break;
+          }
+
+          case "gd:transcript": {
+            const rawEvent = (data as any)?.type === "gd:transcript" ? data : payload;
+            const partId = rawEvent?.participantId || rawEvent?.speakerId;
+            const isFinal = rawEvent?.isFinal !== false;
+
+            if (isFinal) {
+              if (partId) {
+                setRemoteInterimTranscripts((prev) => {
+                  const copy = { ...prev };
+                  delete copy[partId];
+                  return copy;
+                });
+                if (partId === currentParticipant?.id) {
+                  setLiveTranscriptPreview("");
+                }
+              }
+              setSession((prev) => {
+                if (!prev || !rawEvent?.text) return prev;
+                const textTrimmed = rawEvent.text.trim();
+                const exists = prev.transcript.some(
+                  (s) =>
+                    s.id === rawEvent.id ||
+                    (s.text.trim().toLowerCase() === textTrimmed.toLowerCase() &&
+                      s.participantId === partId &&
+                      Math.abs(new Date(s.timestamp || "").getTime() - (typeof rawEvent.timestamp === "number" ? rawEvent.timestamp : new Date(rawEvent.timestamp || "").getTime())) < 4000)
+                );
+                if (exists) return prev;
+                const formattedSeg: IGDTranscriptSegment = {
+                  id: rawEvent.id || `seg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                  roomId: rawEvent.roomId || prev.id,
+                  participantId: partId,
+                  participantName: rawEvent.participantName || "Participant",
+                  speakerId: rawEvent.speakerId || partId,
+                  username: rawEvent.username,
+                  text: textTrimmed,
+                  timestamp: rawEvent.timestamp ? new Date(rawEvent.timestamp) : new Date(),
+                  durationSeconds: rawEvent.durationSeconds || Math.max(1, Math.round(textTrimmed.split(/\s+/).length / 2.5)),
+                  isInterruption: rawEvent.isInterruption || false,
+                  language: rawEvent.language || "en",
+                  confidence: rawEvent.confidence || 0.98,
+                  sequenceNumber: rawEvent.sequenceNumber,
+                  isFinal: true,
+                };
+                return {
+                  ...prev,
+                  transcript: [...prev.transcript, formattedSeg],
+                };
+              });
+              setSilenceWarning(null);
+            } else {
+              if (partId && rawEvent?.text) {
+                setRemoteInterimTranscripts((prev) => ({
+                  ...prev,
+                  [partId]: rawEvent.text,
+                }));
+              }
+            }
             break;
           }
 
@@ -1965,9 +2037,9 @@ export function GDRoomPage() {
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col">
       {/* Top Header Bar */}
       <div className="border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md px-4 sm:px-8 py-3 sticky top-16 z-30">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Discussion Topic & Language Banner */}
-          <div className="space-y-1.5 flex-1 min-w-[280px]">
+          <div className="space-y-1.5 flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                 {session.topic.category}
@@ -1996,7 +2068,7 @@ export function GDRoomPage() {
           </div>
 
           {/* AI Tutor Listening Status & Moderator Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
             <button
               onClick={handleToggleBookmark}
               disabled={isTogglingBookmark}
@@ -2398,26 +2470,55 @@ export function GDRoomPage() {
 
         {/* Right Column: Real-time Transcript & Participants (4 cols) */}
         <div className="lg:col-span-4 flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950/70 h-[420px] lg:h-[680px] overflow-hidden">
-          {/* Tabs */}
-          <div className="flex border-b border-zinc-800 text-xs font-bold">
-            <button
-              onClick={() => setActiveTab("transcript")}
-              className={`flex-1 py-3 text-center border-b-2 transition ${activeTab === "transcript"
-                  ? "border-indigo-500 text-white bg-zinc-900/40"
-                  : "border-transparent text-zinc-400 hover:text-white"
+          {/* Tabs & Live STT Status */}
+          <div className="flex flex-wrap items-center justify-between border-b border-zinc-800 px-3 py-2 text-xs bg-zinc-950/80 gap-2">
+            <div className="flex gap-1.5 font-bold">
+              <button
+                onClick={() => setActiveTab("transcript")}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  activeTab === "transcript"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
+                    : "text-zinc-400 hover:text-white"
                 }`}
-            >
-              Attributed Transcript ({session.transcript.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("participants")}
-              className={`flex-1 py-3 text-center border-b-2 transition ${activeTab === "participants"
-                  ? "border-indigo-500 text-white bg-zinc-900/40"
-                  : "border-transparent text-zinc-400 hover:text-white"
+              >
+                Attributed Transcript ({session.transcript.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("participants")}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  activeTab === "participants"
+                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
+                    : "text-zinc-400 hover:text-white"
                 }`}
-            >
-              Participants ({session.participants.length})
-            </button>
+              >
+                Participants ({session.participants.length})
+              </button>
+            </div>
+
+            {/* STT Status Indicator */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-medium shrink-0">
+              {sttEngine === "deepgram" ? (
+                <>
+                  <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-emerald-300">Live STT Active: Deepgram Nova-3</span>
+                </>
+              ) : sttEngine === "native" ? (
+                <>
+                  <span className="size-2 rounded-full bg-blue-400 animate-pulse" />
+                  <span className="text-blue-300">Live STT Active: Web Speech API</span>
+                </>
+              ) : isMicOn ? (
+                <>
+                  <span className="size-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-amber-300">STT Listening (Ready)</span>
+                </>
+              ) : (
+                <>
+                  <span className="size-2 rounded-full bg-zinc-500" />
+                  <span className="text-zinc-400">Microphone Muted</span>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Transcript Feed View */}
@@ -2425,22 +2526,43 @@ export function GDRoomPage() {
             <div className="flex-1 flex flex-col min-h-0">
               {/* Real-time speech transcription banner (Attributed to whoever is speaking) */}
               {(liveTranscriptPreview || Object.keys(remoteInterimTranscripts).length > 0) && (
-                <div className="mx-4 mt-3 p-2.5 rounded-xl bg-gradient-to-r from-indigo-500/15 via-purple-500/10 to-indigo-500/15 border border-indigo-500/40 text-indigo-200 text-xs flex items-center gap-2.5 animate-pulse shadow-sm shrink-0">
-                  <span className="relative flex h-2.5 w-2.5 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
-                  </span>
-                  <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
-                    <span className="font-bold text-indigo-300 shrink-0">
-                      {liveTranscriptPreview
-                        ? "Transcribing (You):"
-                        : `Transcribing (@${session.participants.find((p) => p.id === Object.keys(remoteInterimTranscripts)[0])?.username || "Speaker"
-                        }):`}
-                    </span>
-                    <span className="italic truncate text-zinc-100 font-medium">
-                      "{liveTranscriptPreview || Object.values(remoteInterimTranscripts)[0]}"
-                    </span>
-                  </div>
+                <div className="mx-4 mt-3 p-3 rounded-xl bg-gradient-to-r from-indigo-500/15 via-purple-500/10 to-indigo-500/15 border border-indigo-500/40 text-indigo-200 text-xs flex flex-col gap-2 shadow-sm shrink-0">
+                  {liveTranscriptPreview && (
+                    <div className="flex items-start gap-2.5">
+                      <span className="relative flex h-2.5 w-2.5 mt-1 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-bold text-indigo-300">
+                          {currentParticipant?.name || "You"} (Speaking):
+                        </span>
+                        <p className="italic text-zinc-100 font-normal mt-0.5 leading-relaxed">
+                          "{liveTranscriptPreview}"
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {Object.entries(remoteInterimTranscripts).map(([partId, text]) => {
+                    if (!text) return null;
+                    const speaker = session.participants.find((p) => p.id === partId);
+                    return (
+                      <div key={partId} className="flex items-start gap-2.5">
+                        <span className="relative flex h-2.5 w-2.5 mt-1 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-bold text-emerald-300">
+                            {speaker?.name || speaker?.username || "Participant"} (Speaking):
+                          </span>
+                          <p className="italic text-zinc-100 font-normal mt-0.5 leading-relaxed">
+                            "{text}"
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -2461,21 +2583,40 @@ export function GDRoomPage() {
                 ) : (
                   session.transcript.map((seg, idx) => {
                     const isUser = seg.participantId === currentParticipant?.id;
+                    const speakerName = seg.participantName || seg.username || "Participant";
+                    const isCurrentlyTalking = isUser
+                      ? !!liveTranscriptPreview
+                      : !!remoteInterimTranscripts[seg.participantId];
+
                     return (
                       <div
                         key={seg.id || idx}
-                        className={`p-3.5 rounded-xl space-y-1 ${isUser
-                            ? "bg-indigo-950/30 border border-indigo-500/30 ml-4"
-                            : "bg-zinc-900/70 border border-zinc-800/80 mr-4"
-                          }`}
+                        className={`p-3.5 rounded-xl space-y-1.5 transition-all ${
+                          isUser
+                            ? "bg-indigo-950/20 border border-indigo-500/30"
+                            : "bg-zinc-900/60 border border-zinc-800/80"
+                        }`}
                       >
                         <div className="flex items-center justify-between">
-                          <strong className={isUser ? "text-indigo-400" : "text-emerald-400"}>
-                            @{seg.username || seg.participantName} {isUser && "(You)"}
-                          </strong>
-                          <span className="text-[10px] text-zinc-500">{seg.durationSeconds}s</span>
+                          <div className="flex items-center gap-2">
+                            {isCurrentlyTalking && (
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                              </span>
+                            )}
+                            <strong className={`font-bold ${isUser ? "text-indigo-400" : "text-emerald-400"}`}>
+                              {speakerName}
+                            </strong>
+                            {isUser && <span className="text-[10px] text-zinc-400 font-normal">(You)</span>}
+                          </div>
+                          <span className="text-[10px] text-zinc-500 font-mono">
+                            {seg.durationSeconds ? `${seg.durationSeconds}s` : ""}
+                          </span>
                         </div>
-                        <p className="text-zinc-200 leading-relaxed">{seg.text}</p>
+                        <p className="text-zinc-200 text-sm leading-relaxed font-normal">
+                          "{seg.text.replace(/^["']+|["']+$/g, "")}"
+                        </p>
                       </div>
                     );
                   })

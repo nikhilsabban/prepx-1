@@ -352,8 +352,10 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
             if (client.sessionId) {
               savedSession = await gdSessionService.addTranscriptSegment(client.sessionId, {
                 segmentId,
+                roomId: client.sessionId,
                 participantId: client.participantId || "candidate",
                 participantName: client.participantName || "Candidate",
+                speakerId: client.participantId || "candidate",
                 username: client.username,
                 text: transcriptText,
                 durationSeconds: parsed.duration ? Math.max(1, Math.round(parsed.duration)) : Math.max(1, Math.round(transcriptText.split(/\s+/).length / 2.5)),
@@ -369,8 +371,10 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
             const payload = {
               segment: savedSession?.transcript.slice(-1)[0] || {
                 id: segmentId,
+                roomId: client.sessionId,
                 participantId: client.participantId,
                 participantName: client.participantName,
+                speakerId: client.participantId,
                 username: client.username,
                 text: transcriptText,
                 durationSeconds: parsed.duration || 3,
@@ -380,6 +384,22 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
               participants: savedSession?.participants,
               currentTurn: savedSession?.currentTurn,
             };
+
+            // Standard participant-attributed transcript event
+            broadcastToGDRoom(client.sessionId || "", {
+              type: "gd:transcript",
+              roomId: client.sessionId || "",
+              participantId: client.participantId || "candidate",
+              participantName: client.participantName || "Candidate",
+              speakerId: client.participantId || "candidate",
+              text: transcriptText,
+              isFinal: true,
+              startTime: parsed.start ?? 0,
+              endTime: parsed.start !== undefined && parsed.duration !== undefined ? parsed.start + parsed.duration : undefined,
+              timestamp: Date.now(),
+              durationSeconds: parsed.duration || 3,
+              payload,
+            });
 
             // Modern normalized event
             broadcastToGDRoom(client.sessionId || "", {
@@ -393,6 +413,20 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
               payload,
             });
           } else {
+            // Standard participant-attributed interim transcript event
+            broadcastToGDRoom(client.sessionId || "", {
+              type: "gd:transcript",
+              roomId: client.sessionId || "",
+              participantId: client.participantId || "candidate",
+              participantName: client.participantName || "Candidate",
+              speakerId: client.participantId || "candidate",
+              text: transcriptText,
+              isFinal: false,
+              startTime: parsed.start ?? 0,
+              endTime: parsed.start !== undefined && parsed.duration !== undefined ? parsed.start + parsed.duration : undefined,
+              timestamp: Date.now(),
+            });
+
             // Interim broadcast: show live preview to everyone in room without DB write
             broadcastToGDRoom(client.sessionId || "", {
               type: "gd:transcription:interim",

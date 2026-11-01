@@ -136,7 +136,12 @@ export class GDEvaluationService {
     // Evaluate each student independently
     for (const student of students) {
       const studentMetrics = metrics.find((m) => m.participantId === student.id);
-      const studentSegments = transcript.filter((t) => t.participantId === student.id);
+      const studentSegments = transcript.filter(
+        (t) =>
+          t.participantId === student.id ||
+          (t as any).speakerId === student.id ||
+          (t.username && student.username && t.username.toLowerCase() === student.username.toLowerCase())
+      );
 
       const evaluation = await this.evaluateStudent(
         topic,

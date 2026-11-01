@@ -948,8 +948,10 @@ class GDSessionService {
     segment: {
       id?: string;
       segmentId?: string;
+      roomId?: string;
       participantId: string;
       participantName: string;
+      speakerId?: string;
       username?: string;
       text: string;
       durationSeconds: number;
@@ -971,8 +973,10 @@ class GDSessionService {
 
     const newSegment: IGDTranscriptSegment = {
       id: segId,
+      roomId: segment.roomId || sessionId,
       participantId: segment.participantId,
       participantName: segment.participantName,
+      speakerId: segment.speakerId || segment.participantId,
       username: segment.username?.toLowerCase().trim(),
       text: segment.text.trim(),
       timestamp: new Date(),

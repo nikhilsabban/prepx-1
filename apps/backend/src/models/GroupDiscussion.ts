@@ -49,8 +49,10 @@ export interface IGDParticipant {
 
 export interface IGDTranscriptSegment {
   id: string;
+  roomId?: string;
   participantId: string;
   participantName: string;
+  speakerId?: string;
   username?: string;
   text: string;
   timestamp: Date;
@@ -269,8 +271,10 @@ const GDParticipantSchema = new Schema<IGDParticipant>(
 const GDTranscriptSegmentSchema = new Schema<IGDTranscriptSegment>(
   {
     id: { type: String, required: true },
+    roomId: { type: String },
     participantId: { type: String, required: true },
     participantName: { type: String, required: true },
+    speakerId: { type: String },
     username: { type: String, lowercase: true, trim: true },
     text: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },

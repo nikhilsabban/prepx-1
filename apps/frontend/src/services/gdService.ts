@@ -50,8 +50,10 @@ export interface IGDParticipant {
 
 export interface IGDTranscriptSegment {
   id: string;
+  roomId?: string;
   participantId: string;
   participantName: string;
+  speakerId?: string;
   username?: string;
   text: string;
   timestamp: string | Date;

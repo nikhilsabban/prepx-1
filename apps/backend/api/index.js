@@ -17410,8 +17410,10 @@ var GDParticipantSchema = new Schema9(
 var GDTranscriptSegmentSchema = new Schema9(
   {
     id: { type: String, required: true },
+    roomId: { type: String },
     participantId: { type: String, required: true },
     participantName: { type: String, required: true },
+    speakerId: { type: String },
     username: { type: String, lowercase: true, trim: true },
     text: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
@@ -17854,7 +17856,9 @@ var GDEvaluationService = class {
     const evaluations = [];
     for (const student of students) {
       const studentMetrics = metrics.find((m) => m.participantId === student.id);
-      const studentSegments = transcript.filter((t) => t.participantId === student.id);
+      const studentSegments = transcript.filter(
+        (t) => t.participantId === student.id || t.speakerId === student.id || t.username && student.username && t.username.toLowerCase() === student.username.toLowerCase()
+      );
       const evaluation = await this.evaluateStudent(
         topic,
         student,
@@ -18939,8 +18943,10 @@ var GDSessionService = class {
     const duration = Math.max(1, segment.durationSeconds || Math.round(words2 / 2.5));
     const newSegment = {
       id: segId,
+      roomId: segment.roomId || sessionId,
       participantId: segment.participantId,
       participantName: segment.participantName,
+      speakerId: segment.speakerId || segment.participantId,
       username: segment.username?.toLowerCase().trim(),
       text: segment.text.trim(),
       timestamp: /* @__PURE__ */ new Date(),
@@ -20257,50 +20263,116 @@ function initGDWebSocketServer(server) {
             }
             break;
           }
+          case "gd:transcript":
           case "transcript_segment": {
-            if (payload?.text && payload.text.trim()) {
-              const currentSess = await gdSessionService.getSessionById(sessionId);
-              const senderPartId = payload.participantId || ws.participantId;
-              const isTurnSpeaker = currentSess?.currentTurn?.participantId === senderPartId;
-              const isInterruption = !isTurnSpeaker && currentSess?.status === "in_progress";
-              const updatedSession = await gdSessionService.addTranscriptSegment(
-                sessionId,
-                {
-                  id: payload.id || payload.segmentId,
-                  participantId: senderPartId || "candidate",
-                  participantName: payload.participantName || ws.participantName || "Candidate",
-                  username: payload.username || ws.username,
-                  text: payload.text,
-                  durationSeconds: payload.durationSeconds || 4,
-                  isInterruption: payload.isInterruption ?? isInterruption,
-                  language: payload.language || "en",
-                  confidence: payload.confidence || 1,
-                  sequenceNumber: payload.sequenceNumber,
-                  turnId: currentSess?.currentTurn ? `${currentSess.currentTurn.participantId}-${currentSess.currentTurn.round}` : void 0
-                }
-              );
-              const lastSeg = updatedSession?.transcript.slice(-1)[0];
-              broadcastToEveryoneInRoom(sessionId, {
-                type: "new_transcript_segment",
-                payload: {
-                  segment: lastSeg,
-                  participants: updatedSession?.participants,
-                  currentTurn: updatedSession?.currentTurn
-                }
-              });
+            const rawEvent = type === "gd:transcript" ? message : payload;
+            const textToSave = rawEvent?.text?.trim() || payload?.text?.trim();
+            const isFinal = rawEvent?.isFinal !== false;
+            if (textToSave) {
+              if (isFinal) {
+                const currentSess = await gdSessionService.getSessionById(sessionId);
+                const senderPartId = ws.participantId || rawEvent.participantId || rawEvent.speakerId || payload?.participantId;
+                const senderPartName = ws.participantName || rawEvent.participantName || payload?.participantName || "Candidate";
+                const isTurnSpeaker = currentSess?.currentTurn?.participantId === senderPartId;
+                const isInterruption = !isTurnSpeaker && currentSess?.status === "in_progress";
+                const segDuration = rawEvent.durationSeconds || payload?.durationSeconds || Math.max(2, Math.round(textToSave.split(/\s+/).length / 2.5));
+                const updatedSession = await gdSessionService.addTranscriptSegment(
+                  sessionId,
+                  {
+                    id: rawEvent.id || payload?.id || payload?.segmentId,
+                    roomId: sessionId,
+                    participantId: senderPartId || "candidate",
+                    participantName: senderPartName,
+                    speakerId: senderPartId || "candidate",
+                    username: ws.username || rawEvent.username || payload?.username,
+                    text: textToSave,
+                    durationSeconds: segDuration,
+                    isInterruption: rawEvent.isInterruption ?? payload?.isInterruption ?? isInterruption,
+                    language: rawEvent.language || payload?.language || "en",
+                    confidence: rawEvent.confidence || payload?.confidence || 1,
+                    sequenceNumber: rawEvent.sequenceNumber || payload?.sequenceNumber,
+                    startTime: rawEvent.startTime,
+                    endTime: rawEvent.endTime,
+                    turnId: currentSess?.currentTurn ? `${currentSess.currentTurn.participantId}-${currentSess.currentTurn.round}` : void 0
+                  }
+                );
+                const lastSeg = updatedSession?.transcript.slice(-1)[0];
+                broadcastToEveryoneInRoom(sessionId, {
+                  type: "gd:transcript",
+                  roomId: sessionId,
+                  participantId: senderPartId,
+                  participantName: senderPartName,
+                  speakerId: senderPartId,
+                  text: textToSave,
+                  isFinal: true,
+                  startTime: rawEvent.startTime ?? 0,
+                  endTime: rawEvent.endTime ?? segDuration,
+                  timestamp: Date.now(),
+                  durationSeconds: segDuration
+                });
+                broadcastToEveryoneInRoom(sessionId, {
+                  type: "new_transcript_segment",
+                  payload: {
+                    segment: lastSeg,
+                    participants: updatedSession?.participants,
+                    currentTurn: updatedSession?.currentTurn
+                  }
+                });
+              } else {
+                const senderPartId = ws.participantId || rawEvent.participantId || rawEvent.speakerId;
+                const senderPartName = ws.participantName || rawEvent.participantName || "Candidate";
+                broadcastToEveryoneInRoom(sessionId, {
+                  type: "gd:transcript",
+                  roomId: sessionId,
+                  participantId: senderPartId,
+                  participantName: senderPartName,
+                  speakerId: senderPartId,
+                  text: textToSave,
+                  isFinal: false,
+                  startTime: rawEvent.startTime ?? 0,
+                  endTime: rawEvent.endTime,
+                  timestamp: Date.now()
+                });
+                broadcastToRoom(
+                  sessionId,
+                  {
+                    type: "participant_interim_transcript",
+                    payload: {
+                      participantId: senderPartId,
+                      username: ws.username,
+                      participantName: senderPartName,
+                      text: textToSave
+                    }
+                  },
+                  ws
+                );
+              }
             }
             break;
           }
           case "interim_transcript": {
             if (payload?.text !== void 0) {
+              const senderPartId = ws.participantId || payload.participantId;
+              const senderPartName = ws.participantName || payload.participantName || "Candidate";
+              broadcastToEveryoneInRoom(sessionId, {
+                type: "gd:transcript",
+                roomId: sessionId,
+                participantId: senderPartId,
+                participantName: senderPartName,
+                speakerId: senderPartId,
+                text: payload.text,
+                isFinal: false,
+                startTime: 0,
+                timestamp: Date.now()
+              });
               broadcastToRoom(
                 sessionId,
                 {
                   type: "participant_interim_transcript",
                   payload: {
-                    participantId: ws.participantId,
+                    participantId: senderPartId,
                     username: ws.username,
-                    participantName: ws.participantName,
+                    participantName: senderPartName,
                     text: payload.text
                   }
                 },
@@ -20739,8 +20811,10 @@ function initGDTranscriptionGateway(server) {
             if (client.sessionId) {
               savedSession = await gdSessionService.addTranscriptSegment(client.sessionId, {
                 segmentId,
+                roomId: client.sessionId,
                 participantId: client.participantId || "candidate",
                 participantName: client.participantName || "Candidate",
+                speakerId: client.participantId || "candidate",
                 username: client.username,
                 text: transcriptText,
                 durationSeconds: parsed.duration ? Math.max(1, Math.round(parsed.duration)) : Math.max(1, Math.round(transcriptText.split(/\s+/).length / 2.5)),
@@ -20754,8 +20828,10 @@ function initGDTranscriptionGateway(server) {
             const payload = {
               segment: savedSession?.transcript.slice(-1)[0] || {
                 id: segmentId,
+                roomId: client.sessionId,
                 participantId: client.participantId,
                 participantName: client.participantName,
+                speakerId: client.participantId,
                 username: client.username,
                 text: transcriptText,
                 durationSeconds: parsed.duration || 3,
@@ -20766,6 +20842,20 @@ function initGDTranscriptionGateway(server) {
               currentTurn: savedSession?.currentTurn
             };
             broadcastToGDRoom(client.sessionId || "", {
+              type: "gd:transcript",
+              roomId: client.sessionId || "",
+              participantId: client.participantId || "candidate",
+              participantName: client.participantName || "Candidate",
+              speakerId: client.participantId || "candidate",
+              text: transcriptText,
+              isFinal: true,
+              startTime: parsed.start ?? 0,
+              endTime: parsed.start !== void 0 && parsed.duration !== void 0 ? parsed.start + parsed.duration : void 0,
+              timestamp: Date.now(),
+              durationSeconds: parsed.duration || 3,
+              payload
+            });
+            broadcastToGDRoom(client.sessionId || "", {
               type: "gd:transcription:final",
               payload: normalizedEvent
             });
@@ -20774,6 +20864,18 @@ function initGDTranscriptionGateway(server) {
               payload
             });
           } else {
+            broadcastToGDRoom(client.sessionId || "", {
+              type: "gd:transcript",
+              roomId: client.sessionId || "",
+              participantId: client.participantId || "candidate",
+              participantName: client.participantName || "Candidate",
+              speakerId: client.participantId || "candidate",
+              text: transcriptText,
+              isFinal: false,
+              startTime: parsed.start ?? 0,
+              endTime: parsed.start !== void 0 && parsed.duration !== void 0 ? parsed.start + parsed.duration : void 0,
+              timestamp: Date.now()
+            });
             broadcastToGDRoom(client.sessionId || "", {
               type: "gd:transcription:interim",
               payload: normalizedEvent
