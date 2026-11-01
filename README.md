@@ -15,7 +15,7 @@
 
 ## 🌐 Live Deployment & Links
 
-- **Live Application:** [https://prepx-one.vercel.app](https://prepx-one.vercel.app)
+- **Live Application:** [https://prepx-one.vercel.app](https://ai-interviewer-frontend-eight.vercel.app/)
 - **GitHub Repository:** [https://github.com/nikhilsabban/prepx-1](https://github.com/nikhilsabban/prepx-1)
 
 ---
