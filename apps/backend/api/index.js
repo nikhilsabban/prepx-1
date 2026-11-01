@@ -18803,14 +18803,14 @@ var GDSessionService = class {
         wordsSpoken: wordsSpoken || 0
       });
     }
-    const activeStudents = session.participants.filter(
-      (p) => !p.isAi && p.isOnline !== false
-    );
-    if (activeStudents.length === 0) {
+    const allStudents = session.participants.filter((p) => !p.isAi);
+    if (allStudents.length === 0) {
       session.currentTurn = void 0;
       await session.save();
       return null;
     }
+    const onlineStudents = allStudents.filter((p) => p.isOnline !== false);
+    const activeStudents = onlineStudents.length > 1 ? onlineStudents : allStudents;
     let eligibleStudents = activeStudents.filter((p) => !p.hasSpokenInCurrentRound);
     if (eligibleStudents.length === 0) {
       session.round = (session.round || 1) + 1;
@@ -18819,10 +18819,15 @@ var GDSessionService = class {
       }
       eligibleStudents = [...activeStudents];
     }
-    if (eligibleStudents.length > 1 && previousTurn) {
-      eligibleStudents = eligibleStudents.filter((p) => p.id !== previousTurn.participantId);
-      if (eligibleStudents.length === 0) {
-        eligibleStudents = [...activeStudents];
+    if (activeStudents.length > 1 && previousTurn) {
+      const otherStudents = activeStudents.filter(
+        (p) => p.id !== previousTurn.participantId && p.username?.toLowerCase() !== previousTurn.username?.toLowerCase()
+      );
+      if (otherStudents.length > 0) {
+        const diffEligible = eligibleStudents.filter(
+          (p) => p.id !== previousTurn.participantId && p.username?.toLowerCase() !== previousTurn.username?.toLowerCase()
+        );
+        eligibleStudents = diffEligible.length > 0 ? diffEligible : otherStudents;
       }
     }
     eligibleStudents.sort((a, b) => {
@@ -18862,8 +18867,12 @@ var GDSessionService = class {
   async finishTurn(roomId, participantId, wordsSpoken = 0) {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
-    if (session.currentTurn.participantId !== participantId) {
-      throw new Error("Only the currently assigned speaker can finish this turn");
+    const currentSpeakerId = session.currentTurn.participantId;
+    const isCurrentSpeaker = !participantId || currentSpeakerId === participantId || session.adminId.toString() === participantId || session.adminUsername.toLowerCase() === participantId.toLowerCase() || session.currentTurn.username?.toLowerCase() === participantId.toLowerCase() || session.participants.some(
+      (p) => (p.id === participantId || p.userId?.toString() === participantId || p.username?.toLowerCase() === participantId.toLowerCase()) && (p.id === currentSpeakerId || p.username?.toLowerCase() === session.currentTurn?.username?.toLowerCase())
+    );
+    if (!isCurrentSpeaker) {
+      throw new Error("Only the currently assigned speaker or moderator can finish this turn");
     }
     await this.assignNextTurn(roomId, "student_finished", wordsSpoken);
     return this.getSessionById(roomId);
@@ -18874,8 +18883,12 @@ var GDSessionService = class {
   async passTurn(roomId, participantId) {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
-    if (session.currentTurn.participantId !== participantId) {
-      throw new Error("Only the currently assigned speaker can pass this turn");
+    const currentSpeakerId = session.currentTurn.participantId;
+    const isCurrentSpeaker = !participantId || currentSpeakerId === participantId || session.adminId.toString() === participantId || session.adminUsername.toLowerCase() === participantId.toLowerCase() || session.currentTurn.username?.toLowerCase() === participantId.toLowerCase() || session.participants.some(
+      (p) => (p.id === participantId || p.userId?.toString() === participantId || p.username?.toLowerCase() === participantId.toLowerCase()) && (p.id === currentSpeakerId || p.username?.toLowerCase() === session.currentTurn?.username?.toLowerCase())
+    );
+    if (!isCurrentSpeaker) {
+      throw new Error("Only the currently assigned speaker or moderator can pass this turn");
     }
     await this.assignNextTurn(roomId, "student_passed", 0);
     return this.getSessionById(roomId);
@@ -19352,6 +19365,17 @@ async function finishStudentTurn(req, res) {
     const userId = req.user?._id?.toString() || req.user?.id?.toString();
     const { wordsSpoken } = req.body;
     const session = await gdSessionService.finishTurn(roomId, userId, Number(wordsSpoken) || 0);
+    broadcastToGDRoom(roomId, {
+      type: "turn_changed",
+      payload: {
+        reason: "student_finished",
+        previousSpeaker: req.user?.username,
+        currentTurn: session?.currentTurn,
+        round: session?.round,
+        participants: session?.participants,
+        turnHistory: session?.turnHistory?.slice(-1)[0]
+      }
+    });
     res.json({
       success: true,
       currentTurn: session?.currentTurn,
@@ -19367,6 +19391,17 @@ async function passStudentTurn(req, res) {
     const roomId = getParam(req.params.roomId || req.params.sessionId);
     const userId = req.user?._id?.toString() || req.user?.id?.toString();
     const session = await gdSessionService.passTurn(roomId, userId);
+    broadcastToGDRoom(roomId, {
+      type: "turn_changed",
+      payload: {
+        reason: "student_passed",
+        previousSpeaker: req.user?.username,
+        currentTurn: session?.currentTurn,
+        round: session?.round,
+        participants: session?.participants,
+        turnHistory: session?.turnHistory?.slice(-1)[0]
+      }
+    });
     res.json({
       success: true,
       currentTurn: session?.currentTurn,
@@ -19382,6 +19417,17 @@ async function skipStudentTurn(req, res) {
     const roomId = getParam(req.params.roomId || req.params.sessionId);
     const adminId = req.user?._id?.toString() || req.user?.id?.toString();
     const session = await gdSessionService.skipTurnByAdmin(roomId, adminId);
+    broadcastToGDRoom(roomId, {
+      type: "turn_changed",
+      payload: {
+        reason: "admin_skipped",
+        previousSpeaker: req.user?.username,
+        currentTurn: session?.currentTurn,
+        round: session?.round,
+        participants: session?.participants,
+        turnHistory: session?.turnHistory?.slice(-1)[0]
+      }
+    });
     res.json({
       success: true,
       currentTurn: session?.currentTurn,
@@ -20281,51 +20327,78 @@ function initGDWebSocketServer(server) {
             break;
           }
           case "finish_turn": {
-            const updated = await gdSessionService.finishTurn(
-              sessionId,
-              ws.participantId || "",
-              payload?.wordsSpoken || 0
-            );
-            broadcastToEveryoneInRoom(sessionId, {
-              type: "turn_changed",
-              payload: {
-                reason: "student_finished",
-                previousSpeaker: ws.username,
-                currentTurn: updated?.currentTurn,
-                round: updated?.round,
-                participants: updated?.participants,
-                turnHistory: updated?.turnHistory.slice(-1)[0]
+            try {
+              const callerId = payload?.participantId || ws.participantId || "";
+              const updated = await gdSessionService.finishTurn(
+                sessionId,
+                callerId,
+                payload?.wordsSpoken || 0
+              );
+              broadcastToEveryoneInRoom(sessionId, {
+                type: "turn_changed",
+                payload: {
+                  reason: "student_finished",
+                  previousSpeaker: ws.username,
+                  currentTurn: updated?.currentTurn,
+                  round: updated?.round,
+                  participants: updated?.participants,
+                  turnHistory: updated?.turnHistory?.slice(-1)[0]
+                }
+              });
+            } catch (err) {
+              console.warn(`[GD WebSocket] finish_turn error:`, err.message);
+              try {
+                ws.send(JSON.stringify({ type: "turn_error", message: err.message }));
+              } catch {
               }
-            });
+            }
             break;
           }
           case "pass_turn": {
-            const updated = await gdSessionService.passTurn(sessionId, ws.participantId || "");
-            broadcastToEveryoneInRoom(sessionId, {
-              type: "turn_changed",
-              payload: {
-                reason: "student_passed",
-                previousSpeaker: ws.username,
-                currentTurn: updated?.currentTurn,
-                round: updated?.round,
-                participants: updated?.participants,
-                turnHistory: updated?.turnHistory.slice(-1)[0]
+            try {
+              const callerId = payload?.participantId || ws.participantId || "";
+              const updated = await gdSessionService.passTurn(sessionId, callerId);
+              broadcastToEveryoneInRoom(sessionId, {
+                type: "turn_changed",
+                payload: {
+                  reason: "student_passed",
+                  previousSpeaker: ws.username,
+                  currentTurn: updated?.currentTurn,
+                  round: updated?.round,
+                  participants: updated?.participants,
+                  turnHistory: updated?.turnHistory?.slice(-1)[0]
+                }
+              });
+            } catch (err) {
+              console.warn(`[GD WebSocket] pass_turn error:`, err.message);
+              try {
+                ws.send(JSON.stringify({ type: "turn_error", message: err.message }));
+              } catch {
               }
-            });
+            }
             break;
           }
           case "skip_turn": {
-            const updated = await gdSessionService.skipTurnByAdmin(sessionId, ws.participantId || "");
-            broadcastToEveryoneInRoom(sessionId, {
-              type: "turn_changed",
-              payload: {
-                reason: "admin_skipped",
-                currentTurn: updated?.currentTurn,
-                round: updated?.round,
-                participants: updated?.participants,
-                turnHistory: updated?.turnHistory.slice(-1)[0]
+            try {
+              const callerId = payload?.participantId || ws.participantId || "";
+              const updated = await gdSessionService.skipTurnByAdmin(sessionId, callerId);
+              broadcastToEveryoneInRoom(sessionId, {
+                type: "turn_changed",
+                payload: {
+                  reason: "admin_skipped",
+                  currentTurn: updated?.currentTurn,
+                  round: updated?.round,
+                  participants: updated?.participants,
+                  turnHistory: updated?.turnHistory?.slice(-1)[0]
+                }
+              });
+            } catch (err) {
+              console.warn(`[GD WebSocket] skip_turn error:`, err.message);
+              try {
+                ws.send(JSON.stringify({ type: "turn_error", message: err.message }));
+              } catch {
               }
-            });
+            }
             break;
           }
           // -----------------------------------------------------------------

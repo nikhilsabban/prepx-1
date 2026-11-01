@@ -376,6 +376,18 @@ export async function finishStudentTurn(req: AuthRequest, res: Response): Promis
 
     const session = await gdSessionService.finishTurn(roomId, userId, Number(wordsSpoken) || 0);
 
+    broadcastToGDRoom(roomId, {
+      type: "turn_changed",
+      payload: {
+        reason: "student_finished",
+        previousSpeaker: req.user?.username,
+        currentTurn: session?.currentTurn,
+        round: session?.round,
+        participants: session?.participants,
+        turnHistory: session?.turnHistory?.slice(-1)[0],
+      },
+    });
+
     res.json({
       success: true,
       currentTurn: session?.currentTurn,
@@ -397,6 +409,18 @@ export async function passStudentTurn(req: AuthRequest, res: Response): Promise<
 
     const session = await gdSessionService.passTurn(roomId, userId);
 
+    broadcastToGDRoom(roomId, {
+      type: "turn_changed",
+      payload: {
+        reason: "student_passed",
+        previousSpeaker: req.user?.username,
+        currentTurn: session?.currentTurn,
+        round: session?.round,
+        participants: session?.participants,
+        turnHistory: session?.turnHistory?.slice(-1)[0],
+      },
+    });
+
     res.json({
       success: true,
       currentTurn: session?.currentTurn,
@@ -417,6 +441,18 @@ export async function skipStudentTurn(req: AuthRequest, res: Response): Promise<
     const adminId = req.user?._id?.toString() || req.user?.id?.toString();
 
     const session = await gdSessionService.skipTurnByAdmin(roomId, adminId);
+
+    broadcastToGDRoom(roomId, {
+      type: "turn_changed",
+      payload: {
+        reason: "admin_skipped",
+        previousSpeaker: req.user?.username,
+        currentTurn: session?.currentTurn,
+        round: session?.round,
+        participants: session?.participants,
+        turnHistory: session?.turnHistory?.slice(-1)[0],
+      },
+    });
 
     res.json({
       success: true,

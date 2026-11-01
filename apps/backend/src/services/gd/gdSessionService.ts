@@ -739,16 +739,17 @@ class GDSessionService {
       });
     }
 
-    // 2. Identify active student participants (all human peers including host/creator)
-    const activeStudents = session.participants.filter(
-      (p) => !p.isAi && p.isOnline !== false
-    );
-
-    if (activeStudents.length === 0) {
+    // 2. Identify student participants (all human peers including host/creator)
+    const allStudents = session.participants.filter((p) => !p.isAi);
+    if (allStudents.length === 0) {
       session.currentTurn = undefined;
       await session.save();
       return null;
     }
+
+    // Prefer online participants if more than one is online; otherwise rotate through all room participants
+    const onlineStudents = allStudents.filter((p) => p.isOnline !== false);
+    const activeStudents = onlineStudents.length > 1 ? onlineStudents : allStudents;
 
     // 3. Find eligible students who have NOT yet spoken in the current round
     let eligibleStudents = activeStudents.filter((p) => !p.hasSpokenInCurrentRound);
@@ -762,11 +763,20 @@ class GDSessionService {
       eligibleStudents = [...activeStudents];
     }
 
-    // Avoid picking the exact same student consecutively across round boundaries if others exist
-    if (eligibleStudents.length > 1 && previousTurn) {
-      eligibleStudents = eligibleStudents.filter((p) => p.id !== previousTurn.participantId);
-      if (eligibleStudents.length === 0) {
-        eligibleStudents = [...activeStudents];
+    // Strictly ensure turn passes to another student if more than one participant exists
+    if (activeStudents.length > 1 && previousTurn) {
+      const otherStudents = activeStudents.filter(
+        (p) =>
+          p.id !== previousTurn.participantId &&
+          p.username?.toLowerCase() !== previousTurn.username?.toLowerCase()
+      );
+      if (otherStudents.length > 0) {
+        const diffEligible = eligibleStudents.filter(
+          (p) =>
+            p.id !== previousTurn.participantId &&
+            p.username?.toLowerCase() !== previousTurn.username?.toLowerCase()
+        );
+        eligibleStudents = diffEligible.length > 0 ? diffEligible : otherStudents;
       }
     }
 
@@ -832,8 +842,21 @@ class GDSessionService {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
 
-    if (session.currentTurn.participantId !== participantId) {
-      throw new Error("Only the currently assigned speaker can finish this turn");
+    const currentSpeakerId = session.currentTurn.participantId;
+    const isCurrentSpeaker =
+      !participantId ||
+      currentSpeakerId === participantId ||
+      session.adminId.toString() === participantId ||
+      session.adminUsername.toLowerCase() === participantId.toLowerCase() ||
+      session.currentTurn.username?.toLowerCase() === participantId.toLowerCase() ||
+      session.participants.some(
+        (p) =>
+          (p.id === participantId || p.userId?.toString() === participantId || p.username?.toLowerCase() === participantId.toLowerCase()) &&
+          (p.id === currentSpeakerId || p.username?.toLowerCase() === session.currentTurn?.username?.toLowerCase())
+      );
+
+    if (!isCurrentSpeaker) {
+      throw new Error("Only the currently assigned speaker or moderator can finish this turn");
     }
 
     await this.assignNextTurn(roomId, "student_finished", wordsSpoken);
@@ -847,8 +870,21 @@ class GDSessionService {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
 
-    if (session.currentTurn.participantId !== participantId) {
-      throw new Error("Only the currently assigned speaker can pass this turn");
+    const currentSpeakerId = session.currentTurn.participantId;
+    const isCurrentSpeaker =
+      !participantId ||
+      currentSpeakerId === participantId ||
+      session.adminId.toString() === participantId ||
+      session.adminUsername.toLowerCase() === participantId.toLowerCase() ||
+      session.currentTurn.username?.toLowerCase() === participantId.toLowerCase() ||
+      session.participants.some(
+        (p) =>
+          (p.id === participantId || p.userId?.toString() === participantId || p.username?.toLowerCase() === participantId.toLowerCase()) &&
+          (p.id === currentSpeakerId || p.username?.toLowerCase() === session.currentTurn?.username?.toLowerCase())
+      );
+
+    if (!isCurrentSpeaker) {
+      throw new Error("Only the currently assigned speaker or moderator can pass this turn");
     }
 
     await this.assignNextTurn(roomId, "student_passed", 0);

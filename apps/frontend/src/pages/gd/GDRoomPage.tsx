@@ -1756,17 +1756,33 @@ export function GDRoomPage() {
   // Finish Turn Handler
   async function handleFinishTurn() {
     if (!sessionId || !isMyTurn) return;
+    const participant = currentParticipantRef.current || currentParticipant;
     try {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({
             type: "finish_turn",
             sessionId,
-            payload: { wordsSpoken: 0 },
+            payload: {
+              participantId: participant?.id,
+              username: participant?.username,
+              wordsSpoken: 0,
+            },
           })
         );
-      } else {
-        await finishTurn(sessionId);
+      }
+      const res = await finishTurn(sessionId);
+      if (res?.currentTurn) {
+        setSession((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            currentTurn: res.currentTurn,
+            round: res.round || prev.round,
+            participants: res.participants || prev.participants,
+          };
+        });
+        setTurnElapsedSeconds(0);
       }
       toast.success("Turn finished! Handing floor to next participant...");
     } catch (err: any) {
@@ -1777,16 +1793,32 @@ export function GDRoomPage() {
   // Pass Turn Handler
   async function handlePassTurn() {
     if (!sessionId || !isMyTurn) return;
+    const participant = currentParticipantRef.current || currentParticipant;
     try {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({
             type: "pass_turn",
             sessionId,
+            payload: {
+              participantId: participant?.id,
+              username: participant?.username,
+            },
           })
         );
-      } else {
-        await passTurn(sessionId);
+      }
+      const res = await passTurn(sessionId);
+      if (res?.currentTurn) {
+        setSession((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            currentTurn: res.currentTurn,
+            round: res.round || prev.round,
+            participants: res.participants || prev.participants,
+          };
+        });
+        setTurnElapsedSeconds(0);
       }
       toast.info("Turn voluntarily passed to next eligible participant");
     } catch (err: any) {
@@ -1797,16 +1829,32 @@ export function GDRoomPage() {
   // Skip Turn
   async function handleAdminSkipTurn() {
     if (!sessionId) return;
+    const participant = currentParticipantRef.current || currentParticipant;
     try {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({
             type: "skip_turn",
             sessionId,
+            payload: {
+              participantId: participant?.id,
+              username: participant?.username,
+            },
           })
         );
-      } else {
-        await skipTurn(sessionId);
+      }
+      const res = await skipTurn(sessionId);
+      if (res?.currentTurn) {
+        setSession((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            currentTurn: res.currentTurn,
+            round: res.round || prev.round,
+            participants: res.participants || prev.participants,
+          };
+        });
+        setTurnElapsedSeconds(0);
       }
       toast.info("Turn skipped to next participant");
     } catch (err: any) {
