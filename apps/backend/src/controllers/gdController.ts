@@ -365,6 +365,24 @@ export async function startGDSession(req: AuthRequest, res: Response): Promise<v
   }
 }
 
+export async function beginGDSessionTurn(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const roomId = getParam(req.params.roomId || req.params.sessionId);
+    const adminId = req.user?._id?.toString() || req.user?.id?.toString() || "";
+    const session = await gdSessionService.beginFirstTurn(roomId, adminId);
+    const payload = {
+      reason: "briefing_completed",
+      currentTurn: session.currentTurn,
+      round: session.round,
+      participants: session.participants,
+    };
+    broadcastToGDRoom(roomId, { type: "turn_changed", payload });
+    res.json({ success: true, ...payload, session });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message || "Unable to begin speaking turns" });
+  }
+}
+
 /**
  * Student finishes their speaking turn.
  */
@@ -478,9 +496,19 @@ export async function appendTranscriptSegment(req: AuthRequest, res: Response): 
       return;
     }
 
-    const speakerId = req.user?._id?.toString() || participantId || "candidate";
-    const speakerName = req.user?.fullName || participantName || "Candidate";
-    const speakerUsername = req.user?.username || username;
+    const speakerId = req.user?._id?.toString() || "";
+    const room = await gdSessionService.getSessionById(sessionId);
+    if (!room || room.status !== "in_progress" || room.currentTurn?.participantId !== speakerId) {
+      res.status(403).json({ success: false, message: "Only the active speaker can submit transcript text." });
+      return;
+    }
+    const registeredParticipant = room.participants.find((participant) => participant.id === speakerId);
+    if (!registeredParticipant) {
+      res.status(403).json({ success: false, message: "You are not a participant in this discussion." });
+      return;
+    }
+    const speakerName = registeredParticipant.name || req.user?.fullName || "Participant";
+    const speakerUsername = registeredParticipant.username || req.user?.username;
 
     const session = await gdSessionService.addTranscriptSegment(sessionId, {
       participantId: speakerId,
@@ -690,7 +718,7 @@ export async function getModeratorSpeech(req: Request, res: Response): Promise<v
 
     const textToSynthesize =
       textOverride?.trim() ||
-      `Welcome to today's Group Discussion on: ${topicTitle}. ${topicDesc} Each participant will have dedicated speaking turns to share their perspective. Please maintain constructive dialogue and professional decorum. Let us begin.`;
+      `Welcome, everyone. Today's group discussion topic is: ${topicTitle}. ${topicDesc} Each participant will receive one turn per round in a randomized order, so everyone has an equal opportunity to contribute. Each speaking turn is limited to 90 seconds. You may pass at any time, and you will remain eligible in later rounds. Please keep your microphone muted while another participant is speaking; only the assigned active speaker's microphone is captured and transcribed. The live transcript is associated with the speaker and saved for the final report. After the discussion, PrepX will generate a separate performance analysis for each participant using their finalized transcript. Please listen respectfully and build on the points raised by others. I will begin the first turn after this briefing.`;
 
     const { synthesizeSpeech } = await import("../services/murfService");
     const tts = await synthesizeSpeech(textToSynthesize, "en-US-terrell");

@@ -149,8 +149,11 @@ export function GDHubPage() {
     let isCancelled = false;
 
     try {
-      const wsUrl = BACKEND_URL.replace(/^http/, "ws") + "/api/v1/gd/ws";
-      socket = new WebSocket(wsUrl);
+      const authToken = localStorage.getItem("token");
+      if (!authToken) return;
+      const wsUrl = new URL(BACKEND_URL.replace(/^http/, "ws") + "/api/v1/gd/ws");
+      wsUrl.searchParams.set("token", authToken);
+      socket = new WebSocket(wsUrl.toString());
 
       socket.onopen = () => {
         if (!isCancelled && socket?.readyState === WebSocket.OPEN) {

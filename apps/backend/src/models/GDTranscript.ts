@@ -9,6 +9,7 @@ export interface IGDTranscriptItem {
   confidence: number;
   isFinal: boolean;
   turnId?: string;
+  streamId?: string;
   timestamp: Date;
 }
 
@@ -33,6 +34,7 @@ const GDTranscriptItemSchema = new Schema<IGDTranscriptItem>(
     confidence: { type: Number, default: 1.0 },
     isFinal: { type: Boolean, default: true },
     turnId: { type: String },
+    streamId: { type: String },
     timestamp: { type: Date, default: Date.now },
   },
   { _id: false }

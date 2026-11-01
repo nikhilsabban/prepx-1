@@ -17414,6 +17414,7 @@ var GDTranscriptSegmentSchema = new Schema9(
     participantId: { type: String, required: true },
     participantName: { type: String, required: true },
     speakerId: { type: String },
+    streamId: { type: String },
     username: { type: String, lowercase: true, trim: true },
     text: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
@@ -17471,7 +17472,7 @@ var GDTurnHistoryItemSchema = new Schema9(
     durationSeconds: { type: Number, default: 0 },
     endReason: {
       type: String,
-      enum: ["student_finished", "student_passed", "admin_skipped", "silence_timeout", "disconnect"],
+      enum: ["student_finished", "student_passed", "admin_skipped", "silence_timeout", "time_expired", "disconnect"],
       default: "student_finished"
     },
     wordsSpoken: { type: Number, default: 0 }
@@ -17623,6 +17624,7 @@ var GDTranscriptItemSchema = new Schema10(
     confidence: { type: Number, default: 1 },
     isFinal: { type: Boolean, default: true },
     turnId: { type: String },
+    streamId: { type: String },
     timestamp: { type: Date, default: Date.now }
   },
   { _id: false }
@@ -17856,9 +17858,10 @@ var GDEvaluationService = class {
     const evaluations = [];
     for (const student of students) {
       const studentMetrics = metrics.find((m) => m.participantId === student.id);
-      const studentSegments = transcript.filter(
-        (t) => t.participantId === student.id || t.speakerId === student.id || t.username && student.username && t.username.toLowerCase() === student.username.toLowerCase()
-      );
+      const studentSegments = transcript.filter((t) => {
+        if (t.participantId) return t.participantId === student.id;
+        return t.speakerId === student.id || !!t.username && !!student.username && t.username.toLowerCase() === student.username.toLowerCase();
+      });
       const evaluation = await this.evaluateStudent(
         topic,
         student,
@@ -17971,20 +17974,20 @@ var GDEvaluationService = class {
         participantId: student.id,
         username: student.username || student.name,
         name: student.name,
-        overallScore: 12,
+        overallScore: 0,
         criterionScores: {
-          topicRelevance: 3,
-          reasoningAndExamples: 2,
-          clarityAndStructure: 2,
-          fluencyAndPace: 1,
-          activeListening: 2,
+          topicRelevance: 0,
+          reasoningAndExamples: 0,
+          clarityAndStructure: 0,
+          fluencyAndPace: 0,
+          activeListening: 0,
           participationBalance: 0,
-          expectedLanguageConsistency: 1,
-          vocalIntelligibility: 1,
+          expectedLanguageConsistency: 0,
+          vocalIntelligibility: 0,
           discussionEtiquette: 0
         },
         topicRelevanceExplanation: "No verbal contributions were detected for this participant during the live session.",
-        strongestArguments: ["Participated in the discussion room session."],
+        strongestArguments: [],
         reasoningEvidence: ["No verbal arguments were presented to evaluate."],
         communicationStrengths: ["Maintained room connection."],
         communicationWeaknesses: ["Complete verbal inactivity during assigned turns."],
@@ -18290,11 +18293,13 @@ var gdEvaluationService = new GDEvaluationService();
 
 // src/services/gd/gdSessionService.ts
 var MAX_STUDENTS_CAPACITY = 5;
-var DEFAULT_SILENCE_WARNING_SEC = 90;
-var DEFAULT_SILENCE_TIMEOUT_SEC = 120;
 var DEFAULT_SUGGESTED_DURATION_SEC = 90;
 var gdRoomBroadcaster = null;
 var gdUserBroadcaster = null;
+function getTurnIdentity(turn) {
+  if (!turn) return "";
+  return `${turn.participantId}:${turn.round}:${new Date(turn.startedAt).getTime()}`;
+}
 function registerGDRoomBroadcaster(broadcaster) {
   gdRoomBroadcaster = broadcaster;
 }
@@ -18318,6 +18323,7 @@ function broadcastToGDUser(username, payload) {
   }
 }
 var GDSessionService = class {
+  turnTransitionTails = /* @__PURE__ */ new Map();
   /**
    * Creates a new Group Discussion room hosted by an admin/moderator.
    * English is the default expected language unless specified.
@@ -18762,14 +18768,22 @@ var GDSessionService = class {
   async startDiscussion(roomId, adminId) {
     const session = await this.getSessionById(roomId);
     if (!session) throw new Error("Discussion room not found");
+    if (session.adminId.toString() !== adminId) {
+      throw new Error("Only the room host can start the discussion");
+    }
     if (session.status !== "in_progress") {
       session.status = "in_progress";
       session.startedAt = /* @__PURE__ */ new Date();
       await session.save();
     }
-    if (!session.currentTurn) {
-      await this.assignNextTurn(roomId, "initial_turn");
-    }
+    return await this.getSessionById(roomId);
+  }
+  async beginFirstTurn(roomId, adminId) {
+    const session = await this.getSessionById(roomId);
+    if (!session) throw new Error("Discussion room not found");
+    if (session.adminId.toString() !== adminId) throw new Error("Only the room host can begin the speaking turns");
+    if (session.status !== "in_progress") throw new Error("The discussion briefing has not started");
+    if (!session.currentTurn) await this.assignNextTurn(roomId, "initial_turn");
     return await this.getSessionById(roomId);
   }
   /**
@@ -18777,9 +18791,28 @@ var GDSessionService = class {
    * Shuffles speaking order each round, prioritizes students with fewer opportunities,
    * balances speaking time, and never repeatedly selects the same student while others are eligible.
    */
-  async assignNextTurn(roomId, reason, wordsSpoken = 0) {
+  async assignNextTurn(roomId, reason, wordsSpoken = 0, expectedTurnId) {
+    const previous = this.turnTransitionTails.get(roomId) || Promise.resolve();
+    let release;
+    const queued = new Promise((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => queued);
+    this.turnTransitionTails.set(roomId, tail);
+    await previous;
+    try {
+      return await this.assignNextTurnLocked(roomId, reason, wordsSpoken, expectedTurnId);
+    } finally {
+      release();
+      if (this.turnTransitionTails.get(roomId) === tail) this.turnTransitionTails.delete(roomId);
+    }
+  }
+  async assignNextTurnLocked(roomId, reason, wordsSpoken = 0, expectedTurnId) {
     const session = await this.getSessionById(roomId);
     if (!session) return null;
+    if (expectedTurnId && getTurnIdentity(session.currentTurn) !== expectedTurnId) {
+      throw new Error("Turn has already changed");
+    }
     const previousTurn = session.currentTurn;
     const now = /* @__PURE__ */ new Date();
     if (previousTurn) {
@@ -18787,7 +18820,7 @@ var GDSessionService = class {
       const durationSeconds = Math.max(1, Math.round((now.getTime() - new Date(previousTurn.startedAt).getTime()) / 1e3));
       if (prevParticipant) {
         prevParticipant.hasSpokenInCurrentRound = true;
-        if (reason === "student_finished") {
+        if (reason === "student_finished" || reason === "time_expired") {
           prevParticipant.turnsCompleted = (prevParticipant.turnsCompleted || 0) + 1;
         } else if (reason === "student_passed") {
           prevParticipant.turnsPassed = (prevParticipant.turnsPassed || 0) + 1;
@@ -18807,7 +18840,9 @@ var GDSessionService = class {
         wordsSpoken: wordsSpoken || 0
       });
     }
-    const allStudents = session.participants.filter((p) => !p.isAi);
+    const allStudents = session.participants.filter(
+      (p) => !p.isAi && !p.isHost && p.role !== "admin"
+    );
     if (allStudents.length === 0) {
       session.currentTurn = void 0;
       await session.save();
@@ -18878,7 +18913,7 @@ var GDSessionService = class {
     if (!isCurrentSpeaker) {
       throw new Error("Only the currently assigned speaker or moderator can finish this turn");
     }
-    await this.assignNextTurn(roomId, "student_finished", wordsSpoken);
+    await this.assignNextTurn(roomId, "student_finished", wordsSpoken, getTurnIdentity(session.currentTurn));
     return this.getSessionById(roomId);
   }
   /**
@@ -18894,7 +18929,7 @@ var GDSessionService = class {
     if (!isCurrentSpeaker) {
       throw new Error("Only the currently assigned speaker or moderator can pass this turn");
     }
-    await this.assignNextTurn(roomId, "student_passed", 0);
+    await this.assignNextTurn(roomId, "student_passed", 0, getTurnIdentity(session.currentTurn));
     return this.getSessionById(roomId);
   }
   /**
@@ -18903,7 +18938,10 @@ var GDSessionService = class {
   async skipTurnByAdmin(roomId, adminId) {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
-    await this.assignNextTurn(roomId, "admin_skipped", 0);
+    if (session.adminId.toString() !== adminId) {
+      throw new Error("Only the room host can skip a speaking turn");
+    }
+    await this.assignNextTurn(roomId, "admin_skipped", 0, getTurnIdentity(session.currentTurn));
     return this.getSessionById(roomId);
   }
   /**
@@ -18912,7 +18950,11 @@ var GDSessionService = class {
   async handleSilenceTimeout(roomId) {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
-    await this.assignNextTurn(roomId, "silence_timeout", 0);
+    await this.assignNextTurn(roomId, "silence_timeout", 0, getTurnIdentity(session.currentTurn));
+    return this.getSessionById(roomId);
+  }
+  async handleTurnTimeout(roomId, expectedTurnId) {
+    await this.assignNextTurn(roomId, "time_expired", 0, expectedTurnId);
     return this.getSessionById(roomId);
   }
   /**
@@ -18926,7 +18968,7 @@ var GDSessionService = class {
       p.isOnline = false;
     }
     if (session.currentTurn && session.currentTurn.participantId === participantId) {
-      await this.assignNextTurn(roomId, "disconnect", 0);
+      await this.assignNextTurn(roomId, "disconnect", 0, getTurnIdentity(session.currentTurn));
     } else {
       await session.save();
     }
@@ -18947,6 +18989,7 @@ var GDSessionService = class {
       participantId: segment.participantId,
       participantName: segment.participantName,
       speakerId: segment.speakerId || segment.participantId,
+      streamId: segment.streamId,
       username: segment.username?.toLowerCase().trim(),
       text: segment.text.trim(),
       timestamp: /* @__PURE__ */ new Date(),
@@ -18960,7 +19003,7 @@ var GDSessionService = class {
       startTime: segment.startTime,
       endTime: segment.endTime
     };
-    await GroupDiscussion.updateOne(
+    const persisted = await GroupDiscussion.updateOne(
       { _id: sessionId, "transcript.id": { $ne: segId } },
       {
         $push: { transcript: newSegment },
@@ -18973,6 +19016,9 @@ var GDSessionService = class {
         }
       }
     );
+    if (!persisted.modifiedCount) {
+      return this.getSessionById(sessionId);
+    }
     await GroupDiscussion.updateOne(
       { _id: sessionId, "participants.id": segment.participantId },
       {
@@ -18983,7 +19029,7 @@ var GDSessionService = class {
         }
       }
     );
-    GDTranscript.findOneAndUpdate(
+    await GDTranscript.findOneAndUpdate(
       { sessionId, participantId: segment.participantId },
       {
         $setOnInsert: {
@@ -19001,6 +19047,7 @@ var GDSessionService = class {
             confidence: newSegment.confidence || 1,
             isFinal: true,
             turnId: newSegment.turnId,
+            streamId: newSegment.streamId,
             timestamp: newSegment.timestamp
           }
         },
@@ -19011,7 +19058,8 @@ var GDSessionService = class {
       },
       { upsert: true, new: true }
     ).catch((err) => {
-      console.warn("[GDTranscript] Upsert error:", err.message);
+      console.error("[GDTranscript] Upsert failed:", err.message);
+      throw err;
     });
     const updated = await this.getSessionById(sessionId);
     if (!updated) return null;
@@ -19365,6 +19413,23 @@ async function startGDSession(req, res) {
     });
   }
 }
+async function beginGDSessionTurn(req, res) {
+  try {
+    const roomId = getParam(req.params.roomId || req.params.sessionId);
+    const adminId = req.user?._id?.toString() || req.user?.id?.toString() || "";
+    const session = await gdSessionService.beginFirstTurn(roomId, adminId);
+    const payload = {
+      reason: "briefing_completed",
+      currentTurn: session.currentTurn,
+      round: session.round,
+      participants: session.participants
+    };
+    broadcastToGDRoom(roomId, { type: "turn_changed", payload });
+    res.json({ success: true, ...payload, session });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message || "Unable to begin speaking turns" });
+  }
+}
 async function finishStudentTurn(req, res) {
   try {
     const roomId = getParam(req.params.roomId || req.params.sessionId);
@@ -19452,9 +19517,19 @@ async function appendTranscriptSegment(req, res) {
       res.status(400).json({ success: false, message: "Valid text and sessionId are required" });
       return;
     }
-    const speakerId = req.user?._id?.toString() || participantId || "candidate";
-    const speakerName = req.user?.fullName || participantName || "Candidate";
-    const speakerUsername = req.user?.username || username;
+    const speakerId = req.user?._id?.toString() || "";
+    const room = await gdSessionService.getSessionById(sessionId);
+    if (!room || room.status !== "in_progress" || room.currentTurn?.participantId !== speakerId) {
+      res.status(403).json({ success: false, message: "Only the active speaker can submit transcript text." });
+      return;
+    }
+    const registeredParticipant = room.participants.find((participant) => participant.id === speakerId);
+    if (!registeredParticipant) {
+      res.status(403).json({ success: false, message: "You are not a participant in this discussion." });
+      return;
+    }
+    const speakerName = registeredParticipant.name || req.user?.fullName || "Participant";
+    const speakerUsername = registeredParticipant.username || req.user?.username;
     const session = await gdSessionService.addTranscriptSegment(sessionId, {
       participantId: speakerId,
       participantName: speakerName,
@@ -19618,7 +19693,7 @@ async function getModeratorSpeech(req, res) {
     }
     const topicTitle = session.topic?.question || session.topic?.originalTitle || session.topic?.title || "Today's Discussion";
     const topicDesc = session.topic?.description || "";
-    const textToSynthesize = textOverride?.trim() || `Welcome to today's Group Discussion on: ${topicTitle}. ${topicDesc} Each participant will have dedicated speaking turns to share their perspective. Please maintain constructive dialogue and professional decorum. Let us begin.`;
+    const textToSynthesize = textOverride?.trim() || `Welcome, everyone. Today's group discussion topic is: ${topicTitle}. ${topicDesc} Each participant will receive one turn per round in a randomized order, so everyone has an equal opportunity to contribute. Each speaking turn is limited to 90 seconds. You may pass at any time, and you will remain eligible in later rounds. Please keep your microphone muted while another participant is speaking; only the assigned active speaker's microphone is captured and transcribed. The live transcript is associated with the speaker and saved for the final report. After the discussion, PrepX will generate a separate performance analysis for each participant using their finalized transcript. Please listen respectfully and build on the points raised by others. I will begin the first turn after this briefing.`;
     const { synthesizeSpeech: synthesizeSpeech2 } = await Promise.resolve().then(() => (init_murfService(), murfService_exports));
     const tts = await synthesizeSpeech2(textToSynthesize, "en-US-terrell");
     res.json({
@@ -19699,16 +19774,17 @@ router5.get("/sessions/:sessionId", getGDSession);
 router5.post("/rooms/:roomId/join", protect, joinGDRoom);
 router5.post("/sessions/:sessionId/join", protect, joinGDRoom);
 router5.post("/rooms/:roomId/start", protect, startGDSession);
+router5.post("/rooms/:roomId/begin", protect, beginGDSessionTurn);
 router5.post("/rooms/:roomId/turns/finish", protect, finishStudentTurn);
 router5.post("/rooms/:roomId/turns/pass", protect, passStudentTurn);
 router5.post("/rooms/:roomId/turns/skip", protect, skipStudentTurn);
 router5.post("/rooms/:roomId/moderator-speech", optionalAuth, getModeratorSpeech);
 router5.post("/sessions/:sessionId/moderator-speech", optionalAuth, getModeratorSpeech);
-router5.get("/transcription/credentials", optionalAuth, getGDTranscriptionCredentials);
-router5.get("/rooms/:roomId/stt-credentials", optionalAuth, getGDTranscriptionCredentials);
-router5.get("/sessions/:sessionId/stt-credentials", optionalAuth, getGDTranscriptionCredentials);
-router5.post("/sessions/:sessionId/transcript", optionalAuth, appendTranscriptSegment);
-router5.post("/rooms/:roomId/transcript", optionalAuth, appendTranscriptSegment);
+router5.get("/transcription/credentials", protect, getGDTranscriptionCredentials);
+router5.get("/rooms/:roomId/stt-credentials", protect, getGDTranscriptionCredentials);
+router5.get("/sessions/:sessionId/stt-credentials", protect, getGDTranscriptionCredentials);
+router5.post("/sessions/:sessionId/transcript", protect, appendTranscriptSegment);
+router5.post("/rooms/:roomId/transcript", protect, appendTranscriptSegment);
 router5.post("/rooms/:roomId/end", protect, endGDSession);
 router5.post("/sessions/:sessionId/end", protect, endGDSession);
 router5.get("/my-sessions", protect, getMyGDSessions);
@@ -19994,7 +20070,9 @@ router6.post("/award", protect, async (req, res) => {
 var gamificationRoutes_default = router6;
 
 // src/services/gd/gdWebSocketService.ts
+init_User();
 import { WebSocketServer, WebSocket } from "ws";
+import jwt5 from "jsonwebtoken";
 function initGDWebSocketServer(server) {
   const wss = new WebSocketServer({ noServer: true });
   const sessionRooms = /* @__PURE__ */ new Map();
@@ -20057,9 +20135,25 @@ function initGDWebSocketServer(server) {
           return;
         }
         const now = Date.now();
-        const lastSpoke = new Date(session.currentTurn.lastSpokeAt || session.currentTurn.startedAt).getTime();
-        const inactiveSeconds = Math.round((now - lastSpoke) / 1e3);
-        if (inactiveSeconds >= DEFAULT_SILENCE_WARNING_SEC && !session.currentTurn.warningEmitted) {
+        const turnStartedAt = new Date(session.currentTurn.startedAt).getTime();
+        const turnDurationSeconds = session.currentTurn.suggestedDurationSeconds || DEFAULT_SUGGESTED_DURATION_SEC;
+        const elapsedSeconds = Math.max(0, Math.floor((now - turnStartedAt) / 1e3));
+        const turnId = `${session.currentTurn.participantId}:${session.currentTurn.round}:${turnStartedAt}`;
+        if (elapsedSeconds >= turnDurationSeconds) {
+          const updatedSession = await gdSessionService.handleTurnTimeout(sessionId, turnId);
+          broadcastToEveryoneInRoom(sessionId, {
+            type: "turn_changed",
+            payload: {
+              currentTurn: updatedSession?.currentTurn,
+              round: updatedSession?.round,
+              participants: updatedSession?.participants,
+              turnHistory: updatedSession?.turnHistory.slice(-1)[0],
+              reason: "time_expired"
+            }
+          });
+          return;
+        }
+        if (elapsedSeconds >= turnDurationSeconds - 15 && !session.currentTurn.warningEmitted) {
           session.currentTurn.warningEmitted = true;
           await session.save();
           broadcastToEveryoneInRoom(sessionId, {
@@ -20067,30 +20161,15 @@ function initGDWebSocketServer(server) {
             payload: {
               participantId: session.currentTurn.participantId,
               username: session.currentTurn.username,
-              secondsInactive: inactiveSeconds,
-              secondsRemaining: Math.max(0, DEFAULT_SILENCE_TIMEOUT_SEC - inactiveSeconds),
-              message: `Turn warning: No speech detected from @${session.currentTurn.username} for ${inactiveSeconds}s. Turn will be passed in ${DEFAULT_SILENCE_TIMEOUT_SEC - inactiveSeconds}s.`
-            }
-          });
-        }
-        if (inactiveSeconds >= DEFAULT_SILENCE_TIMEOUT_SEC) {
-          console.log(`[GD WebSocket] Silence timeout reached (120s) for speaker @${session.currentTurn.username} in room ${sessionId}. Auto-passing turn.`);
-          const updatedSession = await gdSessionService.handleSilenceTimeout(sessionId);
-          broadcastToEveryoneInRoom(sessionId, {
-            type: "turn_silence_timeout",
-            payload: {
-              previousSpeaker: session.currentTurn.username,
-              currentTurn: updatedSession?.currentTurn,
-              round: updatedSession?.round,
-              participants: updatedSession?.participants,
-              turnHistory: updatedSession?.turnHistory.slice(-1)[0]
+              secondsRemaining: Math.max(0, turnDurationSeconds - elapsedSeconds),
+              message: `15 seconds remain in @${session.currentTurn.username}'s speaking turn.`
             }
           });
         }
       } catch (err) {
         console.error(`[GD WebSocket] Silence checker error for session ${sessionId}:`, err);
       }
-    }, 3e3);
+    }, 1e3);
     silenceCheckers.set(sessionId, interval);
   }
   function stopSilenceChecker(sessionId) {
@@ -20101,10 +20180,28 @@ function initGDWebSocketServer(server) {
     }
   }
   server.on("upgrade", (request, socket, head) => {
-    const { pathname } = new URL(request.url || "", `http://${request.headers.host}`);
+    const { pathname, searchParams } = new URL(request.url || "", `http://${request.headers.host}`);
     if (pathname === "/api/v1/gd/ws" || pathname === "/ws/gd") {
+      let decoded;
+      try {
+        const token = searchParams.get("token");
+        if (!token) throw new Error("Missing token");
+        decoded = jwt5.verify(token, process.env.JWT_SECRET || "fallback_secret");
+      } catch {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      const authenticatedUserId = String(decoded.userId || decoded.id || decoded._id || decoded.sub || "");
+      if (!authenticatedUserId) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
       wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
+        const client = ws;
+        client.authenticatedUserId = authenticatedUserId;
+        wss.emit("connection", client, request);
       });
     }
   });
@@ -20118,7 +20215,8 @@ function initGDWebSocketServer(server) {
         const message = JSON.parse(data.toString());
         const { type, sessionId, payload } = message;
         if (type === "register_user") {
-          const cleanUser = (payload?.username || "").toLowerCase().trim();
+          const user = await User.findById(ws.authenticatedUserId).select("username").lean();
+          const cleanUser = (user?.username || "").toLowerCase().trim();
           if (cleanUser) {
             ws.username = cleanUser;
             if (!userSockets.has(cleanUser)) {
@@ -20130,22 +20228,34 @@ function initGDWebSocketServer(server) {
           return;
         }
         if (!sessionId) return;
+        if (!ws.sessionId || ws.sessionId !== sessionId) {
+          ws.send(JSON.stringify({ type: "gd:error", message: "Join this room before sending discussion events." }));
+          return;
+        }
         switch (type) {
           // -----------------------------------------------------------------
           // 1. Room Connection & Setup
           // -----------------------------------------------------------------
           case "join_room": {
+            const session = await gdSessionService.getSessionById(sessionId);
+            const participant = session?.participants.find(
+              (candidate) => candidate.userId?.toString() === ws.authenticatedUserId || candidate.id === ws.authenticatedUserId
+            );
+            if (!session || !participant) {
+              ws.send(JSON.stringify({ type: "gd:error", message: "Authenticated user is not a participant in this room." }));
+              ws.close(1008, "Room membership required");
+              break;
+            }
             ws.sessionId = sessionId;
-            ws.participantId = payload?.participantId;
-            ws.participantName = payload?.participantName || payload?.name || "Participant";
-            ws.username = (payload?.username || "").toLowerCase().trim();
-            ws.role = payload?.role || "student";
+            ws.participantId = participant.id;
+            ws.participantName = participant.name || participant.username || "Participant";
+            ws.username = (participant.username || "").toLowerCase().trim();
+            ws.role = participant.role;
             if (!sessionRooms.has(sessionId)) {
               sessionRooms.set(sessionId, /* @__PURE__ */ new Set());
             }
             sessionRooms.get(sessionId).add(ws);
             ensureSilenceChecker(sessionId);
-            const session = await gdSessionService.getSessionById(sessionId);
             ws.send(
               JSON.stringify({
                 type: "joined_room_ack",
@@ -20269,8 +20379,13 @@ function initGDWebSocketServer(server) {
             const textToSave = rawEvent?.text?.trim() || payload?.text?.trim();
             const isFinal = rawEvent?.isFinal !== false;
             if (textToSave) {
+              const roomState = await gdSessionService.getSessionById(sessionId);
+              if (roomState?.status === "in_progress" && roomState.currentTurn?.participantId !== ws.participantId) {
+                ws.send(JSON.stringify({ type: "transcript_rejected", message: "Only the active speaker can submit discussion audio text." }));
+                break;
+              }
               if (isFinal) {
-                const currentSess = await gdSessionService.getSessionById(sessionId);
+                const currentSess = roomState;
                 const senderPartId = ws.participantId || rawEvent.participantId || rawEvent.speakerId || payload?.participantId;
                 const senderPartName = ws.participantName || rawEvent.participantName || payload?.participantName || "Candidate";
                 const isTurnSpeaker = currentSess?.currentTurn?.participantId === senderPartId;
@@ -20352,6 +20467,11 @@ function initGDWebSocketServer(server) {
           }
           case "interim_transcript": {
             if (payload?.text !== void 0) {
+              const roomState = await gdSessionService.getSessionById(sessionId);
+              if (roomState?.status === "in_progress" && roomState.currentTurn?.participantId !== ws.participantId) {
+                ws.send(JSON.stringify({ type: "transcript_rejected", message: "Only the active speaker can submit discussion audio text." }));
+                break;
+              }
               const senderPartId = ws.participantId || payload.participantId;
               const senderPartName = ws.participantName || payload.participantName || "Candidate";
               broadcastToEveryoneInRoom(sessionId, {
@@ -20400,7 +20520,7 @@ function initGDWebSocketServer(server) {
           }
           case "finish_turn": {
             try {
-              const callerId = payload?.participantId || ws.participantId || "";
+              const callerId = ws.participantId || "";
               const updated = await gdSessionService.finishTurn(
                 sessionId,
                 callerId,
@@ -20428,7 +20548,7 @@ function initGDWebSocketServer(server) {
           }
           case "pass_turn": {
             try {
-              const callerId = payload?.participantId || ws.participantId || "";
+              const callerId = ws.participantId || "";
               const updated = await gdSessionService.passTurn(sessionId, callerId);
               broadcastToEveryoneInRoom(sessionId, {
                 type: "turn_changed",
@@ -20559,9 +20679,10 @@ function initGDWebSocketServer(server) {
 
 // src/services/gd/gdTranscriptionGateway.ts
 import { WebSocketServer as WebSocketServer2, WebSocket as WebSocket2 } from "ws";
-import jwt5 from "jsonwebtoken";
+import jwt6 from "jsonwebtoken";
 import dotenv3 from "dotenv";
 import path2 from "path";
+import { randomUUID } from "crypto";
 dotenv3.config({ path: path2.resolve(process.cwd(), ".env") });
 if (!process.env.DEEPGRAM_API_KEY) {
   dotenv3.config({ path: path2.resolve(process.cwd(), "backend/.env") });
@@ -20574,7 +20695,7 @@ var DEEPGRAM_LANGUAGE2 = process.env.DEEPGRAM_LANGUAGE || "en-IN";
 function initGDTranscriptionGateway(server) {
   const wss = new WebSocketServer2({ noServer: true });
   const activeStreams = /* @__PURE__ */ new Map();
-  server.on("upgrade", (request, socket, head) => {
+  server.on("upgrade", async (request, socket, head) => {
     const { pathname, searchParams } = new URL(request.url || "", `http://${request.headers.host}`);
     if (pathname === "/api/v1/gd/transcription/stream" || pathname === "/ws/gd-transcription") {
       let token = searchParams.get("token");
@@ -20585,21 +20706,31 @@ function initGDTranscriptionGateway(server) {
       if (!token && protocols && protocols.length >= 2 && protocols[0] === "access_token") {
         token = protocols[1];
       }
-      let authedUserId = "";
-      if (token) {
-        try {
-          const decoded = jwt5.verify(token, JWT_SECRET);
-          authedUserId = decoded.id || decoded.userId || decoded._id || decoded.sub || "";
-        } catch {
-          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-          socket.destroy();
-          return;
-        }
-      }
       const sessionId = searchParams.get("sessionId") || searchParams.get("roomId") || "";
-      const participantId = searchParams.get("participantId") || authedUserId || "";
-      const username = searchParams.get("username") || "";
-      const participantName = searchParams.get("participantName") || username || "Participant";
+      let decoded;
+      try {
+        if (!token) throw new Error("Missing token");
+        decoded = jwt6.verify(token, JWT_SECRET);
+        if (decoded.purpose !== "gd_transcription") throw new Error("Invalid token purpose");
+      } catch {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      const authedUserId = String(decoded.userId || decoded.id || decoded._id || decoded.sub || "");
+      const session = await gdSessionService.getSessionById(sessionId);
+      const participant = session?.participants.find(
+        (candidate) => candidate.userId?.toString() === authedUserId || candidate.id === authedUserId
+      );
+      const requestedParticipantId = searchParams.get("participantId") || "";
+      if (!session || !participant || requestedParticipantId && requestedParticipantId !== participant.id) {
+        socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      const participantId = participant.id;
+      const username = participant.username || "";
+      const participantName = participant.name || username || "Participant";
       const language = searchParams.get("language") || DEEPGRAM_LANGUAGE2;
       const model = searchParams.get("model") || DEEPGRAM_MODEL2;
       wss.handleUpgrade(request, socket, head, (ws) => {
@@ -20608,6 +20739,8 @@ function initGDTranscriptionGateway(server) {
         client.participantId = participantId;
         client.participantName = participantName;
         client.username = username.toLowerCase().trim();
+        client.turnId = session.currentTurn?.participantId === participantId ? `${participantId}:${session.currentTurn.round}:${new Date(session.currentTurn.startedAt).getTime()}` : "";
+        client.streamId = randomUUID();
         client.language = language;
         client.model = model;
         client.sequenceCounter = 0;
@@ -20650,10 +20783,26 @@ function initGDTranscriptionGateway(server) {
       return;
     }
     await setupUpstream(client);
-    client.on("message", (data, isBinary) => {
+    client.on("message", async (data, isBinary) => {
       client.lastActiveAt = Date.now();
       if (isBinary) {
         if (!client.isActive) return;
+        let currentSession;
+        try {
+          currentSession = await gdSessionService.getSessionById(client.sessionId || "");
+        } catch (error) {
+          console.error("[GD Transcription Gateway] Active-turn authorization check failed:", error.message);
+          client.isActive = false;
+          client.close(1011, "Unable to verify the active GD turn");
+          return;
+        }
+        const currentTurn = currentSession?.currentTurn;
+        const currentTurnId = currentTurn ? `${currentTurn.participantId}:${currentTurn.round}:${new Date(currentTurn.startedAt).getTime()}` : "";
+        if (currentSession?.status !== "in_progress" || currentTurn?.participantId !== client.participantId || !client.turnId || currentTurnId !== client.turnId) {
+          client.isActive = false;
+          client.close(1008, "Audio is only accepted during the authenticated participant's active turn");
+          return;
+        }
         const chunk = Buffer.from(data);
         const upstream = client.upstreamSocket;
         if (upstream && upstream.readyState === WebSocket2.OPEN) {
@@ -20795,6 +20944,8 @@ function initGDTranscriptionGateway(server) {
             username: client.username || "candidate",
             segmentId,
             sequenceNumber: client.sequenceCounter,
+            turnId: client.turnId,
+            streamId: client.streamId,
             text: transcriptText,
             isFinal,
             startTime: parsed.start,
@@ -20815,12 +20966,14 @@ function initGDTranscriptionGateway(server) {
                 participantId: client.participantId || "candidate",
                 participantName: client.participantName || "Candidate",
                 speakerId: client.participantId || "candidate",
+                streamId: client.streamId,
                 username: client.username,
                 text: transcriptText,
                 durationSeconds: parsed.duration ? Math.max(1, Math.round(parsed.duration)) : Math.max(1, Math.round(transcriptText.split(/\s+/).length / 2.5)),
                 isInterruption: false,
                 confidence,
                 sequenceNumber: client.sequenceCounter,
+                turnId: client.turnId,
                 startTime: parsed.start,
                 endTime: parsed.start !== void 0 && parsed.duration !== void 0 ? parsed.start + parsed.duration : void 0
               });
@@ -20847,6 +21000,8 @@ function initGDTranscriptionGateway(server) {
               participantId: client.participantId || "candidate",
               participantName: client.participantName || "Candidate",
               speakerId: client.participantId || "candidate",
+              turnId: client.turnId,
+              streamId: client.streamId,
               text: transcriptText,
               isFinal: true,
               startTime: parsed.start ?? 0,
@@ -20868,6 +21023,8 @@ function initGDTranscriptionGateway(server) {
               type: "gd:transcript",
               roomId: client.sessionId || "",
               participantId: client.participantId || "candidate",
+              turnId: client.turnId,
+              streamId: client.streamId,
               participantName: client.participantName || "Candidate",
               speakerId: client.participantId || "candidate",
               text: transcriptText,
@@ -20954,7 +21111,7 @@ function initGDTranscriptionGateway(server) {
 // src/services/sttProxyService.ts
 init_sttKeytermsService();
 import { WebSocketServer as WebSocketServer3, WebSocket as WebSocket3 } from "ws";
-import jwt6 from "jsonwebtoken";
+import jwt7 from "jsonwebtoken";
 import dotenv4 from "dotenv";
 dotenv4.config();
 var MURF_API_KEY2 = process.env.MURF_API_KEY || "";
@@ -20978,7 +21135,7 @@ function initSTTWebSocketServer(server) {
       let userId = "";
       if (token) {
         try {
-          const decoded = jwt6.verify(token, JWT_SECRET2);
+          const decoded = jwt7.verify(token, JWT_SECRET2);
           userId = decoded.id || decoded.userId || decoded._id || "";
         } catch {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

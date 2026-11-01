@@ -11,6 +11,7 @@ import {
   joinGDRoom,
   getGDSession,
   startGDSession,
+  beginGDSessionTurn,
   finishStudentTurn,
   passStudentTurn,
   skipStudentTurn,
@@ -54,6 +55,7 @@ router.post("/sessions/:sessionId/join", protect as any, joinGDRoom as any);
 
 // Discussion & Turn management
 router.post("/rooms/:roomId/start", protect as any, startGDSession as any);
+router.post("/rooms/:roomId/begin", protect as any, beginGDSessionTurn as any);
 router.post("/rooms/:roomId/turns/finish", protect as any, finishStudentTurn as any);
 router.post("/rooms/:roomId/turns/pass", protect as any, passStudentTurn as any);
 router.post("/rooms/:roomId/turns/skip", protect as any, skipStudentTurn as any);
@@ -61,11 +63,11 @@ router.post("/rooms/:roomId/moderator-speech", optionalAuth as any, getModerator
 router.post("/sessions/:sessionId/moderator-speech", optionalAuth as any, getModeratorSpeech as any);
 
 // Transcript & End discussion
-router.get("/transcription/credentials", optionalAuth as any, getGDTranscriptionCredentials as any);
-router.get("/rooms/:roomId/stt-credentials", optionalAuth as any, getGDTranscriptionCredentials as any);
-router.get("/sessions/:sessionId/stt-credentials", optionalAuth as any, getGDTranscriptionCredentials as any);
-router.post("/sessions/:sessionId/transcript", optionalAuth as any, appendTranscriptSegment as any);
-router.post("/rooms/:roomId/transcript", optionalAuth as any, appendTranscriptSegment as any);
+router.get("/transcription/credentials", protect as any, getGDTranscriptionCredentials as any);
+router.get("/rooms/:roomId/stt-credentials", protect as any, getGDTranscriptionCredentials as any);
+router.get("/sessions/:sessionId/stt-credentials", protect as any, getGDTranscriptionCredentials as any);
+router.post("/sessions/:sessionId/transcript", protect as any, appendTranscriptSegment as any);
+router.post("/rooms/:roomId/transcript", protect as any, appendTranscriptSegment as any);
 router.post("/rooms/:roomId/end", protect as any, endGDSession as any);
 router.post("/sessions/:sessionId/end", protect as any, endGDSession as any);
 

@@ -57,6 +57,11 @@ export const VIRTUAL_PARTICIPANTS: Omit<IGDParticipant, "speakingTimeSeconds" | 
 let gdRoomBroadcaster: ((sessionId: string, payload: any) => void) | null = null;
 let gdUserBroadcaster: ((username: string, payload: any) => void) | null = null;
 
+function getTurnIdentity(turn: IGDCurrentTurn | undefined): string {
+  if (!turn) return "";
+  return `${turn.participantId}:${turn.round}:${new Date(turn.startedAt).getTime()}`;
+}
+
 export function registerGDRoomBroadcaster(broadcaster: (sessionId: string, payload: any) => void) {
   gdRoomBroadcaster = broadcaster;
 }
@@ -86,6 +91,7 @@ export function broadcastToGDUser(username: string, payload: any) {
 }
 
 class GDSessionService {
+  private turnTransitionTails = new Map<string, Promise<void>>();
   /**
    * Creates a new Group Discussion room hosted by an admin/moderator.
    * English is the default expected language unless specified.
@@ -679,6 +685,9 @@ class GDSessionService {
   public async startDiscussion(roomId: string, adminId: string): Promise<IGroupDiscussion> {
     const session = await this.getSessionById(roomId);
     if (!session) throw new Error("Discussion room not found");
+    if (session.adminId.toString() !== adminId) {
+      throw new Error("Only the room host can start the discussion");
+    }
 
     if (session.status !== "in_progress") {
       session.status = "in_progress";
@@ -686,11 +695,15 @@ class GDSessionService {
       await session.save();
     }
 
-    // Pick first turn if not already active
-    if (!session.currentTurn) {
-      await this.assignNextTurn(roomId, "initial_turn");
-    }
+    return (await this.getSessionById(roomId))!;
+  }
 
+  public async beginFirstTurn(roomId: string, adminId: string): Promise<IGroupDiscussion> {
+    const session = await this.getSessionById(roomId);
+    if (!session) throw new Error("Discussion room not found");
+    if (session.adminId.toString() !== adminId) throw new Error("Only the room host can begin the speaking turns");
+    if (session.status !== "in_progress") throw new Error("The discussion briefing has not started");
+    if (!session.currentTurn) await this.assignNextTurn(roomId, "initial_turn");
     return (await this.getSessionById(roomId))!;
   }
 
@@ -701,11 +714,37 @@ class GDSessionService {
    */
   public async assignNextTurn(
     roomId: string,
-    reason?: "initial_turn" | "student_finished" | "student_passed" | "admin_skipped" | "silence_timeout" | "disconnect",
-    wordsSpoken: number = 0
+    reason?: "initial_turn" | "student_finished" | "student_passed" | "admin_skipped" | "silence_timeout" | "time_expired" | "disconnect",
+    wordsSpoken: number = 0,
+    expectedTurnId?: string
+  ): Promise<IGDCurrentTurn | null> {
+    const previous = this.turnTransitionTails.get(roomId) || Promise.resolve();
+    let release!: () => void;
+    const queued = new Promise<void>((resolve) => { release = resolve; });
+    const tail = previous.then(() => queued);
+    this.turnTransitionTails.set(roomId, tail);
+    await previous;
+
+    try {
+      return await this.assignNextTurnLocked(roomId, reason, wordsSpoken, expectedTurnId);
+    } finally {
+      release();
+      if (this.turnTransitionTails.get(roomId) === tail) this.turnTransitionTails.delete(roomId);
+    }
+  }
+
+  private async assignNextTurnLocked(
+    roomId: string,
+    reason?: "initial_turn" | "student_finished" | "student_passed" | "admin_skipped" | "silence_timeout" | "time_expired" | "disconnect",
+    wordsSpoken: number = 0,
+    expectedTurnId?: string
   ): Promise<IGDCurrentTurn | null> {
     const session = await this.getSessionById(roomId);
     if (!session) return null;
+
+    if (expectedTurnId && getTurnIdentity(session.currentTurn) !== expectedTurnId) {
+      throw new Error("Turn has already changed");
+    }
 
     const previousTurn = session.currentTurn;
     const now = new Date();
@@ -717,7 +756,7 @@ class GDSessionService {
 
       if (prevParticipant) {
         prevParticipant.hasSpokenInCurrentRound = true;
-        if (reason === "student_finished") {
+        if (reason === "student_finished" || reason === "time_expired") {
           prevParticipant.turnsCompleted = (prevParticipant.turnsCompleted || 0) + 1;
         } else if (reason === "student_passed") {
           prevParticipant.turnsPassed = (prevParticipant.turnsPassed || 0) + 1;
@@ -739,8 +778,10 @@ class GDSessionService {
       });
     }
 
-    // 2. Identify student participants (all human peers including host/creator)
-    const allStudents = session.participants.filter((p) => !p.isAi);
+    // 2. Only invited/joined students take speaking slots; the host moderates the room.
+    const allStudents = session.participants.filter(
+      (p) => !p.isAi && !p.isHost && p.role !== "admin"
+    );
     if (allStudents.length === 0) {
       session.currentTurn = undefined;
       await session.save();
@@ -859,7 +900,7 @@ class GDSessionService {
       throw new Error("Only the currently assigned speaker or moderator can finish this turn");
     }
 
-    await this.assignNextTurn(roomId, "student_finished", wordsSpoken);
+    await this.assignNextTurn(roomId, "student_finished", wordsSpoken, getTurnIdentity(session.currentTurn));
     return this.getSessionById(roomId);
   }
 
@@ -887,7 +928,7 @@ class GDSessionService {
       throw new Error("Only the currently assigned speaker or moderator can pass this turn");
     }
 
-    await this.assignNextTurn(roomId, "student_passed", 0);
+    await this.assignNextTurn(roomId, "student_passed", 0, getTurnIdentity(session.currentTurn));
     return this.getSessionById(roomId);
   }
 
@@ -897,10 +938,11 @@ class GDSessionService {
   public async skipTurnByAdmin(roomId: string, adminId: string): Promise<IGroupDiscussion | null> {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
+    if (session.adminId.toString() !== adminId) {
+      throw new Error("Only the room host can skip a speaking turn");
+    }
 
-    // Allow participants to skip turn when needed
-
-    await this.assignNextTurn(roomId, "admin_skipped", 0);
+    await this.assignNextTurn(roomId, "admin_skipped", 0, getTurnIdentity(session.currentTurn));
     return this.getSessionById(roomId);
   }
 
@@ -911,7 +953,12 @@ class GDSessionService {
     const session = await this.getSessionById(roomId);
     if (!session || !session.currentTurn) return null;
 
-    await this.assignNextTurn(roomId, "silence_timeout", 0);
+    await this.assignNextTurn(roomId, "silence_timeout", 0, getTurnIdentity(session.currentTurn));
+    return this.getSessionById(roomId);
+  }
+
+  public async handleTurnTimeout(roomId: string, expectedTurnId: string): Promise<IGroupDiscussion | null> {
+    await this.assignNextTurn(roomId, "time_expired", 0, expectedTurnId);
     return this.getSessionById(roomId);
   }
 
@@ -931,7 +978,7 @@ class GDSessionService {
     }
 
     if (session.currentTurn && session.currentTurn.participantId === participantId) {
-      await this.assignNextTurn(roomId, "disconnect", 0);
+      await this.assignNextTurn(roomId, "disconnect", 0, getTurnIdentity(session.currentTurn));
     } else {
       await session.save();
     }
@@ -952,6 +999,7 @@ class GDSessionService {
       participantId: string;
       participantName: string;
       speakerId?: string;
+      streamId?: string;
       username?: string;
       text: string;
       durationSeconds: number;
@@ -977,6 +1025,7 @@ class GDSessionService {
       participantId: segment.participantId,
       participantName: segment.participantName,
       speakerId: segment.speakerId || segment.participantId,
+      streamId: segment.streamId,
       username: segment.username?.toLowerCase().trim(),
       text: segment.text.trim(),
       timestamp: new Date(),
@@ -992,7 +1041,7 @@ class GDSessionService {
     };
 
     // 1. Idempotent atomic push to GroupDiscussion document
-    await GroupDiscussion.updateOne(
+    const persisted = await GroupDiscussion.updateOne(
       { _id: sessionId, "transcript.id": { $ne: segId } },
       {
         $push: { transcript: newSegment },
@@ -1005,6 +1054,11 @@ class GDSessionService {
         },
       }
     );
+
+    // The main session transcript is the idempotency gate for all mirrors and metrics.
+    if (!persisted.modifiedCount) {
+      return this.getSessionById(sessionId);
+    }
 
     // 2. Increment participant speaking metrics atomically
     await GroupDiscussion.updateOne(
@@ -1019,7 +1073,7 @@ class GDSessionService {
     );
 
     // 3. Atomically persist to dedicated GDTranscript collection
-    GDTranscript.findOneAndUpdate(
+    await GDTranscript.findOneAndUpdate(
       { sessionId, participantId: segment.participantId },
       {
         $setOnInsert: {
@@ -1037,6 +1091,7 @@ class GDSessionService {
             confidence: newSegment.confidence || 1.0,
             isFinal: true,
             turnId: newSegment.turnId,
+            streamId: newSegment.streamId,
             timestamp: newSegment.timestamp,
           },
         },
@@ -1047,7 +1102,8 @@ class GDSessionService {
       },
       { upsert: true, new: true }
     ).catch((err: any) => {
-      console.warn("[GDTranscript] Upsert error:", err.message);
+      console.error("[GDTranscript] Upsert failed:", err.message);
+      throw err;
     });
 
     // 4. Retrieve fresh authoritative session state to recompute percentage speaking time

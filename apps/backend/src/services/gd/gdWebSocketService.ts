@@ -1,11 +1,12 @@
 import { Server as HttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import jwt from "jsonwebtoken";
+import { User } from "../../models/User";
 import {
   gdSessionService,
   registerGDRoomBroadcaster,
   registerGDUserBroadcaster,
-  DEFAULT_SILENCE_WARNING_SEC,
-  DEFAULT_SILENCE_TIMEOUT_SEC,
+  DEFAULT_SUGGESTED_DURATION_SEC,
 } from "./gdSessionService";
 
 interface GDClient extends WebSocket {
@@ -15,6 +16,7 @@ interface GDClient extends WebSocket {
   participantName?: string;
   username?: string;
   role?: string;
+  authenticatedUserId?: string;
 }
 
 export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
@@ -89,8 +91,7 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
   }
 
   /**
-   * Starts a background silence monitor interval for a live GD session.
-   * Checks every 3 seconds whether the current speaker has been silent for 90s (warning) or 120s (auto-pass).
+   * Enforces the authoritative turn deadline and sends synchronized state to every client.
    */
   function ensureSilenceChecker(sessionId: string) {
     if (silenceCheckers.has(sessionId)) return;
@@ -103,11 +104,28 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
         }
 
         const now = Date.now();
-        const lastSpoke = new Date(session.currentTurn.lastSpokeAt || session.currentTurn.startedAt).getTime();
-        const inactiveSeconds = Math.round((now - lastSpoke) / 1000);
+        const turnStartedAt = new Date(session.currentTurn.startedAt).getTime();
+        const turnDurationSeconds = session.currentTurn.suggestedDurationSeconds || DEFAULT_SUGGESTED_DURATION_SEC;
+        const elapsedSeconds = Math.max(0, Math.floor((now - turnStartedAt) / 1000));
+        const turnId = `${session.currentTurn.participantId}:${session.currentTurn.round}:${turnStartedAt}`;
 
-        // Warning at 90s of inactivity
-        if (inactiveSeconds >= DEFAULT_SILENCE_WARNING_SEC && !session.currentTurn.warningEmitted) {
+        if (elapsedSeconds >= turnDurationSeconds) {
+          const updatedSession = await gdSessionService.handleTurnTimeout(sessionId, turnId);
+          broadcastToEveryoneInRoom(sessionId, {
+            type: "turn_changed",
+            payload: {
+              currentTurn: updatedSession?.currentTurn,
+              round: updatedSession?.round,
+              participants: updatedSession?.participants,
+              turnHistory: updatedSession?.turnHistory.slice(-1)[0],
+              reason: "time_expired",
+            },
+          });
+          return;
+        }
+
+        // Warn all clients 15 seconds before the hard deadline.
+        if (elapsedSeconds >= turnDurationSeconds - 15 && !session.currentTurn.warningEmitted) {
           session.currentTurn.warningEmitted = true;
           await session.save();
 
@@ -116,33 +134,15 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
             payload: {
               participantId: session.currentTurn.participantId,
               username: session.currentTurn.username,
-              secondsInactive: inactiveSeconds,
-              secondsRemaining: Math.max(0, DEFAULT_SILENCE_TIMEOUT_SEC - inactiveSeconds),
-              message: `Turn warning: No speech detected from @${session.currentTurn.username} for ${inactiveSeconds}s. Turn will be passed in ${DEFAULT_SILENCE_TIMEOUT_SEC - inactiveSeconds}s.`,
-            },
-          });
-        }
-
-        // Auto pass at 120s of silence
-        if (inactiveSeconds >= DEFAULT_SILENCE_TIMEOUT_SEC) {
-          console.log(`[GD WebSocket] Silence timeout reached (120s) for speaker @${session.currentTurn.username} in room ${sessionId}. Auto-passing turn.`);
-          const updatedSession = await gdSessionService.handleSilenceTimeout(sessionId);
-
-          broadcastToEveryoneInRoom(sessionId, {
-            type: "turn_silence_timeout",
-            payload: {
-              previousSpeaker: session.currentTurn.username,
-              currentTurn: updatedSession?.currentTurn,
-              round: updatedSession?.round,
-              participants: updatedSession?.participants,
-              turnHistory: updatedSession?.turnHistory.slice(-1)[0],
+              secondsRemaining: Math.max(0, turnDurationSeconds - elapsedSeconds),
+              message: `15 seconds remain in @${session.currentTurn.username}'s speaking turn.`,
             },
           });
         }
       } catch (err) {
         console.error(`[GD WebSocket] Silence checker error for session ${sessionId}:`, err);
       }
-    }, 3000);
+    }, 1000);
 
     silenceCheckers.set(sessionId, interval);
   }
@@ -157,11 +157,31 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
   // Handle HTTP upgrade for /api/v1/gd/ws
   server.on("upgrade", (request, socket, head) => {
-    const { pathname } = new URL(request.url || "", `http://${request.headers.host}`);
+    const { pathname, searchParams } = new URL(request.url || "", `http://${request.headers.host}`);
 
     if (pathname === "/api/v1/gd/ws" || pathname === "/ws/gd") {
+      let decoded: any;
+      try {
+        const token = searchParams.get("token");
+        if (!token) throw new Error("Missing token");
+        decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret");
+      } catch {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+
+      const authenticatedUserId = String(decoded.userId || decoded.id || decoded._id || decoded.sub || "");
+      if (!authenticatedUserId) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+
       wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
+        const client = ws as GDClient;
+        client.authenticatedUserId = authenticatedUserId;
+        wss.emit("connection", client, request);
       });
     }
   });
@@ -180,7 +200,8 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
         // Register active user connection for direct real-time invitation pushes
         if (type === "register_user") {
-          const cleanUser = (payload?.username || "").toLowerCase().trim();
+          const user = await User.findById(ws.authenticatedUserId).select("username").lean();
+          const cleanUser = (user?.username || "").toLowerCase().trim();
           if (cleanUser) {
             ws.username = cleanUser;
             if (!userSockets.has(cleanUser)) {
@@ -193,17 +214,31 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
         }
 
         if (!sessionId) return;
+        if (!ws.sessionId || ws.sessionId !== sessionId) {
+          ws.send(JSON.stringify({ type: "gd:error", message: "Join this room before sending discussion events." }));
+          return;
+        }
 
         switch (type) {
           // -----------------------------------------------------------------
           // 1. Room Connection & Setup
           // -----------------------------------------------------------------
           case "join_room": {
+            const session = await gdSessionService.getSessionById(sessionId);
+            const participant = session?.participants.find(
+              (candidate) => candidate.userId?.toString() === ws.authenticatedUserId || candidate.id === ws.authenticatedUserId
+            );
+            if (!session || !participant) {
+              ws.send(JSON.stringify({ type: "gd:error", message: "Authenticated user is not a participant in this room." }));
+              ws.close(1008, "Room membership required");
+              break;
+            }
+
             ws.sessionId = sessionId;
-            ws.participantId = payload?.participantId;
-            ws.participantName = payload?.participantName || payload?.name || "Participant";
-            ws.username = (payload?.username || "").toLowerCase().trim();
-            ws.role = payload?.role || "student";
+            ws.participantId = participant.id;
+            ws.participantName = participant.name || participant.username || "Participant";
+            ws.username = (participant.username || "").toLowerCase().trim();
+            ws.role = participant.role;
 
             if (!sessionRooms.has(sessionId)) {
               sessionRooms.set(sessionId, new Set());
@@ -213,8 +248,6 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
             ensureSilenceChecker(sessionId);
 
             // Fetch latest authoritative room state from database
-            const session = await gdSessionService.getSessionById(sessionId);
-
             // Send full room state ack back to newly joined client
             ws.send(
               JSON.stringify({
@@ -351,8 +384,16 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
             const isFinal = rawEvent?.isFinal !== false;
 
             if (textToSave) {
+              const roomState = await gdSessionService.getSessionById(sessionId);
+              if (
+                roomState?.status === "in_progress" &&
+                roomState.currentTurn?.participantId !== ws.participantId
+              ) {
+                ws.send(JSON.stringify({ type: "transcript_rejected", message: "Only the active speaker can submit discussion audio text." }));
+                break;
+              }
               if (isFinal) {
-                const currentSess = await gdSessionService.getSessionById(sessionId);
+                const currentSess = roomState;
                 // Authenticated participant identity from WebSocket connection
                 const senderPartId = ws.participantId || rawEvent.participantId || rawEvent.speakerId || payload?.participantId;
                 const senderPartName = ws.participantName || rawEvent.participantName || payload?.participantName || "Candidate";
@@ -445,6 +486,14 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
           case "interim_transcript": {
             if (payload?.text !== undefined) {
+              const roomState = await gdSessionService.getSessionById(sessionId);
+              if (
+                roomState?.status === "in_progress" &&
+                roomState.currentTurn?.participantId !== ws.participantId
+              ) {
+                ws.send(JSON.stringify({ type: "transcript_rejected", message: "Only the active speaker can submit discussion audio text." }));
+                break;
+              }
               const senderPartId = ws.participantId || payload.participantId;
               const senderPartName = ws.participantName || payload.participantName || "Candidate";
 
@@ -498,7 +547,7 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
           case "finish_turn": {
             try {
-              const callerId = payload?.participantId || ws.participantId || "";
+              const callerId = ws.participantId || "";
               const updated = await gdSessionService.finishTurn(
                 sessionId,
                 callerId,
@@ -527,7 +576,7 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
           case "pass_turn": {
             try {
-              const callerId = payload?.participantId || ws.participantId || "";
+              const callerId = ws.participantId || "";
               const updated = await gdSessionService.passTurn(sessionId, callerId);
 
               broadcastToEveryoneInRoom(sessionId, {

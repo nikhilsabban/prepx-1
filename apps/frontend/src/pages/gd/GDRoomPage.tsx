@@ -33,6 +33,7 @@ import {
   fetchGDSession,
   joinGDRoom,
   startDiscussion,
+  beginDiscussionTurn,
   finishTurn,
   passTurn,
   skipTurn,
@@ -172,6 +173,7 @@ export function GDRoomPage() {
   const [isModeratorPlaying, setIsModeratorPlaying] = useState(false);
   const [moderatorText, setModeratorText] = useState("");
   const moderatorAudioRef = useRef<HTMLAudioElement | null>(null);
+  const moderatorBriefingFinishedRef = useRef(false);
   const murfSocketRef = useRef<WebSocket | null>(null);
   const murfRecorderRef = useRef<MediaRecorder | null>(null);
   const audioCaptureSessionRef = useRef<GDAudioCaptureSession | null>(null);
@@ -373,14 +375,13 @@ export function GDRoomPage() {
     }
   }
 
-  // Audio & STT streaming synchronization:
-  // When session is in progress and mic is enabled, keep audio track live and STT streaming
-  // so each participant's contributions are captured with accurate individual speaker attribution.
+  // Capture is restricted to the server-assigned speaker. Each turn gets a new STT
+  // stream so delayed provider results retain the turn identity they started with.
   useEffect(() => {
     if (!session || session.status !== "in_progress") return;
 
     const audioTrack = localStreamRef.current?.getAudioTracks()[0];
-    if (isMicOnRef.current && audioTrack) {
+    if (isMyTurn && isMicOnRef.current && audioTrack) {
       audioTrack.enabled = true;
       startMurfOrNativeSTT();
     } else if (!isMicOnRef.current && audioTrack) {
@@ -388,8 +389,13 @@ export function GDRoomPage() {
       stopMurfSTT();
       stopSpeechRecognition();
       setLiveTranscriptPreview("");
+    } else {
+      if (audioTrack) audioTrack.enabled = false;
+      stopMurfSTT();
+      stopSpeechRecognition();
+      setLiveTranscriptPreview("");
     }
-  }, [session?.status, isMicOn]);
+  }, [session?.status, isMicOn, isMyTurn]);
 
   // 1. Initialize Room & Join via backend
   useEffect(() => {
@@ -445,6 +451,16 @@ export function GDRoomPage() {
       hasAudio = stream.getAudioTracks().length > 0;
       hasVideo = stream.getVideoTracks().length > 0;
     } catch (errCombined: any) {
+      const isDenied = errCombined?.name === "NotAllowedError" || errCombined?.name === "PermissionDeniedError";
+      if (isDenied) {
+        setMediaError("Microphone and camera permissions were denied. Please allow microphone access in your browser site settings.");
+        setIsMicOn(false);
+        setIsVideoOn(false);
+        isMicOnRef.current = false;
+        isVideoOnRef.current = false;
+        return;
+      }
+
       console.warn("Combined getUserMedia failed, attempting separate device fallback...", errCombined);
 
       const tracks: MediaStreamTrack[] = [];
@@ -479,6 +495,8 @@ export function GDRoomPage() {
     }
 
     if (stream) {
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) audioTrack.enabled = false;
       localStreamRef.current = stream;
       setLocalStream(stream);
       setIsVideoOn(hasVideo);
@@ -687,6 +705,14 @@ export function GDRoomPage() {
     const participant = currentParticipantRef.current || currentParticipant;
     if (!participant || !sessionId) return;
 
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+    if (backendUrl.includes(".vercel.app")) {
+      // Vercel serverless platform does not host persistent WebSockets.
+      // Activate browser native SpeechRecognition directly without attempting WebSocket connection.
+      startSpeechRecognition();
+      return;
+    }
+
     if (audioCaptureSessionRef.current) {
       audioCaptureSessionRef.current.resume();
       setSttEngine("deepgram");
@@ -764,7 +790,8 @@ export function GDRoomPage() {
 
   function stopMurfSTT() {
     if (audioCaptureSessionRef.current) {
-      audioCaptureSessionRef.current.pause();
+      audioCaptureSessionRef.current.destroy();
+      audioCaptureSessionRef.current = null;
     }
     setLiveTranscriptPreview("");
     setSttEngine("none");
@@ -789,6 +816,7 @@ export function GDRoomPage() {
 
       audio.onended = () => {
         setIsModeratorPlaying(false);
+        void completeModeratorBriefing();
       };
       audio.onerror = (e) => {
         console.warn("Audio element playback error, trying speech synthesis fallback:", e);
@@ -828,15 +856,40 @@ export function GDRoomPage() {
         utterance.lang = "en-US";
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
-        utterance.onend = () => setIsModeratorPlaying(false);
-        utterance.onerror = () => setIsModeratorPlaying(false);
+        utterance.onend = () => {
+          setIsModeratorPlaying(false);
+          void completeModeratorBriefing();
+        };
+        utterance.onerror = () => {
+          setIsModeratorPlaying(false);
+          void completeModeratorBriefing();
+        };
         setIsModeratorPlaying(true);
         window.speechSynthesis.speak(utterance);
       } catch {
         setIsModeratorPlaying(false);
+        void completeModeratorBriefing();
       }
     } else {
       setIsModeratorPlaying(false);
+      void completeModeratorBriefing();
+    }
+  }
+
+  async function completeModeratorBriefing() {
+    if (!isAdmin || !sessionId || moderatorBriefingFinishedRef.current) return;
+    moderatorBriefingFinishedRef.current = true;
+    try {
+      const result = await beginDiscussionTurn(sessionId);
+      setSession((prev) => prev ? {
+        ...prev,
+        currentTurn: result.currentTurn,
+        round: result.round || prev.round,
+        participants: result.participants || prev.participants,
+      } : prev);
+    } catch (error: any) {
+      moderatorBriefingFinishedRef.current = false;
+      toast.error(getErrorMessage(error, "Unable to begin the first speaking turn."));
     }
   }
 
@@ -877,6 +930,7 @@ export function GDRoomPage() {
         speakBrowserFallback(res.moderatorText);
       } else {
         setIsModeratorPlaying(false);
+        void completeModeratorBriefing();
       }
     } catch (err: any) {
       console.warn("Failed to fetch moderator speech, falling back:", err);
@@ -885,7 +939,7 @@ export function GDRoomPage() {
         (session?.topic as any)?.originalTitle ||
         "Today's Discussion";
       const topicTitle = formatTopicDisplay(rawTitle).replace(/^["']+|["']+$/g, "");
-      const fallbackText = `Welcome to today's Group Discussion on ${topicTitle}. Each participant will have dedicated speaking turns to share their perspective. Please maintain constructive dialogue and professional decorum. Let us begin.`;
+      const fallbackText = `Welcome to today's Group Discussion on ${topicTitle}. Every participant receives one turn per round in a randomized order. Each turn lasts up to 90 seconds, and you may pass at any time while remaining eligible in later rounds. Keep your microphone muted when you are not the active speaker; only the assigned speaker is captured and transcribed. Your finalized transcript is saved, and PrepX will prepare a separate evidence-based analysis for each participant after the discussion. I will start the first turn after this briefing.`;
       speakBrowserFallback(fallbackText);
     }
   }
@@ -898,6 +952,8 @@ export function GDRoomPage() {
       console.warn("Web Speech API not supported in this browser. Use manual contribution input.");
       return;
     }
+
+    setSttEngine("native");
 
     try {
       if (speechRestartTimeoutRef.current) {
@@ -1128,7 +1184,14 @@ export function GDRoomPage() {
     }
 
     try {
-      const socket = new WebSocket(wsUrl);
+      const authToken = localStorage.getItem("token");
+      if (!authToken) {
+        toast.error("Your sign-in session has expired. Sign in again to join the discussion.");
+        return;
+      }
+      const socketUrl = new URL(wsUrl);
+      socketUrl.searchParams.set("token", authToken);
+      const socket = new WebSocket(socketUrl.toString());
       wsRef.current = socket;
 
       socket.onerror = (e) => {
@@ -1585,12 +1648,15 @@ export function GDRoomPage() {
   useEffect(() => {
     if (session?.status !== "in_progress" || !session.currentTurn) return;
 
-    const interval = setInterval(() => {
-      setTurnElapsedSeconds((prev) => prev + 1);
-    }, 1000);
+    const startedAt = new Date(session.currentTurn.startedAt).getTime();
+    const updateElapsed = () => {
+      setTurnElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    };
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
 
     return () => clearInterval(interval);
-  }, [session?.status, session?.currentTurn?.participantId]);
+  }, [session?.status, session?.currentTurn?.participantId, session?.currentTurn?.startedAt]);
 
   // Auto-scroll transcript container
   useEffect(() => {
@@ -1742,6 +1808,7 @@ export function GDRoomPage() {
         });
         const newTrack = aStream.getAudioTracks()[0];
         if (newTrack) {
+          newTrack.enabled = true;
           if (!stream) {
             stream = new MediaStream([newTrack]);
           } else {
@@ -1776,12 +1843,13 @@ export function GDRoomPage() {
         return;
       }
     } else {
-      audioTrack.enabled = !audioTrack.enabled;
-      setIsMicOn(audioTrack.enabled);
-      isMicOnRef.current = audioTrack.enabled;
+      const shouldEnableMic = !isMicOnRef.current;
+      audioTrack.enabled = shouldEnableMic;
+      setIsMicOn(shouldEnableMic);
+      isMicOnRef.current = shouldEnableMic;
 
       // Resume AudioContext & restart speech recognition if unmuting
-      if (audioTrack.enabled) {
+      if (shouldEnableMic) {
         speechNetworkErrorCountRef.current = 0;
         speechNoticeLoggedRef.current = false;
         if (audioContextRef.current?.state === "suspended") {
@@ -1946,9 +2014,11 @@ export function GDRoomPage() {
           })
         );
       } else {
-        await startDiscussion(sessionId);
+        const result = await startDiscussion(sessionId);
+        setSession(result.session);
+        triggerModeratorSpeech();
+        return;
       }
-      triggerModeratorSpeech();
     } catch (err: any) {
       toast.error("Failed to start discussion");
     }
@@ -2237,7 +2307,7 @@ export function GDRoomPage() {
               <div className="flex items-center gap-3 text-xs">
                 <div className="text-zinc-400 flex items-center gap-1">
                   <Clock className="size-3.5" />
-                  Speaking: {turnElapsedSeconds}s / 90s suggested
+                  Speaking time left: {Math.max(0, 90 - turnElapsedSeconds)}s
                 </div>
                 <button
                   onClick={handleAdminSkipTurn}

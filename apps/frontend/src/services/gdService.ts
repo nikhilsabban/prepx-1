@@ -336,6 +336,16 @@ export async function startDiscussion(roomId: string): Promise<{ session: IGDSes
   return res.data;
 }
 
+export async function beginDiscussionTurn(roomId: string): Promise<{
+  session: IGDSession;
+  currentTurn?: IGDCurrentTurn;
+  round?: number;
+  participants?: IGDParticipant[];
+}> {
+  const res = await api.post(`/api/v1/gd/rooms/${roomId}/begin`);
+  return res.data;
+}
+
 /**
  * Student finishes their speaking turn.
  */

@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import path from "path";
+import { randomUUID } from "crypto";
 import { gdSessionService, broadcastToGDRoom } from "./gdSessionService";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
@@ -20,6 +21,8 @@ interface GDTranscriptionClient extends WebSocket {
   isAlive?: boolean;
   sessionId?: string;
   participantId?: string;
+  turnId?: string;
+  streamId?: string;
   participantName?: string;
   username?: string;
   language?: string;
@@ -40,6 +43,8 @@ export interface GDNormalizedTranscriptEvent {
   username: string;
   segmentId: string;
   sequenceNumber: number;
+  turnId?: string;
+  streamId?: string;
   text: string;
   isFinal: boolean;
   startTime?: number;
@@ -60,7 +65,7 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
   // Map of `${sessionId}:${participantId}` -> active GDTranscriptionClient
   const activeStreams = new Map<string, GDTranscriptionClient>();
 
-  server.on("upgrade", (request, socket, head) => {
+  server.on("upgrade", async (request, socket, head) => {
     const { pathname, searchParams } = new URL(request.url || "", `http://${request.headers.host}`);
 
     if (pathname === "/api/v1/gd/transcription/stream" || pathname === "/ws/gd-transcription") {
@@ -76,22 +81,33 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
         token = protocols[1];
       }
 
-      let authedUserId = "";
-      if (token) {
-        try {
-          const decoded = jwt.verify(token, JWT_SECRET) as any;
-          authedUserId = decoded.id || decoded.userId || decoded._id || decoded.sub || "";
-        } catch {
-          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-          socket.destroy();
-          return;
-        }
+      const sessionId = searchParams.get("sessionId") || searchParams.get("roomId") || "";
+      let decoded: any;
+      try {
+        if (!token) throw new Error("Missing token");
+        decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.purpose !== "gd_transcription") throw new Error("Invalid token purpose");
+      } catch {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
       }
 
-      const sessionId = searchParams.get("sessionId") || searchParams.get("roomId") || "";
-      const participantId = searchParams.get("participantId") || authedUserId || "";
-      const username = searchParams.get("username") || "";
-      const participantName = searchParams.get("participantName") || username || "Participant";
+      const authedUserId = String(decoded.userId || decoded.id || decoded._id || decoded.sub || "");
+      const session = await gdSessionService.getSessionById(sessionId);
+      const participant = session?.participants.find(
+        (candidate) => candidate.userId?.toString() === authedUserId || candidate.id === authedUserId
+      );
+      const requestedParticipantId = searchParams.get("participantId") || "";
+      if (!session || !participant || (requestedParticipantId && requestedParticipantId !== participant.id)) {
+        socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+
+      const participantId = participant.id;
+      const username = participant.username || "";
+      const participantName = participant.name || username || "Participant";
       const language = searchParams.get("language") || DEEPGRAM_LANGUAGE;
       const model = searchParams.get("model") || DEEPGRAM_MODEL;
 
@@ -101,6 +117,10 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
         client.participantId = participantId;
         client.participantName = participantName;
         client.username = username.toLowerCase().trim();
+        client.turnId = session.currentTurn?.participantId === participantId
+          ? `${participantId}:${session.currentTurn.round}:${new Date(session.currentTurn.startedAt).getTime()}`
+          : "";
+        client.streamId = randomUUID();
         client.language = language;
         client.model = model;
         client.sequenceCounter = 0;
@@ -154,11 +174,36 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
     await setupUpstream(client);
 
     // Handle incoming client audio frames and control messages
-    client.on("message", (data: WebSocket.RawData, isBinary: boolean) => {
+    client.on("message", async (data: WebSocket.RawData, isBinary: boolean) => {
       client.lastActiveAt = Date.now();
 
       if (isBinary) {
         if (!client.isActive) return;
+        // Bind every audio frame to the authenticated room member and the exact turn
+        // captured at handshake. Old or inactive streams are never forwarded upstream.
+        let currentSession;
+        try {
+          currentSession = await gdSessionService.getSessionById(client.sessionId || "");
+        } catch (error: any) {
+          console.error("[GD Transcription Gateway] Active-turn authorization check failed:", error.message);
+          client.isActive = false;
+          client.close(1011, "Unable to verify the active GD turn");
+          return;
+        }
+        const currentTurn = currentSession?.currentTurn;
+        const currentTurnId = currentTurn
+          ? `${currentTurn.participantId}:${currentTurn.round}:${new Date(currentTurn.startedAt).getTime()}`
+          : "";
+        if (
+          currentSession?.status !== "in_progress" ||
+          currentTurn?.participantId !== client.participantId ||
+          !client.turnId ||
+          currentTurnId !== client.turnId
+        ) {
+          client.isActive = false;
+          client.close(1008, "Audio is only accepted during the authenticated participant's active turn");
+          return;
+        }
         const chunk = Buffer.from(data as any);
         const upstream = client.upstreamSocket;
 
@@ -332,6 +377,8 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
             username: client.username || "candidate",
             segmentId,
             sequenceNumber: client.sequenceCounter,
+            turnId: client.turnId,
+            streamId: client.streamId,
             text: transcriptText,
             isFinal,
             startTime: parsed.start,
@@ -356,12 +403,14 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
                 participantId: client.participantId || "candidate",
                 participantName: client.participantName || "Candidate",
                 speakerId: client.participantId || "candidate",
+                streamId: client.streamId,
                 username: client.username,
                 text: transcriptText,
                 durationSeconds: parsed.duration ? Math.max(1, Math.round(parsed.duration)) : Math.max(1, Math.round(transcriptText.split(/\s+/).length / 2.5)),
                 isInterruption: false,
                 confidence,
                 sequenceNumber: client.sequenceCounter,
+                turnId: client.turnId,
                 startTime: parsed.start,
                 endTime: parsed.start !== undefined && parsed.duration !== undefined ? parsed.start + parsed.duration : undefined,
               });
@@ -392,6 +441,8 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
               participantId: client.participantId || "candidate",
               participantName: client.participantName || "Candidate",
               speakerId: client.participantId || "candidate",
+              turnId: client.turnId,
+              streamId: client.streamId,
               text: transcriptText,
               isFinal: true,
               startTime: parsed.start ?? 0,
@@ -418,6 +469,8 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
               type: "gd:transcript",
               roomId: client.sessionId || "",
               participantId: client.participantId || "candidate",
+              turnId: client.turnId,
+              streamId: client.streamId,
               participantName: client.participantName || "Candidate",
               speakerId: client.participantId || "candidate",
               text: transcriptText,

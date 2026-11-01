@@ -62,7 +62,7 @@ export function GDResultPage() {
       if (Array.isArray(bms)) {
         setIsBookmarked(bms.some((b: any) => b.roomId === sessionId || b._id === sessionId));
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   async function handleToggleBookmark() {
@@ -145,11 +145,10 @@ export function GDResultPage() {
             <button
               onClick={handleToggleBookmark}
               disabled={isTogglingBookmark}
-              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
-                isBookmarked
-                  ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
-                  : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
-              }`}
+              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${isBookmarked
+                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
+                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                }`}
               title={isBookmarked ? "Remove Bookmark" : "Bookmark Evaluation"}
             >
               {isBookmarked ? (
@@ -248,21 +247,19 @@ export function GDResultPage() {
                   {evaluations.map((ev, idx) => (
                     <tr
                       key={ev.participantId}
-                      className={`transition ${
-                        selectedStudentIndex === idx ? "bg-indigo-950/30 font-bold" : "hover:bg-zinc-900/40"
-                      }`}
+                      className={`transition ${selectedStudentIndex === idx ? "bg-indigo-950/30 font-bold" : "hover:bg-zinc-900/40"
+                        }`}
                     >
                       <td className="py-3">
                         <span
-                          className={`size-6 rounded-full inline-flex items-center justify-center font-black text-xs ${
-                            idx === 0
-                              ? "bg-amber-400 text-black shadow-md shadow-amber-400/30"
-                              : idx === 1
+                          className={`size-6 rounded-full inline-flex items-center justify-center font-black text-xs ${idx === 0
+                            ? "bg-amber-400 text-black shadow-md shadow-amber-400/30"
+                            : idx === 1
                               ? "bg-zinc-300 text-black"
                               : idx === 2
-                              ? "bg-amber-700 text-white"
-                              : "bg-zinc-800 text-zinc-300"
-                          }`}
+                                ? "bg-amber-700 text-white"
+                                : "bg-zinc-800 text-zinc-300"
+                            }`}
                         >
                           {ev.rank || idx + 1}
                         </span>
@@ -288,11 +285,10 @@ export function GDResultPage() {
                       <td className="py-3 text-right">
                         <button
                           onClick={() => setSelectedStudentIndex(idx)}
-                          className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${
-                            selectedStudentIndex === idx
-                              ? "bg-indigo-600 text-white"
-                              : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
-                          }`}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer transition ${selectedStudentIndex === idx
+                            ? "bg-indigo-600 text-white"
+                            : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                            }`}
                         >
                           View Report
                         </button>

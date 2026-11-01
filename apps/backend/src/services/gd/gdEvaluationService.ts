@@ -136,12 +136,15 @@ export class GDEvaluationService {
     // Evaluate each student independently
     for (const student of students) {
       const studentMetrics = metrics.find((m) => m.participantId === student.id);
-      const studentSegments = transcript.filter(
-        (t) =>
-          t.participantId === student.id ||
+      const studentSegments = transcript.filter((t) => {
+        // A present participantId is authoritative. Legacy fields are fallbacks
+        // only when the primary identity is absent, preventing cross-assignment.
+        if (t.participantId) return t.participantId === student.id;
+        return (
           (t as any).speakerId === student.id ||
-          (t.username && student.username && t.username.toLowerCase() === student.username.toLowerCase())
-      );
+          (!!t.username && !!student.username && t.username.toLowerCase() === student.username.toLowerCase())
+        );
+      });
 
       const evaluation = await this.evaluateStudent(
         topic,
@@ -305,20 +308,20 @@ export class GDEvaluationService {
         participantId: student.id,
         username: student.username || student.name,
         name: student.name,
-        overallScore: 12,
+        overallScore: 0,
         criterionScores: {
-          topicRelevance: 3,
-          reasoningAndExamples: 2,
-          clarityAndStructure: 2,
-          fluencyAndPace: 1,
-          activeListening: 2,
+          topicRelevance: 0,
+          reasoningAndExamples: 0,
+          clarityAndStructure: 0,
+          fluencyAndPace: 0,
+          activeListening: 0,
           participationBalance: 0,
-          expectedLanguageConsistency: 1,
-          vocalIntelligibility: 1,
+          expectedLanguageConsistency: 0,
+          vocalIntelligibility: 0,
           discussionEtiquette: 0,
         },
         topicRelevanceExplanation: "No verbal contributions were detected for this participant during the live session.",
-        strongestArguments: ["Participated in the discussion room session."],
+        strongestArguments: [],
         reasoningEvidence: ["No verbal arguments were presented to evaluate."],
         communicationStrengths: ["Maintained room connection."],
         communicationWeaknesses: ["Complete verbal inactivity during assigned turns."],

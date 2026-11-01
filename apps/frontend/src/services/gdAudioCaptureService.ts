@@ -108,8 +108,19 @@ export class GDAudioCaptureSession {
     this.isPaused = false;
     this.setStatus("connecting", "Initializing speech recognition engine...");
 
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+    const wsHost = backendUrl.replace(/^https?:\/\//i, "");
+
     // 1. Fetch credentials
     this.credentials = await fetchGDTranscriptionCredentials();
+
+    // Vercel serverless functions do not host persistent WebSockets.
+    // If backend is on *.vercel.app or STT is not configured, fallback to native browser STT cleanly without failing WebSockets.
+    if (wsHost.includes(".vercel.app") || !this.credentials?.configured || !this.credentials?.token) {
+      this.setStatus("error", "Serverless environment or missing STT key, using native browser STT.");
+      this.options.onError?.(new Error("WebSocket unavailable in current serverless environment."));
+      return;
+    }
 
     // 2. Open WebSocket
     await this.connectWebSocket();
@@ -131,6 +142,13 @@ export class GDAudioCaptureSession {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
     const wsProtocol = backendUrl.startsWith("https") ? "wss:" : "ws:";
     const wsHost = backendUrl.replace(/^https?:\/\//i, "");
+
+    // Guard against Vercel serverless environment or missing credentials
+    if (wsHost.includes(".vercel.app") || !this.credentials?.configured || !this.credentials?.token) {
+      this.setStatus("error", "Serverless environment or missing STT key, using native browser STT.");
+      this.options.onError?.(new Error("WebSocket unavailable in current serverless environment."));
+      return;
+    }
 
     const proxyPath = this.credentials?.proxyUrl || "/api/v1/gd/transcription/stream";
     const token = this.credentials?.token || "";
@@ -188,9 +206,17 @@ export class GDAudioCaptureSession {
 
   private scheduleReconnect() {
     if (this.isDestroyed || this.isPaused) return;
+
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+    const wsHost = backendUrl.replace(/^https?:\/\//i, "");
+    if (wsHost.includes(".vercel.app") || !this.credentials?.configured || !this.credentials?.token) {
+      return;
+    }
+
     this.reconnectAttempts++;
-    if (this.reconnectAttempts > 5) {
-      this.setStatus("error", "Speech engine connection lost. Please verify network.");
+    if (this.reconnectAttempts > 3) {
+      this.setStatus("error", "Speech engine connection lost. Using native browser STT.");
+      this.options.onError?.(new Error("Speech engine connection limit reached."));
       return;
     }
 

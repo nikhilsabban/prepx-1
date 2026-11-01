@@ -53,6 +53,7 @@ export interface IGDTranscriptSegment {
   participantId: string;
   participantName: string;
   speakerId?: string;
+  streamId?: string;
   username?: string;
   text: string;
   timestamp: Date;
@@ -173,7 +174,7 @@ export interface IGDTurnHistoryItem {
   startedAt: Date;
   endedAt: Date;
   durationSeconds: number;
-  endReason: "student_finished" | "student_passed" | "admin_skipped" | "silence_timeout" | "disconnect";
+  endReason: "student_finished" | "student_passed" | "admin_skipped" | "silence_timeout" | "time_expired" | "disconnect";
   wordsSpoken: number;
 }
 
@@ -275,6 +276,7 @@ const GDTranscriptSegmentSchema = new Schema<IGDTranscriptSegment>(
     participantId: { type: String, required: true },
     participantName: { type: String, required: true },
     speakerId: { type: String },
+    streamId: { type: String },
     username: { type: String, lowercase: true, trim: true },
     text: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
@@ -335,7 +337,7 @@ const GDTurnHistoryItemSchema = new Schema<IGDTurnHistoryItem>(
     durationSeconds: { type: Number, default: 0 },
     endReason: {
       type: String,
-      enum: ["student_finished", "student_passed", "admin_skipped", "silence_timeout", "disconnect"],
+    enum: ["student_finished", "student_passed", "admin_skipped", "silence_timeout", "time_expired", "disconnect"],
       default: "student_finished",
     },
     wordsSpoken: { type: Number, default: 0 },
