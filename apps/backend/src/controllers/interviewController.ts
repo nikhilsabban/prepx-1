@@ -170,7 +170,7 @@ export async function getDeepgramKey(req: AuthRequest, res: Response): Promise<v
  */
 export async function initiateInterview(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const interview = await Interview.findById(interviewId);
 
     if (!interview) {
@@ -261,7 +261,7 @@ export async function initiateInterview(req: AuthRequest, res: Response): Promis
  */
 export async function processInterviewResponse(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const { message } = req.body;
 
     if (!interviewId || !message || !message.trim()) {
@@ -341,7 +341,7 @@ export async function processInterviewResponse(req: AuthRequest, res: Response):
 export async function saveUserResponse(req: Request, res: Response): Promise<void> {
   try {
     const { message } = req.body;
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
 
     if (!message || !interviewId) {
       res.status(400).json({ message: "Message and interviewId are required" });
@@ -366,7 +366,7 @@ export async function saveUserResponse(req: Request, res: Response): Promise<voi
  */
 export async function getResult(req: Request, res: Response): Promise<void> {
   try {
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
 
     const interview = await Interview.findById(interviewId);
     if (!interview) {
@@ -442,7 +442,7 @@ export async function toggleBookmark(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const interview = await Interview.findOne({ _id: interviewId, userId: req.user._id }).select("isBookmarked").lean();
 
     if (!interview) {
@@ -596,7 +596,7 @@ Rules (strictly follow):
  */
 export async function verifyTurnSpeechHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const liveTranscript = (req.body?.liveTranscript || req.body?.transcript || "").trim();
     let audioBuffer: Buffer | undefined;
 

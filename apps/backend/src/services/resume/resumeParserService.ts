@@ -220,7 +220,7 @@ export async function extractTextFromBuffer(
   } else if (isDocx) {
     try {
       // Mammoth convertToMarkdown retains table columns, rows, bullet points and headings
-      const mdResult = await mammoth.convertToMarkdown({ buffer });
+      const mdResult = await (mammoth as any).convertToMarkdown({ buffer });
       let text = mdResult.value || "";
 
       // Clean markdown table markers while retaining cell boundaries

@@ -3181,7 +3181,7 @@ async function getDeepgramKey(req, res) {
 }
 async function initiateInterview(req, res) {
   try {
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const interview = await Interview.findById(interviewId);
     if (!interview) {
       res.status(404).json({ message: "Interview session not found" });
@@ -3250,7 +3250,7 @@ async function initiateInterview(req, res) {
 }
 async function processInterviewResponse(req, res) {
   try {
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const { message } = req.body;
     if (!interviewId || !message || !message.trim()) {
       res.status(400).json({ message: "Interview ID and user transcript message are required" });
@@ -3311,7 +3311,7 @@ async function processInterviewResponse(req, res) {
 async function saveUserResponse(req, res) {
   try {
     const { message } = req.body;
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     if (!message || !interviewId) {
       res.status(400).json({ message: "Message and interviewId are required" });
       return;
@@ -3329,7 +3329,7 @@ async function saveUserResponse(req, res) {
 }
 async function getResult(req, res) {
   try {
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const interview = await Interview.findById(interviewId);
     if (!interview) {
       res.status(404).json({ message: "Interview not found" });
@@ -3391,7 +3391,7 @@ async function toggleBookmark(req, res) {
       res.status(401).json({ message: "Not authenticated" });
       return;
     }
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const interview = await Interview.findOne({ _id: interviewId, userId: req.user._id }).select("isBookmarked").lean();
     if (!interview) {
       res.status(404).json({ message: "Interview record not found" });
@@ -3506,7 +3506,7 @@ Rules (strictly follow):
 }
 async function verifyTurnSpeechHandler(req, res) {
   try {
-    const { interviewId } = req.params;
+    const interviewId = Array.isArray(req.params.interviewId) ? req.params.interviewId[0] : req.params.interviewId;
     const liveTranscript = (req.body?.liveTranscript || req.body?.transcript || "").trim();
     let audioBuffer;
     if (req.file?.buffer) {

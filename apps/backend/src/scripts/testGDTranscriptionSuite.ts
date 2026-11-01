@@ -86,6 +86,8 @@ async function runGDTranscriptionSuite() {
   const studentUsers: any[] = [];
   let roomId = "";
   let roomBId = "";
+  let wsClient1: any = null;
+  const clientSockets: WebSocket[] = [];
 
   try {
     adminUser = await User.create({
@@ -157,7 +159,7 @@ async function runGDTranscriptionSuite() {
   const firstStudent = studentUsers[0]!;
   const wsUrl1 = `ws://127.0.0.1:${port}/api/v1/gd/transcription/stream?sessionId=${roomId}&participantId=${firstStudent._id}&username=${firstStudent.username}&participantName=${encodeURIComponent(firstStudent.fullName)}`;
 
-  const wsClient1 = new WebSocket(wsUrl1);
+  wsClient1 = new WebSocket(wsUrl1);
   let ws1Connected = false;
   let receivedConnectedMsg = false;
 
@@ -166,7 +168,7 @@ async function runGDTranscriptionSuite() {
     wsClient1.on("open", () => {
       ws1Connected = true;
     });
-    wsClient1.on("message", (data) => {
+    wsClient1.on("message", (data: any) => {
       try {
         const msg = JSON.parse(data.toString());
         if (msg.type === "gd:transcription:connected") {
@@ -176,7 +178,7 @@ async function runGDTranscriptionSuite() {
         }
       } catch {}
     });
-    wsClient1.on("error", (e) => {
+    wsClient1.on("error", (e: any) => {
       clearTimeout(timeout);
       resolve();
     });
@@ -199,7 +201,6 @@ async function runGDTranscriptionSuite() {
   // TEST 2: Multi-participant isolated streams & attribution
   // -----------------------------------------------------------------
   console.log("\n--- TEST 2: Multi-Participant Isolated Audio Streams & Attribution ---");
-  const clientSockets: WebSocket[] = [];
   for (let i = 1; i < 5; i++) {
     const s = studentUsers[i]!;
     const clientWs = new WebSocket(
@@ -344,7 +345,7 @@ async function runGDTranscriptionSuite() {
 
   const completedSession = await gdSessionService.endSession(roomId, adminUser._id.toString());
   assert(completedSession?.status === "completed", "Discussion session concluded with status 'completed'");
-  assert((completedSession?.metrics.totalWords || 0) > 0, "Calculated total words from transcript", `Total words: ${completedSession?.metrics.totalWords}`);
+  assert(((completedSession?.metrics as any)?.totalWords || 0) > 0, "Calculated total words from transcript", `Total words: ${(completedSession?.metrics as any)?.totalWords}`);
   assert(
     (completedSession?.evaluations || []).length >= 5,
     "Generated individual evaluations for all participating students and speaker",
@@ -361,7 +362,7 @@ async function runGDTranscriptionSuite() {
     // -----------------------------------------------------------------
     console.log("\n--- Cleaning up Test Artifacts ---");
     try {
-      wsClient1.close();
+      if (wsClient1) wsClient1.close();
       clientSockets.forEach((s) => s.close());
       server.close();
     } catch {}
