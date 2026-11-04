@@ -143,7 +143,7 @@ export async function getDeepgramKey(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  // Issue a short-lived 10-minute STT streaming session ticket
+  // Issue an authenticated 1-hour STT streaming session ticket for full interview duration
   const payload = {
     sub: req.user?._id || "candidate-session",
     role: (req.user as any)?.role || "candidate",
@@ -151,7 +151,7 @@ export async function getDeepgramKey(req: AuthRequest, res: Response): Promise<v
   };
 
   const sttToken = jwt.sign(payload, process.env.JWT_SECRET || "fallback_secret", {
-    expiresIn: "10m",
+    expiresIn: "1h",
   });
 
   res.json({

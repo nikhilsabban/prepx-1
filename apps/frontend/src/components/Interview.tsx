@@ -236,7 +236,10 @@ export function Interview() {
     };
   }, []);
 
-  function startTurnMediaRecorder() {
+  const initialHeaderChunkRef = useRef<BlobPart | null>(null);
+  const keepAlivePingTimerRef = useRef<any>(null);
+
+  function startContinuousMediaRecorder() {
     if (!userStreamRef.current || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
     if (recorderRef.current && recorderRef.current.state === "recording") return;
 
@@ -251,18 +254,24 @@ export function Interview() {
       recorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
-        // Drop outgoing chunks if AI is speaking or mic is muted to prevent speaker echo bleed
+        if (!event.data || event.data.size === 0) return;
+
+        // Cache initial container header so subsequent turn blobs are valid WebM files
+        if (!initialHeaderChunkRef.current) {
+          initialHeaderChunkRef.current = event.data;
+        }
+
+        // Drop outgoing chunks if AI is speaking or mic is muted
         if (isAiSpeakingRef.current || !isListeningRef.current) {
           diagnosticsRef.current.chunksDropped++;
           return;
         }
-        if (event.data && event.data.size > 0) {
-          // Buffer for turn-level acoustic verification
-          turnAudioChunksRef.current.push(event.data);
-          if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-            diagnosticsRef.current.chunksSent++;
-            socketRef.current.send(event.data);
-          }
+
+        // Buffer for turn-level acoustic verification
+        turnAudioChunksRef.current.push(event.data);
+        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+          diagnosticsRef.current.chunksSent++;
+          socketRef.current.send(event.data);
         }
       };
 
@@ -271,17 +280,6 @@ export function Interview() {
     } catch (recErr) {
       console.warn("MediaRecorder start notice, using native speech recognition:", recErr);
       startNativeSpeechRecognition();
-    }
-  }
-
-  function stopTurnMediaRecorder() {
-    if (recorderRef.current) {
-      try {
-        if (recorderRef.current.state !== "inactive") {
-          recorderRef.current.stop();
-        }
-      } catch {}
-      recorderRef.current = null;
     }
   }
 
@@ -294,13 +292,18 @@ export function Interview() {
       return;
     }
 
-    // Do NOT stop or restart if already running cleanly
-    if (recognitionRef.current) return;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+      recognitionRef.current = null;
+    }
 
     try {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
+      recognition.maxAlternatives = 3;
       recognition.lang = "en-IN"; // Prioritize Indian English
 
       diagnosticsRef.current.engine = "native";
@@ -308,8 +311,8 @@ export function Interview() {
       if (!diagnosticsRef.current.startTime) diagnosticsRef.current.startTime = Date.now();
 
       recognition.onresult = (event: any) => {
-        // Ignore any transcript while AI is speaking to avoid picking up AI audio
-        if (isAiSpeakingRef.current) return;
+        // Ignore any transcript while AI is speaking
+        if (isAiSpeakingRef.current || !isListeningRef.current) return;
 
         let newFinalText = "";
         let interimText = "";
@@ -317,10 +320,11 @@ export function Interview() {
         // Start from event.resultIndex to avoid re-processing old finals
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const result = event.results[i];
+          if (!result || !result[0]) continue;
           if (result.isFinal) {
-            newFinalText += result[0].transcript;
+            newFinalText += " " + result[0].transcript;
           } else {
-            interimText += result[0].transcript;
+            interimText += " " + result[0].transcript;
           }
         }
 
@@ -331,41 +335,50 @@ export function Interview() {
           }
 
           setTextInput((prev) => {
-            const { merged, overlapFound } = mergeTranscriptDeduplicated(prev, newFinalText);
+            const { merged, overlapFound } = mergeTranscriptDeduplicated(prev, newFinalText.trim());
             if (overlapFound) diagnosticsRef.current.duplicatesPrevented++;
             return merged;
           });
           setInterimTranscript("");
         }
 
-        if (interimText) {
+        if (interimText.trim()) {
           diagnosticsRef.current.interimSegmentsCount++;
           if (diagnosticsRef.current.timeToFirstInterimMs === null) {
             diagnosticsRef.current.timeToFirstInterimMs = Date.now() - diagnosticsRef.current.startTime;
           }
         }
-        // Always update interim to display ghost preview or clear
-        setInterimTranscript(interimText);
+        // Always update interim to display live ghost preview
+        setInterimTranscript(interimText.trim());
       };
 
       recognition.onend = () => {
         recognitionRef.current = null;
-        // Do NOT restart if AI is speaking or mic was turned off or Deepgram took over
+        // Auto-restart quickly if candidate turn is active
         if (isListeningRef.current && !isAiSpeakingRef.current && !hasDeepgramRef.current) {
           setTimeout(() => {
             if (isListeningRef.current && !isAiSpeakingRef.current && !hasDeepgramRef.current) {
               startNativeSpeechRecognition();
             }
-          }, 300);
+          }, 200);
         }
       };
 
       recognition.onerror = (e: any) => {
-        if (e.error === "language-not-supported") {
-          recognition.lang = "en-US";
-        } else if (e.error === "not-allowed") {
-          toast.error("Please click Allow Microphone in your browser address bar.");
+        if (e.error === "no-speech" || e.error === "aborted") {
+          return; // Normal pause by candidate
         }
+        if (e.error === "language-not-supported") {
+          try {
+            recognition.lang = "en-US";
+          } catch {}
+          return;
+        }
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          toast.error("Please click Allow Microphone in your browser address bar.");
+          return;
+        }
+        console.warn("Speech recognition notice:", e.error);
       };
 
       recognition.start();
@@ -447,9 +460,25 @@ export function Interview() {
               diagnosticsRef.current.language = creds.defaultLanguage || "en-IN";
               diagnosticsRef.current.startTime = Date.now();
 
-              // Start streaming candidate audio only if it is already candidate's speaking turn
-              if (isListeningRef.current && !isAiSpeakingRef.current) {
-                startTurnMediaRecorder();
+              // Start keepalive heartbeat every 4s to prevent connection timeouts during AI speech
+              if (keepAlivePingTimerRef.current) clearInterval(keepAlivePingTimerRef.current);
+              keepAlivePingTimerRef.current = setInterval(() => {
+                if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                  try {
+                    socketRef.current.send(JSON.stringify({ type: "KeepAlive" }));
+                  } catch {}
+                }
+              }, 4000);
+
+              // Start continuous MediaRecorder session
+              startContinuousMediaRecorder();
+
+              // Abort native speech recognition fallback if it was active
+              if (recognitionRef.current) {
+                try {
+                  recognitionRef.current.abort();
+                } catch {}
+                recognitionRef.current = null;
               }
 
               if (import.meta.env.DEV) {
@@ -469,9 +498,7 @@ export function Interview() {
                 const received = JSON.parse(message.data);
                 if (received.type === "ready") {
                   setSttStatus("listening");
-                  if (isListeningRef.current && !isAiSpeakingRef.current) {
-                    startTurnMediaRecorder();
-                  }
+                  startContinuousMediaRecorder();
                   return;
                 }
                 if (received.type === "status") {
@@ -515,6 +542,10 @@ export function Interview() {
 
             const handleSocketDisconnect = () => {
               if (cancelled) return;
+              if (keepAlivePingTimerRef.current) {
+                clearInterval(keepAlivePingTimerRef.current);
+                keepAlivePingTimerRef.current = null;
+              }
               hasDeepgramRef.current = false;
               if (isListeningRef.current && !isAiSpeakingRef.current) {
                 startNativeSpeechRecognition();
@@ -575,17 +606,11 @@ export function Interview() {
       isListeningRef.current = false;
       setIsMicActive(false);
       setSttStatus("paused");
-      stopTurnMediaRecorder();
-      // Mute audio track so MediaRecorder receives silence
-      if (userStreamRef.current) {
-        userStreamRef.current.getAudioTracks().forEach((track) => {
-          track.enabled = false;
-        });
-      }
+      // Stop native speech recognition if active
       if (recognitionRef.current) {
         try {
-          recognitionRef.current.stop();
-        } catch (e) {}
+          recognitionRef.current.abort();
+        } catch {}
         recognitionRef.current = null;
       }
       toast.info("Microphone muted.");
@@ -593,14 +618,11 @@ export function Interview() {
       isListeningRef.current = true;
       setIsMicActive(true);
       setSttStatus("listening");
-      if (userStreamRef.current) {
-        userStreamRef.current.getAudioTracks().forEach((track) => {
-          track.enabled = true;
-        });
-      }
-      if (hasDeepgramRef.current && !isAiSpeakingRef.current) {
-        startTurnMediaRecorder();
-      } else if (!hasDeepgramRef.current) {
+      if (hasDeepgramRef.current && socketRef.current?.readyState === WebSocket.OPEN) {
+        if (!recorderRef.current || recorderRef.current.state !== "recording") {
+          startContinuousMediaRecorder();
+        }
+      } else {
         startNativeSpeechRecognition();
       }
       toast.success("Microphone active.");
@@ -638,39 +660,32 @@ export function Interview() {
   function pauseRecognitionForAiSpeech() {
     isAiSpeakingRef.current = true;
     setSttStatus("processing");
-    stopTurnMediaRecorder();
-    // Mute candidate mic audio tracks so laptop speaker playback cannot bleed into STT buffer
-    if (userStreamRef.current) {
-      userStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = false;
-      });
-    }
-    // Stop native recognition while AI speaks so it doesn't transcribe AI audio
+    // Continuous MediaRecorder: DO NOT stop recorder!
+    // Chunks are gated in ondataavailable while isAiSpeakingRef is true to preserve WebM container integrity.
+    // Stop native speech recognition if active so it does not capture AI audio:
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
+      try {
+        recognitionRef.current.abort();
+      } catch {}
       recognitionRef.current = null;
     }
   }
 
   function resumeRecognitionAfterAiSpeech() {
-    // 350ms acoustic decay ensures speaker room resonance has completely faded before unmuting mic
-    setTimeout(() => {
-      isAiSpeakingRef.current = false;
-      if (isListeningRef.current) {
-        setSttStatus("listening");
+    // Clear AI speaking lock immediately — acoustic echo cancellation handles speaker decay
+    // Zero latency ensures the candidate's very first word is NEVER missed!
+    isAiSpeakingRef.current = false;
+    if (isListeningRef.current) {
+      setSttStatus("listening");
+    }
+
+    if (isListeningRef.current && hasDeepgramRef.current && socketRef.current?.readyState === WebSocket.OPEN) {
+      if (!recorderRef.current || recorderRef.current.state !== "recording") {
+        startContinuousMediaRecorder();
       }
-      if (isListeningRef.current && userStreamRef.current) {
-        userStreamRef.current.getAudioTracks().forEach((track) => {
-          track.enabled = true;
-        });
-      }
-      // Start STT stream for candidate's speaking turn (starts fresh MediaRecorder with valid WebM header)
-      if (isListeningRef.current && hasDeepgramRef.current) {
-        startTurnMediaRecorder();
-      } else if (isListeningRef.current) {
-        startNativeSpeechRecognition();
-      }
-    }, 350);
+    } else if (isListeningRef.current) {
+      startNativeSpeechRecognition();
+    }
   }
 
   function playAudioOrSpeakText(text: string, base64Data?: string | null) {
@@ -867,6 +882,11 @@ export function Interview() {
     const chunks = [...turnAudioChunksRef.current];
     turnAudioChunksRef.current = [];
 
+    // Ensure turn blob starts with the valid WebM container header
+    if (initialHeaderChunkRef.current && chunks.length > 0 && chunks[0] !== initialHeaderChunkRef.current) {
+      chunks.unshift(initialHeaderChunkRef.current);
+    }
+
     let candidateUtterance = fullText;
 
     if (
@@ -909,11 +929,22 @@ export function Interview() {
   function cleanup() {
     isListeningRef.current = false;
     stopAllAudio();
-    stopTurnMediaRecorder();
+    if (keepAlivePingTimerRef.current) {
+      clearInterval(keepAlivePingTimerRef.current);
+      keepAlivePingTimerRef.current = null;
+    }
+    if (recorderRef.current) {
+      try {
+        if (recorderRef.current.state !== "inactive") {
+          recorderRef.current.stop();
+        }
+      } catch {}
+      recorderRef.current = null;
+    }
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        recognitionRef.current.abort();
       } catch {}
       recognitionRef.current = null;
     }

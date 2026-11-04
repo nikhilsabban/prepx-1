@@ -126,8 +126,15 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
           const str = data.toString();
           const parsed = JSON.parse(str);
 
-          if (parsed.type === "ping") {
+          if (parsed.type === "ping" || parsed.type === "keepalive") {
             client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+            if (upstream && upstream.readyState === WebSocket.OPEN && client.provider === "deepgram") {
+              try { upstream.send(JSON.stringify({ type: "KeepAlive" })); } catch {}
+            }
+          } else if (parsed.type === "KeepAlive") {
+            if (upstream && upstream.readyState === WebSocket.OPEN && client.provider === "deepgram") {
+              try { upstream.send(JSON.stringify({ type: "KeepAlive" })); } catch {}
+            }
           } else if (parsed.type === "Finalize" || parsed.type === "finalize") {
             if (upstream && upstream.readyState === WebSocket.OPEN) {
               upstream.send(JSON.stringify({ type: "Finalize" }));
@@ -143,7 +150,16 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
       }
     });
 
+    let activeKeepAliveTimer: NodeJS.Timeout | null = null;
+    const clearKeepAlive = () => {
+      if (activeKeepAliveTimer) {
+        clearInterval(activeKeepAliveTimer);
+        activeKeepAliveTimer = null;
+      }
+    };
+
     client.on("close", () => {
+      clearKeepAlive();
       client.audioQueue = [];
       const upstream = client.upstreamSocket;
       if (upstream) {
@@ -158,6 +174,7 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
     });
 
     client.on("error", () => {
+      clearKeepAlive();
       const upstream = client.upstreamSocket;
       if (upstream) {
         try {
@@ -167,6 +184,7 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
     });
 
     function connectUpstream(provider: "murf" | "deepgram") {
+      clearKeepAlive();
       client.provider = provider;
       let upstreamSocket: WebSocket | null = null;
 
@@ -243,6 +261,19 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
 
       // Upstream socket open
       upstreamSocket.on("open", () => {
+        clearKeepAlive();
+        // Deepgram streaming requires regular frames or KeepAlive frames every ~3-5s.
+        // During AI speech turns or pauses, this ensures Deepgram never closes with a 10s inactivity timeout.
+        if (provider === "deepgram") {
+          activeKeepAliveTimer = setInterval(() => {
+            if (upstreamSocket && upstreamSocket.readyState === WebSocket.OPEN) {
+              try {
+                upstreamSocket.send(JSON.stringify({ type: "KeepAlive" }));
+              } catch {}
+            }
+          }, 3500);
+        }
+
         if (client.readyState === WebSocket.OPEN) {
           client.send(
             JSON.stringify({
@@ -348,6 +379,7 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
 
       // Upstream socket error
       upstreamSocket.on("error", (err: Error) => {
+        clearKeepAlive();
         console.error(`[STT Gateway] ${provider} socket error:`, err.message);
 
         // Failover between providers if available
@@ -390,6 +422,7 @@ export function initSTTWebSocketServer(server: HttpServer): WebSocketServer {
 
       // Upstream socket close
       upstreamSocket.on("close", (code, reason) => {
+        clearKeepAlive();
         if (client.readyState === WebSocket.OPEN) {
           client.close(code, reason.toString());
         }

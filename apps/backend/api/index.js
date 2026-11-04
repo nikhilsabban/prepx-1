@@ -3167,7 +3167,7 @@ async function getDeepgramKey(req, res) {
     purpose: "stt_stream"
   };
   const sttToken = jwt3.sign(payload, process.env.JWT_SECRET || "fallback_secret", {
-    expiresIn: "10m"
+    expiresIn: "1h"
   });
   res.json({
     configured: true,
@@ -21192,8 +21192,21 @@ function initSTTWebSocketServer(server) {
         try {
           const str = data.toString();
           const parsed = JSON.parse(str);
-          if (parsed.type === "ping") {
+          if (parsed.type === "ping" || parsed.type === "keepalive") {
             client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+            if (upstream && upstream.readyState === WebSocket3.OPEN && client.provider === "deepgram") {
+              try {
+                upstream.send(JSON.stringify({ type: "KeepAlive" }));
+              } catch {
+              }
+            }
+          } else if (parsed.type === "KeepAlive") {
+            if (upstream && upstream.readyState === WebSocket3.OPEN && client.provider === "deepgram") {
+              try {
+                upstream.send(JSON.stringify({ type: "KeepAlive" }));
+              } catch {
+              }
+            }
           } else if (parsed.type === "Finalize" || parsed.type === "finalize") {
             if (upstream && upstream.readyState === WebSocket3.OPEN) {
               upstream.send(JSON.stringify({ type: "Finalize" }));
@@ -21208,7 +21221,15 @@ function initSTTWebSocketServer(server) {
         }
       }
     });
+    let activeKeepAliveTimer = null;
+    const clearKeepAlive = () => {
+      if (activeKeepAliveTimer) {
+        clearInterval(activeKeepAliveTimer);
+        activeKeepAliveTimer = null;
+      }
+    };
     client.on("close", () => {
+      clearKeepAlive();
       client.audioQueue = [];
       const upstream = client.upstreamSocket;
       if (upstream) {
@@ -21223,6 +21244,7 @@ function initSTTWebSocketServer(server) {
       }
     });
     client.on("error", () => {
+      clearKeepAlive();
       const upstream = client.upstreamSocket;
       if (upstream) {
         try {
@@ -21232,6 +21254,7 @@ function initSTTWebSocketServer(server) {
       }
     });
     function connectUpstream(provider2) {
+      clearKeepAlive();
       client.provider = provider2;
       let upstreamSocket = null;
       try {
@@ -21296,6 +21319,17 @@ function initSTTWebSocketServer(server) {
         return;
       }
       upstreamSocket.on("open", () => {
+        clearKeepAlive();
+        if (provider2 === "deepgram") {
+          activeKeepAliveTimer = setInterval(() => {
+            if (upstreamSocket && upstreamSocket.readyState === WebSocket3.OPEN) {
+              try {
+                upstreamSocket.send(JSON.stringify({ type: "KeepAlive" }));
+              } catch {
+              }
+            }
+          }, 3500);
+        }
         if (client.readyState === WebSocket3.OPEN) {
           client.send(
             JSON.stringify({
@@ -21374,6 +21408,7 @@ function initSTTWebSocketServer(server) {
         }
       });
       upstreamSocket.on("error", (err) => {
+        clearKeepAlive();
         console.error(`[STT Gateway] ${provider2} socket error:`, err.message);
         if (provider2 === "deepgram" && hasMurf && client.readyState === WebSocket3.OPEN) {
           console.warn("[STT Gateway] Switching upstream from Deepgram to Murf AI fallback...");
@@ -21417,6 +21452,7 @@ function initSTTWebSocketServer(server) {
         }
       });
       upstreamSocket.on("close", (code, reason) => {
+        clearKeepAlive();
         if (client.readyState === WebSocket3.OPEN) {
           client.close(code, reason.toString());
         }
