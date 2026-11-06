@@ -33,6 +33,9 @@ interface GDTranscriptionClient extends WebSocket {
   isActive?: boolean;
   reconnectAttempts?: number;
   lastActiveAt?: number;
+  cachedSession?: any;
+  lastSessionCheckAt?: number;
+  keepAliveTimer?: NodeJS.Timeout | null;
 }
 
 export interface GDNormalizedTranscriptEvent {
@@ -179,31 +182,37 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
 
       if (isBinary) {
         if (!client.isActive) return;
-        // Bind every audio frame to the authenticated room member and the exact turn
-        // captured at handshake. Old or inactive streams are never forwarded upstream.
-        let currentSession;
-        try {
-          currentSession = await gdSessionService.getSessionById(client.sessionId || "");
-        } catch (error: any) {
-          console.error("[GD Transcription Gateway] Active-turn authorization check failed:", error.message);
-          client.isActive = false;
-          client.close(1011, "Unable to verify the active GD turn");
-          return;
+
+        // Throttle session status check to once every 1200ms to avoid hammering MongoDB
+        const now = Date.now();
+        if (!client.cachedSession || now - (client.lastSessionCheckAt || 0) > 1200) {
+          try {
+            client.cachedSession = await gdSessionService.getSessionById(client.sessionId || "");
+            client.lastSessionCheckAt = now;
+          } catch (error: any) {
+            // Keep using cached session on transient DB error
+          }
         }
+
+        const currentSession = client.cachedSession;
         const currentTurn = currentSession?.currentTurn;
         const currentTurnId = currentTurn
           ? `${currentTurn.participantId}:${currentTurn.round}:${new Date(currentTurn.startedAt).getTime()}`
           : "";
-        if (
-          currentSession?.status !== "in_progress" ||
-          currentTurn?.participantId !== client.participantId ||
-          !client.turnId ||
-          currentTurnId !== client.turnId
-        ) {
-          client.isActive = false;
-          client.close(1008, "Audio is only accepted during the authenticated participant's active turn");
+
+        // If the GD session has not begun or is paused for briefing, ignore audio quietly without closing the socket
+        if (currentSession?.status !== "in_progress") {
           return;
         }
+
+        // Dynamically bind to the participant's turn as turns advance across rounds
+        if (currentTurn?.participantId === client.participantId) {
+          client.turnId = currentTurnId;
+        } else {
+          // Audio from non-speaking participant: drop chunk silently to maintain upstream hygiene, DO NOT terminate WebSocket
+          return;
+        }
+
         const chunk = Buffer.from(data as any);
         const upstream = client.upstreamSocket;
 
@@ -221,15 +230,22 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
           const parsed = JSON.parse(str);
           const type = parsed.type;
 
-          if (type === "ping") {
+          if (type === "ping" || type === "keepalive") {
             client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+            if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket.OPEN) {
+              try { client.upstreamSocket.send(JSON.stringify({ type: "KeepAlive" })); } catch {}
+            }
+          } else if (type === "KeepAlive") {
+            if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket.OPEN) {
+              try { client.upstreamSocket.send(JSON.stringify({ type: "KeepAlive" })); } catch {}
+            }
           } else if (type === "gd:transcription:start" || type === "start") {
             client.isActive = true;
             client.send(JSON.stringify({ type: "gd:transcription:resumed", participantId: client.participantId }));
           } else if (type === "gd:transcription:stop" || type === "stop" || type === "Finalize") {
             client.isActive = false;
             if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket.OPEN) {
-              client.upstreamSocket.send(JSON.stringify({ type: "Finalize" }));
+              try { client.upstreamSocket.send(JSON.stringify({ type: "Finalize" })); } catch {}
             }
           }
         } catch {
@@ -327,6 +343,16 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
 
       upstreamSocket.on("open", () => {
         client.reconnectAttempts = 0;
+        // KeepAlive heartbeat every 3.5s so Deepgram never times out during pauses or thinking periods
+        if (client.keepAliveTimer) clearInterval(client.keepAliveTimer);
+        client.keepAliveTimer = setInterval(() => {
+          if (upstreamSocket && upstreamSocket.readyState === WebSocket.OPEN) {
+            try {
+              upstreamSocket.send(JSON.stringify({ type: "KeepAlive" }));
+            } catch {}
+          }
+        }, 3500);
+
         if (client.readyState === WebSocket.OPEN) {
           client.send(
             JSON.stringify({
@@ -503,16 +529,28 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
       });
 
       upstreamSocket.on("error", (err: Error) => {
+        if (client.keepAliveTimer) {
+          clearInterval(client.keepAliveTimer);
+          client.keepAliveTimer = null;
+        }
         console.warn(`[GD Transcription Gateway] Deepgram upstream error for participant ${client.participantId}:`, err.message);
         handleUpstreamReconnect(client);
       });
 
       upstreamSocket.on("close", () => {
+        if (client.keepAliveTimer) {
+          clearInterval(client.keepAliveTimer);
+          client.keepAliveTimer = null;
+        }
         if (client.readyState === WebSocket.OPEN && client.isActive) {
           handleUpstreamReconnect(client);
         }
       });
     } catch (err: any) {
+      if (client.keepAliveTimer) {
+        clearInterval(client.keepAliveTimer);
+        client.keepAliveTimer = null;
+      }
       console.error("[GD Transcription Gateway] Upstream initialization failed:", err.message);
       handleUpstreamReconnect(client);
     }
@@ -551,6 +589,10 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
   }
 
   function teardownUpstream(client: GDTranscriptionClient) {
+    if (client.keepAliveTimer) {
+      clearInterval(client.keepAliveTimer);
+      client.keepAliveTimer = null;
+    }
     const upstream = client.upstreamSocket;
     if (upstream) {
       try {

@@ -370,7 +370,7 @@ export function GDRoomPage() {
     if (recognitionRef.current) {
       try {
         recognitionRef.current.abort();
-      } catch {}
+      } catch { }
       recognitionRef.current = null;
     }
   }
@@ -381,17 +381,25 @@ export function GDRoomPage() {
     if (!session || session.status !== "in_progress") return;
 
     const audioTrack = localStreamRef.current?.getAudioTracks()[0];
-    if (isMyTurn && isMicOnRef.current && audioTrack) {
-      audioTrack.enabled = true;
-      startMurfOrNativeSTT();
-    } else if (!isMicOnRef.current && audioTrack) {
-      audioTrack.enabled = false;
-      stopMurfSTT();
+    if (isMyTurn && isMicOnRef.current) {
+      if (audioTrack) audioTrack.enabled = true;
+      if (audioCaptureSessionRef.current) {
+        audioCaptureSessionRef.current.resume();
+        setSttEngine("deepgram");
+      } else {
+        startMurfOrNativeSTT();
+      }
+      if (sttEngine === "native") {
+        startSpeechRecognition();
+      }
+    } else if (!isMicOnRef.current) {
+      if (audioTrack) audioTrack.enabled = false;
+      audioCaptureSessionRef.current?.pause();
       stopSpeechRecognition();
       setLiveTranscriptPreview("");
     } else {
-      if (audioTrack) audioTrack.enabled = false;
-      stopMurfSTT();
+      // Not user's active turn: pause STT so other speakers are not captured locally
+      audioCaptureSessionRef.current?.pause();
       stopSpeechRecognition();
       setLiveTranscriptPreview("");
     }
@@ -898,12 +906,12 @@ export function GDRoomPage() {
       try {
         moderatorAudioRef.current.pause();
         moderatorAudioRef.current.currentTime = 0;
-      } catch {}
+      } catch { }
     }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       try {
         window.speechSynthesis.cancel();
-      } catch {}
+      } catch { }
     }
     setIsModeratorPlaying(false);
   }
@@ -916,8 +924,8 @@ export function GDRoomPage() {
       if (!moderatorAudioRef.current) {
         moderatorAudioRef.current = new Audio();
       }
-      moderatorAudioRef.current.play().catch(() => {});
-    } catch {}
+      moderatorAudioRef.current.play().catch(() => { });
+    } catch { }
 
     setIsModeratorPlaying(true);
     toast.info("🎙️ Loading AI Moderator Kabir Verma's briefing...");
@@ -1145,7 +1153,14 @@ export function GDRoomPage() {
         }
         speechRestartTimeoutRef.current = setTimeout(() => {
           if (isMicOnRef.current && !isSpeechActiveRef.current) {
-            if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) return;
+            if (sessionRef.current?.status === "in_progress" && !isMyTurnRef.current) {
+              speechRestartTimeoutRef.current = setTimeout(() => {
+                if (isMicOnRef.current && !isSpeechActiveRef.current && (isMyTurnRef.current || sessionRef.current?.status !== "in_progress")) {
+                  startMurfOrNativeSTT();
+                }
+              }, 400);
+              return;
+            }
             startMurfOrNativeSTT();
           }
         }, delay);
@@ -1202,329 +1217,329 @@ export function GDRoomPage() {
         // Silently handled by HTTP polling fallback
       };
 
-    socket.onopen = () => {
-      socket.send(
-        JSON.stringify({
-          type: "join_room",
-          sessionId,
-          payload: {
-            participantId: participant.id,
-            participantName: participant.name,
-            username: participant.username,
-            role: participant.role,
-            isAudioMuted: !isMicOn,
-            isVideoMuted: !isVideoOn,
-          },
-        })
-      );
-    };
+      socket.onopen = () => {
+        socket.send(
+          JSON.stringify({
+            type: "join_room",
+            sessionId,
+            payload: {
+              participantId: participant.id,
+              participantName: participant.name,
+              username: participant.username,
+              role: participant.role,
+              isAudioMuted: !isMicOn,
+              isVideoMuted: !isVideoOn,
+            },
+          })
+        );
+      };
 
-    socket.onmessage = async (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        const { type, payload } = msg;
+      socket.onmessage = async (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          const { type, payload } = msg;
 
-        switch (type) {
-          case "joined_room_ack": {
-            setSession((prev) => (prev ? { ...prev, ...payload } : prev));
-            // Connect to existing peers via WebRTC offers
-            if (payload?.participants) {
-              for (const p of payload.participants) {
-                if (p.id !== participant.id && p.isOnline) {
-                  createPeerConnection(p.id, true);
+          switch (type) {
+            case "joined_room_ack": {
+              setSession((prev) => (prev ? { ...prev, ...payload } : prev));
+              // Connect to existing peers via WebRTC offers
+              if (payload?.participants) {
+                for (const p of payload.participants) {
+                  if (p.id !== participant.id && p.isOnline) {
+                    createPeerConnection(p.id, true);
+                  }
                 }
               }
+              break;
             }
-            break;
-          }
 
-          case "invitation_sent":
-          case "invitation_updated": {
-            if (payload?.invitation) {
+            case "invitation_sent":
+            case "invitation_updated": {
+              if (payload?.invitation) {
+                setSession((prev) => {
+                  if (!prev) return prev;
+                  const existing = prev.invitations || [];
+                  const idx = existing.findIndex((i: any) => i.username === payload.invitation.username);
+                  const updatedInvs = idx >= 0
+                    ? existing.map((inv: any, i: number) => (i === idx ? payload.invitation : inv))
+                    : [...existing, payload.invitation];
+                  return { ...prev, invitations: updatedInvs };
+                });
+              }
+              break;
+            }
+
+            case "participant_joined": {
+              toast.info(`@${payload.username || payload.participantName} joined the room`);
               setSession((prev) => {
                 if (!prev) return prev;
-                const existing = prev.invitations || [];
-                const idx = existing.findIndex((i: any) => i.username === payload.invitation.username);
-                const updatedInvs = idx >= 0
-                  ? existing.map((inv: any, i: number) => (i === idx ? payload.invitation : inv))
-                  : [...existing, payload.invitation];
-                return { ...prev, invitations: updatedInvs };
+                const exists = prev.participants.some((p) => p.id === payload.participantId);
+                return {
+                  ...prev,
+                  participants: exists ? prev.participants : [...prev.participants, payload],
+                };
               });
+              // The joining participant receives offers, or existing peer creates offer
+              createPeerConnection(payload.participantId, true);
+              break;
             }
-            break;
-          }
 
-          case "participant_joined": {
-            toast.info(`@${payload.username || payload.participantName} joined the room`);
-            setSession((prev) => {
-              if (!prev) return prev;
-              const exists = prev.participants.some((p) => p.id === payload.participantId);
-              return {
-                ...prev,
-                participants: exists ? prev.participants : [...prev.participants, payload],
-              };
-            });
-            // The joining participant receives offers, or existing peer creates offer
-            createPeerConnection(payload.participantId, true);
-            break;
-          }
+            case "webrtc_offer": {
+              await handleWebRTCOffer(payload.fromParticipantId, payload.offer);
+              break;
+            }
 
-          case "webrtc_offer": {
-            await handleWebRTCOffer(payload.fromParticipantId, payload.offer);
-            break;
-          }
+            case "webrtc_answer": {
+              await handleWebRTCAnswer(payload.fromParticipantId, payload.answer);
+              break;
+            }
 
-          case "webrtc_answer": {
-            await handleWebRTCAnswer(payload.fromParticipantId, payload.answer);
-            break;
-          }
+            case "webrtc_ice_candidate": {
+              await handleWebRTCIceCandidate(payload.fromParticipantId, payload.candidate);
+              break;
+            }
 
-          case "webrtc_ice_candidate": {
-            await handleWebRTCIceCandidate(payload.fromParticipantId, payload.candidate);
-            break;
-          }
+            case "media_state_change": {
+              setSession((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  participants: prev.participants.map((p) =>
+                    p.id === payload.participantId
+                      ? { ...p, isAudioMuted: payload.isAudioMuted, isVideoMuted: payload.isVideoMuted }
+                      : p
+                  ),
+                };
+              });
+              break;
+            }
 
-          case "media_state_change": {
-            setSession((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                participants: prev.participants.map((p) =>
-                  p.id === payload.participantId
-                    ? { ...p, isAudioMuted: payload.isAudioMuted, isVideoMuted: payload.isVideoMuted }
-                    : p
-                ),
-              };
-            });
-            break;
-          }
+            case "participant_started_speaking": {
+              setSpeakingPeers((prev) => ({ ...prev, [payload.participantId]: true }));
+              break;
+            }
 
-          case "participant_started_speaking": {
-            setSpeakingPeers((prev) => ({ ...prev, [payload.participantId]: true }));
-            break;
-          }
+            case "participant_stopped_speaking": {
+              setSpeakingPeers((prev) => ({ ...prev, [payload.participantId]: false }));
+              break;
+            }
 
-          case "participant_stopped_speaking": {
-            setSpeakingPeers((prev) => ({ ...prev, [payload.participantId]: false }));
-            break;
-          }
+            case "gd:transcript": {
+              const rawEvent = msg?.type === "gd:transcript" ? msg : payload;
+              const partId = rawEvent?.participantId || rawEvent?.speakerId;
+              const isFinal = rawEvent?.isFinal !== false;
 
-          case "gd:transcript": {
-            const rawEvent = msg?.type === "gd:transcript" ? msg : payload;
-            const partId = rawEvent?.participantId || rawEvent?.speakerId;
-            const isFinal = rawEvent?.isFinal !== false;
+              if (isFinal) {
+                if (partId) {
+                  setRemoteInterimTranscripts((prev) => {
+                    const copy = { ...prev };
+                    delete copy[partId];
+                    return copy;
+                  });
+                  if (partId === currentParticipant?.id) {
+                    setLiveTranscriptPreview("");
+                  }
+                }
+                setSession((prev) => {
+                  if (!prev || !rawEvent?.text) return prev;
+                  const textTrimmed = rawEvent.text.trim();
+                  const exists = prev.transcript.some(
+                    (s) =>
+                      s.id === rawEvent.id ||
+                      (s.text.trim().toLowerCase() === textTrimmed.toLowerCase() &&
+                        s.participantId === partId &&
+                        Math.abs(new Date(s.timestamp || "").getTime() - (typeof rawEvent.timestamp === "number" ? rawEvent.timestamp : new Date(rawEvent.timestamp || "").getTime())) < 4000)
+                  );
+                  if (exists) return prev;
+                  const formattedSeg: IGDTranscriptSegment = {
+                    id: rawEvent.id || `seg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                    roomId: rawEvent.roomId || prev._id,
+                    participantId: partId,
+                    participantName: rawEvent.participantName || "Participant",
+                    speakerId: rawEvent.speakerId || partId,
+                    username: rawEvent.username,
+                    text: textTrimmed,
+                    timestamp: rawEvent.timestamp ? new Date(rawEvent.timestamp) : new Date(),
+                    durationSeconds: rawEvent.durationSeconds || Math.max(1, Math.round(textTrimmed.split(/\s+/).length / 2.5)),
+                    isInterruption: rawEvent.isInterruption || false,
+                    language: rawEvent.language || "en",
+                    confidence: rawEvent.confidence || 0.98,
+                    sequenceNumber: rawEvent.sequenceNumber,
+                    isFinal: true,
+                  };
+                  return {
+                    ...prev,
+                    transcript: [...prev.transcript, formattedSeg],
+                  };
+                });
+                setSilenceWarning(null);
+              } else {
+                if (partId && rawEvent?.text) {
+                  setRemoteInterimTranscripts((prev) => ({
+                    ...prev,
+                    [partId]: rawEvent.text,
+                  }));
+                }
+              }
+              break;
+            }
 
-            if (isFinal) {
+            case "gd:transcription:interim":
+            case "participant_interim_transcript": {
+              const partId = payload?.participantId;
               if (partId) {
                 setRemoteInterimTranscripts((prev) => {
+                  if (!payload.text) {
+                    const copy = { ...prev };
+                    delete copy[partId];
+                    return copy;
+                  }
+                  return { ...prev, [partId]: payload.text };
+                });
+              }
+              break;
+            }
+
+            case "gd:transcription:final":
+            case "new_transcript_segment": {
+              const seg = payload?.segment || payload;
+              if (seg?.participantId) {
+                setRemoteInterimTranscripts((prev) => {
                   const copy = { ...prev };
-                  delete copy[partId];
+                  delete copy[seg.participantId];
                   return copy;
                 });
-                if (partId === currentParticipant?.id) {
+                if (seg.participantId === currentParticipant?.id) {
                   setLiveTranscriptPreview("");
                 }
               }
               setSession((prev) => {
-                if (!prev || !rawEvent?.text) return prev;
-                const textTrimmed = rawEvent.text.trim();
+                if (!prev || !seg || !seg.text) return prev;
                 const exists = prev.transcript.some(
                   (s) =>
-                    s.id === rawEvent.id ||
-                    (s.text.trim().toLowerCase() === textTrimmed.toLowerCase() &&
-                      s.participantId === partId &&
-                      Math.abs(new Date(s.timestamp || "").getTime() - (typeof rawEvent.timestamp === "number" ? rawEvent.timestamp : new Date(rawEvent.timestamp || "").getTime())) < 4000)
+                    s.id === seg.id ||
+                    s.id === seg.segmentId ||
+                    (s.text.trim() === seg.text.trim() &&
+                      s.participantId === seg.participantId &&
+                      Math.abs(new Date(s.timestamp || "").getTime() - new Date(seg.timestamp || "").getTime()) < 3000)
                 );
                 if (exists) return prev;
                 const formattedSeg: IGDTranscriptSegment = {
-                  id: rawEvent.id || `seg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                  roomId: rawEvent.roomId || prev._id,
-                  participantId: partId,
-                  participantName: rawEvent.participantName || "Participant",
-                  speakerId: rawEvent.speakerId || partId,
-                  username: rawEvent.username,
-                  text: textTrimmed,
-                  timestamp: rawEvent.timestamp ? new Date(rawEvent.timestamp) : new Date(),
-                  durationSeconds: rawEvent.durationSeconds || Math.max(1, Math.round(textTrimmed.split(/\s+/).length / 2.5)),
-                  isInterruption: rawEvent.isInterruption || false,
-                  language: rawEvent.language || "en",
-                  confidence: rawEvent.confidence || 0.98,
-                  sequenceNumber: rawEvent.sequenceNumber,
+                  id: seg.id || seg.segmentId || `seg-${Date.now()}`,
+                  participantId: seg.participantId,
+                  participantName: seg.participantName || seg.username || "Participant",
+                  username: seg.username,
+                  text: seg.text,
+                  timestamp: seg.timestamp ? new Date(seg.timestamp) : new Date(),
+                  durationSeconds: seg.durationSeconds || Math.max(1, Math.round(seg.text.split(/\s+/).length / 2.5)),
+                  isInterruption: seg.isInterruption || false,
+                  language: seg.language || "en",
+                  confidence: seg.confidence || 0.98,
+                  sequenceNumber: seg.sequenceNumber,
                   isFinal: true,
                 };
                 return {
                   ...prev,
                   transcript: [...prev.transcript, formattedSeg],
+                  participants: payload.participants || prev.participants,
+                  currentTurn: payload.currentTurn || prev.currentTurn,
                 };
               });
               setSilenceWarning(null);
-            } else {
-              if (partId && rawEvent?.text) {
-                setRemoteInterimTranscripts((prev) => ({
+              break;
+            }
+
+            case "discussion_started": {
+              toast.success("Group discussion has officially begun!");
+              setSession((prev) => {
+                if (!prev) return prev;
+                return {
                   ...prev,
-                  [partId]: rawEvent.text,
-                }));
-              }
-            }
-            break;
-          }
-
-          case "gd:transcription:interim":
-          case "participant_interim_transcript": {
-            const partId = payload?.participantId;
-            if (partId) {
-              setRemoteInterimTranscripts((prev) => {
-                if (!payload.text) {
-                  const copy = { ...prev };
-                  delete copy[partId];
-                  return copy;
-                }
-                return { ...prev, [partId]: payload.text };
+                  status: "in_progress",
+                  currentTurn: payload.currentTurn,
+                  round: payload.round,
+                  participants: payload.participants,
+                };
               });
+              // Automatically play Murf AI Moderator introduction for all participants
+              triggerModeratorSpeech();
+              break;
             }
-            break;
-          }
 
-          case "gd:transcription:final":
-          case "new_transcript_segment": {
-            const seg = payload?.segment || payload;
-            if (seg?.participantId) {
-              setRemoteInterimTranscripts((prev) => {
-                const copy = { ...prev };
-                delete copy[seg.participantId];
-                return copy;
+            case "turn_changed": {
+              setSilenceWarning(null);
+              setTurnElapsedSeconds(0);
+              toast.info(`Next Turn: @${payload.currentTurn?.username || "Participant"} (Round ${payload.round})`);
+              setSession((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  currentTurn: payload.currentTurn,
+                  round: payload.round,
+                  participants: payload.participants || prev.participants,
+                };
               });
-              if (seg.participantId === currentParticipant?.id) {
-                setLiveTranscriptPreview("");
-              }
+              break;
             }
-            setSession((prev) => {
-              if (!prev || !seg || !seg.text) return prev;
-              const exists = prev.transcript.some(
-                (s) =>
-                  s.id === seg.id ||
-                  s.id === seg.segmentId ||
-                  (s.text.trim() === seg.text.trim() &&
-                    s.participantId === seg.participantId &&
-                    Math.abs(new Date(s.timestamp || "").getTime() - new Date(seg.timestamp || "").getTime()) < 3000)
-              );
-              if (exists) return prev;
-              const formattedSeg: IGDTranscriptSegment = {
-                id: seg.id || seg.segmentId || `seg-${Date.now()}`,
-                participantId: seg.participantId,
-                participantName: seg.participantName || seg.username || "Participant",
-                username: seg.username,
-                text: seg.text,
-                timestamp: seg.timestamp ? new Date(seg.timestamp) : new Date(),
-                durationSeconds: seg.durationSeconds || Math.max(1, Math.round(seg.text.split(/\s+/).length / 2.5)),
-                isInterruption: seg.isInterruption || false,
-                language: seg.language || "en",
-                confidence: seg.confidence || 0.98,
-                sequenceNumber: seg.sequenceNumber,
-                isFinal: true,
-              };
-              return {
-                ...prev,
-                transcript: [...prev.transcript, formattedSeg],
-                participants: payload.participants || prev.participants,
-                currentTurn: payload.currentTurn || prev.currentTurn,
-              };
-            });
-            setSilenceWarning(null);
-            break;
-          }
 
-          case "discussion_started": {
-            toast.success("Group discussion has officially begun!");
-            setSession((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                status: "in_progress",
-                currentTurn: payload.currentTurn,
-                round: payload.round,
-                participants: payload.participants,
-              };
-            });
-            // Automatically play Murf AI Moderator introduction for all participants
-            triggerModeratorSpeech();
-            break;
-          }
+            case "turn_silence_warning": {
+              setSilenceWarning(payload.message);
+              toast.warn(payload.message);
+              break;
+            }
 
-          case "turn_changed": {
-            setSilenceWarning(null);
-            setTurnElapsedSeconds(0);
-            toast.info(`Next Turn: @${payload.currentTurn?.username || "Participant"} (Round ${payload.round})`);
-            setSession((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                currentTurn: payload.currentTurn,
-                round: payload.round,
-                participants: payload.participants || prev.participants,
-              };
-            });
-            break;
-          }
+            case "turn_silence_timeout": {
+              setSilenceWarning(null);
+              toast.error(`Turn timed out due to silence. Passed to next student.`);
+              setSession((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  currentTurn: payload.currentTurn,
+                  round: payload.round,
+                  participants: payload.participants || prev.participants,
+                };
+              });
+              break;
+            }
 
-          case "turn_silence_warning": {
-            setSilenceWarning(payload.message);
-            toast.warn(payload.message);
-            break;
-          }
+            case "participant_left": {
+              setSession((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  participants: prev.participants.map((p) =>
+                    p.id === payload.participantId ? { ...p, isOnline: false } : p
+                  ),
+                  currentTurn: payload.currentTurn || prev.currentTurn,
+                };
+              });
+              closePeerConnection(payload.participantId);
+              break;
+            }
 
-          case "turn_silence_timeout": {
-            setSilenceWarning(null);
-            toast.error(`Turn timed out due to silence. Passed to next student.`);
-            setSession((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                currentTurn: payload.currentTurn,
-                round: payload.round,
-                participants: payload.participants || prev.participants,
-              };
-            });
-            break;
-          }
+            case "evaluating_session": {
+              toast.info(payload.message || "Generating placement evaluations...");
+              break;
+            }
 
-          case "participant_left": {
-            setSession((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                participants: prev.participants.map((p) =>
-                  p.id === payload.participantId ? { ...p, isOnline: false } : p
-                ),
-                currentTurn: payload.currentTurn || prev.currentTurn,
-              };
-            });
-            closePeerConnection(payload.participantId);
-            break;
-          }
+            case "session_ended": {
+              toast.success("Discussion concluded! Navigating to Results & Leaderboard...");
+              navigate(`/group-discussion/result/${sessionId}`);
+              break;
+            }
 
-          case "evaluating_session": {
-            toast.info(payload.message || "Generating placement evaluations...");
-            break;
+            default:
+              break;
           }
-
-          case "session_ended": {
-            toast.success("Discussion concluded! Navigating to Results & Leaderboard...");
-            navigate(`/group-discussion/result/${sessionId}`);
-            break;
-          }
-
-          default:
-            break;
+        } catch (err) {
+          console.error("WS message parse error:", err);
         }
-      } catch (err) {
-        console.error("WS message parse error:", err);
-      }
-    };
-  } catch (err) {
-    console.warn("WebSocket init error:", err);
+      };
+    } catch (err) {
+      console.warn("WebSocket init error:", err);
+    }
   }
-}
 
   // 6. WebRTC Peer Connection Management
   function createPeerConnection(peerId: string, isInitiator: boolean): RTCPeerConnection {
@@ -2143,8 +2158,8 @@ export function GDRoomPage() {
               onClick={handleToggleBookmark}
               disabled={isTogglingBookmark}
               className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${isBookmarked
-                  ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
-                  : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
+                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
                 }`}
               title={isBookmarked ? "Remove Bookmark" : "Bookmark Discussion"}
             >
@@ -2172,8 +2187,8 @@ export function GDRoomPage() {
                 }
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-xl border text-xs font-semibold cursor-pointer transition-all active:scale-95 shadow-sm touch-manipulation ${isModeratorPlaying
-                  ? "border-amber-500/50 bg-amber-500/20 text-amber-300 animate-pulse shadow-amber-500/20"
-                  : "border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50"
+                ? "border-amber-500/50 bg-amber-500/20 text-amber-300 animate-pulse shadow-amber-500/20"
+                : "border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50"
                 }`}
               title="Murf AI Moderator (Kabir Verma) Voice Briefing"
               aria-label="Murf AI Moderator Voice Briefing"
@@ -2325,10 +2340,10 @@ export function GDRoomPage() {
             {/* Local User Tile */}
             <div
               className={`relative rounded-2xl overflow-hidden border aspect-video bg-zinc-900 flex items-center justify-center transition-all duration-300 ${!faceDetected && isVideoOn
-                  ? "border-red-500 ring-2 ring-red-500/50 shadow-lg shadow-red-500/20"
-                  : speakingPeers[currentParticipant?.id || ""] || isMyTurn
-                    ? "border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10"
-                    : "border-zinc-800"
+                ? "border-red-500 ring-2 ring-red-500/50 shadow-lg shadow-red-500/20"
+                : speakingPeers[currentParticipant?.id || ""] || isMyTurn
+                  ? "border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10"
+                  : "border-zinc-800"
                 }`}
             >
               {/* Real-time speech transcription badge */}
@@ -2396,8 +2411,8 @@ export function GDRoomPage() {
                   <div
                     key={p.id}
                     className={`relative rounded-2xl overflow-hidden border aspect-video bg-zinc-900 flex items-center justify-center transition-all duration-300 ${isSpeaking || isPeerTurn
-                        ? "border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10"
-                        : "border-zinc-800"
+                      ? "border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10"
+                      : "border-zinc-800"
                       }`}
                   >
                     {/* Remote participant speech transcription badge */}
@@ -2489,8 +2504,8 @@ export function GDRoomPage() {
               <button
                 onClick={toggleMicrophone}
                 className={`p-3 rounded-full font-bold transition cursor-pointer ${isMicOn
-                    ? "bg-zinc-800 hover:bg-zinc-700 text-white"
-                    : "bg-red-600 hover:bg-red-500 text-white animate-pulse"
+                  ? "bg-zinc-800 hover:bg-zinc-700 text-white"
+                  : "bg-red-600 hover:bg-red-500 text-white animate-pulse"
                   }`}
                 title={isMicOn ? "Mute Microphone" : "Unmute Microphone"}
               >
@@ -2500,8 +2515,8 @@ export function GDRoomPage() {
               <button
                 onClick={toggleCamera}
                 className={`p-3 rounded-full font-bold transition cursor-pointer ${isVideoOn
-                    ? "bg-zinc-800 hover:bg-zinc-700 text-white"
-                    : "bg-red-600 hover:bg-red-500 text-white"
+                  ? "bg-zinc-800 hover:bg-zinc-700 text-white"
+                  : "bg-red-600 hover:bg-red-500 text-white"
                   }`}
                 title={isVideoOn ? "Turn Camera Off" : "Turn Camera On"}
               >
@@ -2545,21 +2560,19 @@ export function GDRoomPage() {
             <div className="flex gap-1.5 font-bold">
               <button
                 onClick={() => setActiveTab("transcript")}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  activeTab === "transcript"
+                className={`px-3 py-1.5 rounded-lg transition ${activeTab === "transcript"
                     ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
                     : "text-zinc-400 hover:text-white"
-                }`}
+                  }`}
               >
                 Attributed Transcript ({session.transcript.length})
               </button>
               <button
                 onClick={() => setActiveTab("participants")}
-                className={`px-3 py-1.5 rounded-lg transition ${
-                  activeTab === "participants"
+                className={`px-3 py-1.5 rounded-lg transition ${activeTab === "participants"
                     ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
                     : "text-zinc-400 hover:text-white"
-                }`}
+                  }`}
               >
                 Participants ({session.participants.length})
               </button>
@@ -2661,11 +2674,10 @@ export function GDRoomPage() {
                     return (
                       <div
                         key={seg.id || idx}
-                        className={`p-3.5 rounded-xl space-y-1.5 transition-all ${
-                          isUser
+                        className={`p-3.5 rounded-xl space-y-1.5 transition-all ${isUser
                             ? "bg-indigo-950/20 border border-indigo-500/30"
                             : "bg-zinc-900/60 border border-zinc-800/80"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -2803,9 +2815,8 @@ export function GDRoomPage() {
                     <div
                       key={u.id}
                       onClick={() => !isInvitingStudent && handleSendInvite(u.username)}
-                      className={`p-2.5 rounded-lg hover:bg-zinc-800 cursor-pointer flex items-center justify-between ${
-                        isInvitingStudent ? "opacity-50 pointer-events-none" : ""
-                      }`}
+                      className={`p-2.5 rounded-lg hover:bg-zinc-800 cursor-pointer flex items-center justify-between ${isInvitingStudent ? "opacity-50 pointer-events-none" : ""
+                        }`}
                     >
                       <div>
                         <span className="font-bold text-white block">@{u.username}</span>

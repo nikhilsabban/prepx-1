@@ -1,6 +1,11 @@
 import dotenv from "dotenv";
 import path from "path";
+import dns from "dns";
 import mongoose from "mongoose";
+
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {}
 import bcrypt from "bcryptjs";
 import { User } from "../models/User";
 import { GroupDiscussion } from "../models/GroupDiscussion";

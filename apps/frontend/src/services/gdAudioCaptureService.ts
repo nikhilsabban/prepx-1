@@ -85,6 +85,7 @@ export class GDAudioCaptureSession {
   private reconnectAttempts: number = 0;
   private credentials: GDTranscriptionCredentials | null = null;
   private localStream: MediaStream | null = null;
+  private keepAlivePingTimer: any = null;
 
   constructor(options: GDAudioCaptureOptions) {
     this.options = options;
@@ -171,6 +172,16 @@ export class GDAudioCaptureSession {
       if (this.isDestroyed) return;
       this.reconnectAttempts = 0;
       this.setStatus("listening", "Listening to your contributions");
+
+      // Send periodic ping to keep socket connection alive through quiet periods
+      if (this.keepAlivePingTimer) clearInterval(this.keepAlivePingTimer);
+      this.keepAlivePingTimer = setInterval(() => {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+          try {
+            this.socket.send(JSON.stringify({ type: "ping" }));
+          } catch {}
+        }
+      }, 4000);
     };
 
     socket.onmessage = (event) => {
@@ -199,6 +210,10 @@ export class GDAudioCaptureSession {
     };
 
     socket.onclose = () => {
+      if (this.keepAlivePingTimer) {
+        clearInterval(this.keepAlivePingTimer);
+        this.keepAlivePingTimer = null;
+      }
       if (this.isDestroyed || this.isPaused) return;
       this.scheduleReconnect();
     };
@@ -373,6 +388,11 @@ export class GDAudioCaptureSession {
   public destroy(): void {
     this.isDestroyed = true;
     this.isPaused = true;
+
+    if (this.keepAlivePingTimer) {
+      clearInterval(this.keepAlivePingTimer);
+      this.keepAlivePingTimer = null;
+    }
 
     if (this.workletNode) {
       try {

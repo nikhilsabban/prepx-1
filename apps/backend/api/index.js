@@ -20787,20 +20787,23 @@ function initGDTranscriptionGateway(server) {
       client.lastActiveAt = Date.now();
       if (isBinary) {
         if (!client.isActive) return;
-        let currentSession;
-        try {
-          currentSession = await gdSessionService.getSessionById(client.sessionId || "");
-        } catch (error) {
-          console.error("[GD Transcription Gateway] Active-turn authorization check failed:", error.message);
-          client.isActive = false;
-          client.close(1011, "Unable to verify the active GD turn");
-          return;
+        const now = Date.now();
+        if (!client.cachedSession || now - (client.lastSessionCheckAt || 0) > 1200) {
+          try {
+            client.cachedSession = await gdSessionService.getSessionById(client.sessionId || "");
+            client.lastSessionCheckAt = now;
+          } catch (error) {
+          }
         }
+        const currentSession = client.cachedSession;
         const currentTurn = currentSession?.currentTurn;
         const currentTurnId = currentTurn ? `${currentTurn.participantId}:${currentTurn.round}:${new Date(currentTurn.startedAt).getTime()}` : "";
-        if (currentSession?.status !== "in_progress" || currentTurn?.participantId !== client.participantId || !client.turnId || currentTurnId !== client.turnId) {
-          client.isActive = false;
-          client.close(1008, "Audio is only accepted during the authenticated participant's active turn");
+        if (currentSession?.status !== "in_progress") {
+          return;
+        }
+        if (currentTurn?.participantId === client.participantId) {
+          client.turnId = currentTurnId;
+        } else {
           return;
         }
         const chunk = Buffer.from(data);
@@ -20817,15 +20820,31 @@ function initGDTranscriptionGateway(server) {
           const str = data.toString();
           const parsed = JSON.parse(str);
           const type = parsed.type;
-          if (type === "ping") {
+          if (type === "ping" || type === "keepalive") {
             client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+            if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket2.OPEN) {
+              try {
+                client.upstreamSocket.send(JSON.stringify({ type: "KeepAlive" }));
+              } catch {
+              }
+            }
+          } else if (type === "KeepAlive") {
+            if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket2.OPEN) {
+              try {
+                client.upstreamSocket.send(JSON.stringify({ type: "KeepAlive" }));
+              } catch {
+              }
+            }
           } else if (type === "gd:transcription:start" || type === "start") {
             client.isActive = true;
             client.send(JSON.stringify({ type: "gd:transcription:resumed", participantId: client.participantId }));
           } else if (type === "gd:transcription:stop" || type === "stop" || type === "Finalize") {
             client.isActive = false;
             if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket2.OPEN) {
-              client.upstreamSocket.send(JSON.stringify({ type: "Finalize" }));
+              try {
+                client.upstreamSocket.send(JSON.stringify({ type: "Finalize" }));
+              } catch {
+              }
             }
           }
         } catch {
@@ -20902,6 +20921,15 @@ function initGDTranscriptionGateway(server) {
       client.upstreamSocket = upstreamSocket;
       upstreamSocket.on("open", () => {
         client.reconnectAttempts = 0;
+        if (client.keepAliveTimer) clearInterval(client.keepAliveTimer);
+        client.keepAliveTimer = setInterval(() => {
+          if (upstreamSocket && upstreamSocket.readyState === WebSocket2.OPEN) {
+            try {
+              upstreamSocket.send(JSON.stringify({ type: "KeepAlive" }));
+            } catch {
+            }
+          }
+        }, 3500);
         if (client.readyState === WebSocket2.OPEN) {
           client.send(
             JSON.stringify({
@@ -21052,15 +21080,27 @@ function initGDTranscriptionGateway(server) {
         }
       });
       upstreamSocket.on("error", (err) => {
+        if (client.keepAliveTimer) {
+          clearInterval(client.keepAliveTimer);
+          client.keepAliveTimer = null;
+        }
         console.warn(`[GD Transcription Gateway] Deepgram upstream error for participant ${client.participantId}:`, err.message);
         handleUpstreamReconnect(client);
       });
       upstreamSocket.on("close", () => {
+        if (client.keepAliveTimer) {
+          clearInterval(client.keepAliveTimer);
+          client.keepAliveTimer = null;
+        }
         if (client.readyState === WebSocket2.OPEN && client.isActive) {
           handleUpstreamReconnect(client);
         }
       });
     } catch (err) {
+      if (client.keepAliveTimer) {
+        clearInterval(client.keepAliveTimer);
+        client.keepAliveTimer = null;
+      }
       console.error("[GD Transcription Gateway] Upstream initialization failed:", err.message);
       handleUpstreamReconnect(client);
     }
@@ -21093,6 +21133,10 @@ function initGDTranscriptionGateway(server) {
     }, delay);
   }
   function teardownUpstream(client) {
+    if (client.keepAliveTimer) {
+      clearInterval(client.keepAliveTimer);
+      client.keepAliveTimer = null;
+    }
     const upstream = client.upstreamSocket;
     if (upstream) {
       try {
