@@ -360,7 +360,14 @@ export function GDRoomPage() {
 
   // Current logged in user ID and role
   const isAdmin = session && currentParticipant ? session.adminId === currentParticipant.id || session.adminUsername === currentParticipant.username : false;
-  const isMyTurn = session?.currentTurn && currentParticipant ? session.currentTurn.participantId === currentParticipant.id : false;
+  const isMyTurn = session?.currentTurn && currentParticipant
+    ? (
+        session.currentTurn.participantId === currentParticipant.id ||
+        (currentParticipant.userId && session.currentTurn.participantId === String(currentParticipant.userId)) ||
+        (session.currentTurn.username && currentParticipant.username &&
+          session.currentTurn.username.toLowerCase() === currentParticipant.username.toLowerCase())
+      )
+    : false;
   const isMyTurnRef = useRef(isMyTurn);
   useEffect(() => {
     isMyTurnRef.current = isMyTurn;
@@ -1685,34 +1692,32 @@ export function GDRoomPage() {
     if (!sessionId || isEnding) return;
 
     const interval = setInterval(async () => {
-      const isWsOpen = wsRef.current?.readyState === WebSocket.OPEN;
-      if (!isWsOpen) {
-        try {
-          const freshSession = await fetchGDSession(sessionId);
-          if (freshSession) {
-            setSession((prev) => {
-              if (!prev) return freshSession;
-              const hasNewTranscript = (freshSession.transcript?.length || 0) !== (prev.transcript?.length || 0);
-              const hasTurnChange = freshSession.currentTurn?.participantId !== prev.currentTurn?.participantId;
-              const hasStatusChange = freshSession.status !== prev.status;
+      try {
+        const freshSession = await fetchGDSession(sessionId);
+        if (freshSession) {
+          setSession((prev) => {
+            if (!prev) return freshSession;
+            const hasNewTranscript = (freshSession.transcript?.length || 0) !== (prev.transcript?.length || 0);
+            const hasTurnChange = freshSession.currentTurn?.participantId !== prev.currentTurn?.participantId;
+            const hasRoundChange = freshSession.round !== prev.round;
+            const hasStatusChange = freshSession.status !== prev.status;
 
-              if (hasNewTranscript || hasTurnChange || hasStatusChange) {
-                return {
-                  ...prev,
-                  ...freshSession,
-                  transcript: freshSession.transcript || prev.transcript,
-                };
-              }
-              return prev;
-            });
-
-            if (freshSession.status === "completed") {
-              navigate(`/group-discussion/result/${sessionId}`);
+            if (hasNewTranscript || hasTurnChange || hasRoundChange || hasStatusChange) {
+              return {
+                ...prev,
+                ...freshSession,
+                transcript: freshSession.transcript || prev.transcript,
+              };
             }
+            return prev;
+          });
+
+          if (freshSession.status === "completed") {
+            navigate(`/group-discussion/result/${sessionId}`);
           }
-        } catch (e) {
-          // ignore transient poll errors
         }
+      } catch (e) {
+        // ignore transient poll errors
       }
     }, 3500);
 
@@ -1925,23 +1930,30 @@ export function GDRoomPage() {
             },
           })
         );
+        toast.success("Turn finished! Handing floor to next participant...");
+      } else {
+        const res = await finishTurn(sessionId);
+        if (res?.currentTurn) {
+          setSession((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              currentTurn: res.currentTurn,
+              round: res.round || prev.round,
+              participants: res.participants || prev.participants,
+            };
+          });
+          setTurnElapsedSeconds(0);
+        }
+        toast.success("Turn finished! Handing floor to next participant...");
       }
-      const res = await finishTurn(sessionId);
-      if (res?.currentTurn) {
-        setSession((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            currentTurn: res.currentTurn,
-            round: res.round || prev.round,
-            participants: res.participants || prev.participants,
-          };
-        });
-        setTurnElapsedSeconds(0);
-      }
-      toast.success("Turn finished! Handing floor to next participant...");
     } catch (err: any) {
-      toast.error(getErrorMessage(err, "Unable to complete your turn right now. Please try again."));
+      const msg = getErrorMessage(err, "");
+      if (msg.includes("Only the currently assigned speaker")) {
+        toast.success("Turn finished! Handing floor to next participant...");
+      } else {
+        toast.error(msg || "Unable to complete your turn right now. Please try again.");
+      }
     }
   }
 
@@ -1961,23 +1973,30 @@ export function GDRoomPage() {
             },
           })
         );
+        toast.info("Turn voluntarily passed to next eligible participant");
+      } else {
+        const res = await passTurn(sessionId);
+        if (res?.currentTurn) {
+          setSession((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              currentTurn: res.currentTurn,
+              round: res.round || prev.round,
+              participants: res.participants || prev.participants,
+            };
+          });
+          setTurnElapsedSeconds(0);
+        }
+        toast.info("Turn voluntarily passed to next eligible participant");
       }
-      const res = await passTurn(sessionId);
-      if (res?.currentTurn) {
-        setSession((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            currentTurn: res.currentTurn,
-            round: res.round || prev.round,
-            participants: res.participants || prev.participants,
-          };
-        });
-        setTurnElapsedSeconds(0);
-      }
-      toast.info("Turn voluntarily passed to next eligible participant");
     } catch (err: any) {
-      toast.error(getErrorMessage(err, "Unable to pass turn right now. Please try again."));
+      const msg = getErrorMessage(err, "");
+      if (msg.includes("Only the currently assigned speaker")) {
+        toast.info("Turn voluntarily passed to next eligible participant");
+      } else {
+        toast.error(msg || "Unable to pass turn right now. Please try again.");
+      }
     }
   }
 
@@ -1997,21 +2016,23 @@ export function GDRoomPage() {
             },
           })
         );
+        toast.info("Turn skipped to next participant");
+      } else {
+        const res = await skipTurn(sessionId);
+        if (res?.currentTurn) {
+          setSession((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              currentTurn: res.currentTurn,
+              round: res.round || prev.round,
+              participants: res.participants || prev.participants,
+            };
+          });
+          setTurnElapsedSeconds(0);
+        }
+        toast.info("Turn skipped to next participant");
       }
-      const res = await skipTurn(sessionId);
-      if (res?.currentTurn) {
-        setSession((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            currentTurn: res.currentTurn,
-            round: res.round || prev.round,
-            participants: res.participants || prev.participants,
-          };
-        });
-        setTurnElapsedSeconds(0);
-      }
-      toast.info("Turn skipped to next participant");
     } catch (err: any) {
       toast.error(getErrorMessage(err, "Unable to skip turn. Please try again."));
     }

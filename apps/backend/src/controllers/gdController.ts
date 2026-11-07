@@ -389,10 +389,15 @@ export async function beginGDSessionTurn(req: AuthRequest, res: Response): Promi
 export async function finishStudentTurn(req: AuthRequest, res: Response): Promise<void> {
   try {
     const roomId = getParam(req.params.roomId || req.params.sessionId);
-    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    const userId = req.user?._id?.toString() || req.user?.id?.toString() || req.user?.username || "";
     const { wordsSpoken } = req.body;
 
     const session = await gdSessionService.finishTurn(roomId, userId, Number(wordsSpoken) || 0);
+
+    if (!session) {
+      res.status(404).json({ success: false, message: "Room not found or no active turn" });
+      return;
+    }
 
     broadcastToGDRoom(roomId, {
       type: "turn_changed",
@@ -423,9 +428,14 @@ export async function finishStudentTurn(req: AuthRequest, res: Response): Promis
 export async function passStudentTurn(req: AuthRequest, res: Response): Promise<void> {
   try {
     const roomId = getParam(req.params.roomId || req.params.sessionId);
-    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    const userId = req.user?._id?.toString() || req.user?.id?.toString() || req.user?.username || "";
 
     const session = await gdSessionService.passTurn(roomId, userId);
+
+    if (!session) {
+      res.status(404).json({ success: false, message: "Room not found or no active turn" });
+      return;
+    }
 
     broadcastToGDRoom(roomId, {
       type: "turn_changed",

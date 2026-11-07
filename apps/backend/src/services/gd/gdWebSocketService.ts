@@ -214,7 +214,7 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
         }
 
         if (!sessionId) return;
-        if (!ws.sessionId || ws.sessionId !== sessionId) {
+        if (type !== "join_room" && (!ws.sessionId || ws.sessionId !== sessionId)) {
           ws.send(JSON.stringify({ type: "gd:error", message: "Join this room before sending discussion events." }));
           return;
         }
@@ -225,8 +225,13 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
           // -----------------------------------------------------------------
           case "join_room": {
             const session = await gdSessionService.getSessionById(sessionId);
+            const cleanUser = (ws.username || payload?.username || "").toLowerCase().trim();
             const participant = session?.participants.find(
-              (candidate) => candidate.userId?.toString() === ws.authenticatedUserId || candidate.id === ws.authenticatedUserId
+              (candidate) =>
+                candidate.userId?.toString() === ws.authenticatedUserId ||
+                candidate.id === ws.authenticatedUserId ||
+                (candidate.username && cleanUser && candidate.username.toLowerCase() === cleanUser) ||
+                (payload?.participantId && (candidate.id === payload.participantId || candidate.userId?.toString() === payload.participantId))
             );
             if (!session || !participant) {
               ws.send(JSON.stringify({ type: "gd:error", message: "Authenticated user is not a participant in this room." }));
@@ -547,7 +552,7 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
           case "finish_turn": {
             try {
-              const callerId = ws.participantId || "";
+              const callerId = ws.participantId || payload?.participantId || ws.authenticatedUserId || "";
               const updated = await gdSessionService.finishTurn(
                 sessionId,
                 callerId,
@@ -576,7 +581,7 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
           case "pass_turn": {
             try {
-              const callerId = ws.participantId || "";
+              const callerId = ws.participantId || payload?.participantId || ws.authenticatedUserId || "";
               const updated = await gdSessionService.passTurn(sessionId, callerId);
 
               broadcastToEveryoneInRoom(sessionId, {
@@ -601,7 +606,7 @@ export function initGDWebSocketServer(server: HttpServer): WebSocketServer {
 
           case "skip_turn": {
             try {
-              const callerId = payload?.participantId || ws.participantId || "";
+              const callerId = payload?.participantId || ws.participantId || ws.authenticatedUserId || "";
               const updated = await gdSessionService.skipTurnByAdmin(sessionId, callerId);
 
               broadcastToEveryoneInRoom(sessionId, {

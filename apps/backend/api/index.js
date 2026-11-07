@@ -18816,7 +18816,9 @@ var GDSessionService = class {
     const previousTurn = session.currentTurn;
     const now = /* @__PURE__ */ new Date();
     if (previousTurn) {
-      const prevParticipant = session.participants.find((p) => p.id === previousTurn.participantId);
+      const prevParticipant = session.participants.find(
+        (p) => p.id === previousTurn.participantId || p.userId?.toString() === previousTurn.participantId || p.username && previousTurn.username && p.username.toLowerCase() === previousTurn.username.toLowerCase()
+      );
       const durationSeconds = Math.max(1, Math.round((now.getTime() - new Date(previousTurn.startedAt).getTime()) / 1e3));
       if (prevParticipant) {
         prevParticipant.hasSpokenInCurrentRound = true;
@@ -18840,9 +18842,10 @@ var GDSessionService = class {
         wordsSpoken: wordsSpoken || 0
       });
     }
-    const allStudents = session.participants.filter(
+    const studentParticipants = session.participants.filter(
       (p) => !p.isAi && !p.isHost && p.role !== "admin"
     );
+    const allStudents = studentParticipants.length > 0 ? studentParticipants : session.participants.filter((p) => !p.isAi);
     if (allStudents.length === 0) {
       session.currentTurn = void 0;
       await session.save();
@@ -18911,6 +18914,10 @@ var GDSessionService = class {
       (p) => (p.id === participantId || p.userId?.toString() === participantId || p.username?.toLowerCase() === participantId.toLowerCase()) && (p.id === currentSpeakerId || p.username?.toLowerCase() === session.currentTurn?.username?.toLowerCase())
     );
     if (!isCurrentSpeaker) {
+      const lastTurn = session.turnHistory.slice(-1)[0];
+      if (lastTurn && (lastTurn.participantId === participantId || lastTurn.username?.toLowerCase() === participantId.toLowerCase()) && Date.now() - new Date(lastTurn.endedAt).getTime() < 8e3) {
+        return session;
+      }
       throw new Error("Only the currently assigned speaker or moderator can finish this turn");
     }
     await this.assignNextTurn(roomId, "student_finished", wordsSpoken, getTurnIdentity(session.currentTurn));
@@ -19433,9 +19440,13 @@ async function beginGDSessionTurn(req, res) {
 async function finishStudentTurn(req, res) {
   try {
     const roomId = getParam(req.params.roomId || req.params.sessionId);
-    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    const userId = req.user?._id?.toString() || req.user?.id?.toString() || req.user?.username || "";
     const { wordsSpoken } = req.body;
     const session = await gdSessionService.finishTurn(roomId, userId, Number(wordsSpoken) || 0);
+    if (!session) {
+      res.status(404).json({ success: false, message: "Room not found or no active turn" });
+      return;
+    }
     broadcastToGDRoom(roomId, {
       type: "turn_changed",
       payload: {
@@ -19460,8 +19471,12 @@ async function finishStudentTurn(req, res) {
 async function passStudentTurn(req, res) {
   try {
     const roomId = getParam(req.params.roomId || req.params.sessionId);
-    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    const userId = req.user?._id?.toString() || req.user?.id?.toString() || req.user?.username || "";
     const session = await gdSessionService.passTurn(roomId, userId);
+    if (!session) {
+      res.status(404).json({ success: false, message: "Room not found or no active turn" });
+      return;
+    }
     broadcastToGDRoom(roomId, {
       type: "turn_changed",
       payload: {
@@ -20228,7 +20243,7 @@ function initGDWebSocketServer(server) {
           return;
         }
         if (!sessionId) return;
-        if (!ws.sessionId || ws.sessionId !== sessionId) {
+        if (type !== "join_room" && (!ws.sessionId || ws.sessionId !== sessionId)) {
           ws.send(JSON.stringify({ type: "gd:error", message: "Join this room before sending discussion events." }));
           return;
         }
@@ -20238,8 +20253,9 @@ function initGDWebSocketServer(server) {
           // -----------------------------------------------------------------
           case "join_room": {
             const session = await gdSessionService.getSessionById(sessionId);
+            const cleanUser = (ws.username || payload?.username || "").toLowerCase().trim();
             const participant = session?.participants.find(
-              (candidate) => candidate.userId?.toString() === ws.authenticatedUserId || candidate.id === ws.authenticatedUserId
+              (candidate) => candidate.userId?.toString() === ws.authenticatedUserId || candidate.id === ws.authenticatedUserId || candidate.username && cleanUser && candidate.username.toLowerCase() === cleanUser || payload?.participantId && (candidate.id === payload.participantId || candidate.userId?.toString() === payload.participantId)
             );
             if (!session || !participant) {
               ws.send(JSON.stringify({ type: "gd:error", message: "Authenticated user is not a participant in this room." }));
@@ -20520,7 +20536,7 @@ function initGDWebSocketServer(server) {
           }
           case "finish_turn": {
             try {
-              const callerId = ws.participantId || "";
+              const callerId = ws.participantId || payload?.participantId || ws.authenticatedUserId || "";
               const updated = await gdSessionService.finishTurn(
                 sessionId,
                 callerId,
@@ -20548,7 +20564,7 @@ function initGDWebSocketServer(server) {
           }
           case "pass_turn": {
             try {
-              const callerId = ws.participantId || "";
+              const callerId = ws.participantId || payload?.participantId || ws.authenticatedUserId || "";
               const updated = await gdSessionService.passTurn(sessionId, callerId);
               broadcastToEveryoneInRoom(sessionId, {
                 type: "turn_changed",
@@ -20572,7 +20588,7 @@ function initGDWebSocketServer(server) {
           }
           case "skip_turn": {
             try {
-              const callerId = payload?.participantId || ws.participantId || "";
+              const callerId = payload?.participantId || ws.participantId || ws.authenticatedUserId || "";
               const updated = await gdSessionService.skipTurnByAdmin(sessionId, callerId);
               broadcastToEveryoneInRoom(sessionId, {
                 type: "turn_changed",

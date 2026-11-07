@@ -751,7 +751,12 @@ class GDSessionService {
 
     // 1. Archive previous turn if one existed
     if (previousTurn) {
-      const prevParticipant = session.participants.find((p) => p.id === previousTurn.participantId);
+      const prevParticipant = session.participants.find(
+        (p) =>
+          p.id === previousTurn.participantId ||
+          p.userId?.toString() === previousTurn.participantId ||
+          (p.username && previousTurn.username && p.username.toLowerCase() === previousTurn.username.toLowerCase())
+      );
       const durationSeconds = Math.max(1, Math.round((now.getTime() - new Date(previousTurn.startedAt).getTime()) / 1000));
 
       if (prevParticipant) {
@@ -779,9 +784,14 @@ class GDSessionService {
     }
 
     // 2. Only invited/joined students take speaking slots; the host moderates the room.
-    const allStudents = session.participants.filter(
+    // If no other students are present (e.g. host testing or practicing solo), allow non-AI participants so turns advance.
+    const studentParticipants = session.participants.filter(
       (p) => !p.isAi && !p.isHost && p.role !== "admin"
     );
+    const allStudents = studentParticipants.length > 0
+      ? studentParticipants
+      : session.participants.filter((p) => !p.isAi);
+
     if (allStudents.length === 0) {
       session.currentTurn = undefined;
       await session.save();
@@ -897,6 +907,15 @@ class GDSessionService {
       );
 
     if (!isCurrentSpeaker) {
+      const lastTurn = session.turnHistory.slice(-1)[0];
+      if (
+        lastTurn &&
+        (lastTurn.participantId === participantId ||
+          lastTurn.username?.toLowerCase() === participantId.toLowerCase()) &&
+        Date.now() - new Date(lastTurn.endedAt).getTime() < 8000
+      ) {
+        return session;
+      }
       throw new Error("Only the currently assigned speaker or moderator can finish this turn");
     }
 
