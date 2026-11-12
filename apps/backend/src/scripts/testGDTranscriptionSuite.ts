@@ -4,6 +4,7 @@ import path from "path";
 import bcrypt from "bcryptjs";
 import http from "http";
 import { WebSocket } from "ws";
+import jwt from "jsonwebtoken";
 
 import { User } from "../models/User";
 import { GroupDiscussion } from "../models/GroupDiscussion";
@@ -148,16 +149,32 @@ async function runGDTranscriptionSuite() {
   );
 
   // Start discussion & assign initial turn
-  const startedRoom = await gdSessionService.startDiscussion(roomId, adminUser._id.toString());
+  await gdSessionService.startDiscussion(roomId, adminUser._id.toString());
+  const startedRoom = await gdSessionService.beginFirstTurn(roomId, adminUser._id.toString());
   assert(startedRoom.status === "in_progress", "Discussion started with status 'in_progress'");
   assert(!!startedRoom.currentTurn?.participantId, "Initial turn assigned", `First speaker: @${startedRoom.currentTurn?.username}`);
+
+  const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
+  const getTokenForUser = (user: any) =>
+    jwt.sign(
+      {
+        userId: user._id.toString(),
+        id: user._id.toString(),
+        username: user.username,
+        role: "student",
+        purpose: "gd_transcription",
+      },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
 
   // -----------------------------------------------------------------
   // TEST 1: Single participant 16kHz PCM frame transport to Gateway
   // -----------------------------------------------------------------
   console.log("\n--- TEST 1: Single Participant 16kHz PCM Streaming ---");
   const firstStudent = studentUsers[0]!;
-  const wsUrl1 = `ws://127.0.0.1:${port}/api/v1/gd/transcription/stream?sessionId=${roomId}&participantId=${firstStudent._id}&username=${firstStudent.username}&participantName=${encodeURIComponent(firstStudent.fullName)}`;
+  const token1 = getTokenForUser(firstStudent);
+  const wsUrl1 = `ws://127.0.0.1:${port}/api/v1/gd/transcription/stream?token=${token1}&sessionId=${roomId}&participantId=${firstStudent._id}&username=${firstStudent.username}&participantName=${encodeURIComponent(firstStudent.fullName)}`;
 
   wsClient1 = new WebSocket(wsUrl1);
   let ws1Connected = false;
@@ -203,15 +220,39 @@ async function runGDTranscriptionSuite() {
   console.log("\n--- TEST 2: Multi-Participant Isolated Audio Streams & Attribution ---");
   for (let i = 1; i < 5; i++) {
     const s = studentUsers[i]!;
+    const tok = getTokenForUser(s);
     const clientWs = new WebSocket(
-      `ws://127.0.0.1:${port}/api/v1/gd/transcription/stream?sessionId=${roomId}&participantId=${s._id}&username=${s.username}&participantName=${encodeURIComponent(s.fullName)}`
+      `ws://127.0.0.1:${port}/api/v1/gd/transcription/stream?token=${tok}&sessionId=${roomId}&participantId=${s._id}&username=${s.username}&participantName=${encodeURIComponent(s.fullName)}`
     );
     clientSockets.push(clientWs);
   }
 
-  await new Promise<void>((resolve) => setTimeout(resolve, 1500));
-  const allSocketsOpen = clientSockets.every((s) => s.readyState === WebSocket.OPEN);
-  assert(allSocketsOpen, "All 5 participants maintained concurrent isolated STT streams simultaneously");
+  const all5 = [wsClient1, ...clientSockets];
+  await Promise.all(
+    all5.map(
+      (ws, idx) =>
+        new Promise<void>((resolve) => {
+          if (ws.readyState === WebSocket.OPEN) return resolve();
+          const timer = setTimeout(() => {
+            console.warn(`Participant socket ${idx} timed out. State: ${ws.readyState}`);
+            resolve();
+          }, 6000);
+          ws.once("open", () => {
+            clearTimeout(timer);
+            resolve();
+          });
+          ws.once("error", (err: any) => {
+            clearTimeout(timer);
+            console.warn(`Participant socket ${idx} connection error:`, err?.message);
+            resolve();
+          });
+        })
+    )
+  );
+
+  const openCount = all5.filter((s) => s.readyState === WebSocket.OPEN).length;
+  const allSocketsOpen = openCount === 5;
+  assert(allSocketsOpen, "All 5 participants maintained concurrent isolated STT streams simultaneously", `Open sockets: ${openCount}/5`);
 
   // -----------------------------------------------------------------
   // TEST 3: Turn-wise speaking & Out-of-turn interjection attribution

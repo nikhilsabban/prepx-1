@@ -17851,7 +17851,8 @@ var GDEvaluationService = class {
    * Awards gamification points idempotently.
    */
   async evaluateAllStudents(topic, participants, transcript, metrics, totalDurationSeconds, expectedLanguage = "English") {
-    const students = participants.filter((p) => !p.isAi);
+    const studentParticipants = participants.filter((p) => !p.isAi && !p.isHost && p.role !== "admin");
+    const students = studentParticipants.length > 0 ? studentParticipants : participants.filter((p) => !p.isAi);
     if (students.length === 0) {
       return [];
     }
@@ -18724,6 +18725,14 @@ var GDSessionService = class {
       session.participants.push(participant);
       await session.save();
       return { session, participant };
+    }
+    if (session.invitations && session.invitations.length > 0) {
+      const isInvited = session.invitations.some(
+        (inv) => inv.username.toLowerCase() === cleanUsername
+      );
+      if (!isInvited) {
+        throw new Error("Access denied: You have not been invited to this private discussion room");
+      }
     }
     const existingStudents = session.participants.filter((p) => !p.isHost && p.role !== "admin").length;
     if (existingStudents >= MAX_STUDENTS_CAPACITY) {

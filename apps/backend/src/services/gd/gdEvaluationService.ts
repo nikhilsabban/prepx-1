@@ -124,8 +124,11 @@ export class GDEvaluationService {
     totalDurationSeconds: number,
     expectedLanguage: string = "English"
   ): Promise<IGDStudentEvaluation[]> {
-    // Filter all human participants (including host/creator peer)
-    const students = participants.filter((p) => !p.isAi);
+    // Filter students: the admin host moderates when students are present
+    const studentParticipants = participants.filter((p) => !p.isAi && !p.isHost && p.role !== "admin");
+    const students = studentParticipants.length > 0
+      ? studentParticipants
+      : participants.filter((p) => !p.isAi);
 
     if (students.length === 0) {
       return [];

@@ -203,6 +203,7 @@ async function runComprehensiveTests() {
     // Scenario 7: Speech transcription with individual participant attribution
     console.log("\n--- Scenario 7 & 8: Attributed transcription pipeline ---");
     await gdSessionService.startDiscussion(testRoom._id.toString(), adminUser._id.toString());
+    await gdSessionService.beginFirstTurn(testRoom._id.toString(), adminUser._id.toString());
 
     await gdSessionService.addTranscriptSegment(testRoom._id.toString(), {
       participantId: studentUsers[0]!._id.toString(),

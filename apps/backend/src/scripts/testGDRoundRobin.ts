@@ -1,12 +1,8 @@
 import dotenv from "dotenv";
 import path from "path";
-import dns from "dns";
 import mongoose from "mongoose";
-
-try {
-  dns.setServers(["8.8.8.8", "1.1.1.1"]);
-} catch {}
 import bcrypt from "bcryptjs";
+import { connectDB } from "../config/db";
 import { User } from "../models/User";
 import { GroupDiscussion } from "../models/GroupDiscussion";
 import { GDTranscript } from "../models/GDTranscript";
@@ -24,8 +20,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 async function run() {
-  if (!process.env.MONGO_URI) throw new Error("MONGO_URI is not configured");
-  await mongoose.connect(process.env.MONGO_URI);
+  await connectDB();
 
   const timestamp = Date.now();
   const testUsers: any[] = [];

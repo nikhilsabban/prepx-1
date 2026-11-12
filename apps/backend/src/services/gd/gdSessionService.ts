@@ -634,6 +634,16 @@ class GDSessionService {
       return { session, participant };
     }
 
+    // If this room has an invitation list, verify that the student is invited
+    if (session.invitations && session.invitations.length > 0) {
+      const isInvited = session.invitations.some(
+        (inv) => inv.username.toLowerCase() === cleanUsername
+      );
+      if (!isInvited) {
+        throw new Error("Access denied: You have not been invited to this private discussion room");
+      }
+    }
+
     // Open room participation: any authenticated user can join directly up to room capacity
     const existingStudents = session.participants.filter((p) => !p.isHost && p.role !== "admin").length;
     if (existingStudents >= MAX_STUDENTS_CAPACITY) {
