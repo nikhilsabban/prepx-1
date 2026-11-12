@@ -305,15 +305,15 @@ export function GDResultPage() {
         {currentEval ? (
           <div className="space-y-6">
             {/* Student Report Header */}
-            <div className="p-8 rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900/90 via-zinc-950 to-[#09090b] shadow-2xl grid grid-cols-1 md:grid-cols-12 gap-6">
+            <div className="p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900/90 via-zinc-950 to-[#09090b] shadow-2xl grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6">
               {/* Overall Score Circle (4 cols) */}
-              <div className="md:col-span-4 flex flex-col items-center justify-center p-6 rounded-2xl border border-zinc-800/80 bg-zinc-950/60 text-center space-y-3">
+              <div className="md:col-span-4 flex flex-col items-center justify-center p-5 sm:p-6 rounded-2xl border border-zinc-800/80 bg-zinc-950/60 text-center space-y-3">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
                   Individual Placement Score
                 </span>
-                <div className="size-32 rounded-full border-4 border-indigo-500 flex flex-col items-center justify-center shadow-lg shadow-indigo-500/20 bg-indigo-950/20">
-                  <span className="text-4xl font-black text-white">{currentEval.overallScore}</span>
-                  <span className="text-xs font-bold text-zinc-400">OUT OF 100</span>
+                <div className="size-28 sm:size-32 rounded-full border-4 border-indigo-500 flex flex-col items-center justify-center shadow-lg shadow-indigo-500/20 bg-indigo-950/20">
+                  <span className="text-3xl sm:text-4xl font-black text-white">{currentEval.overallScore}</span>
+                  <span className="text-[10px] sm:text-xs font-bold text-zinc-400">OUT OF 100</span>
                 </div>
                 <div className="space-y-1">
                   <div className="text-sm font-bold text-white">@{currentEval.username}</div>
@@ -329,14 +329,14 @@ export function GDResultPage() {
               {/* Qualitative Debrief (8 cols) */}
               <div className="md:col-span-8 flex flex-col justify-center space-y-4">
                 <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm">
-                  <ShieldCheck className="size-4" />
-                  Talent Acquisition Evaluator Debrief for @{currentEval.username}
+                  <ShieldCheck className="size-4 shrink-0" />
+                  <span>Talent Acquisition Evaluator Debrief for @{currentEval.username}</span>
                 </div>
-                <p className="text-sm text-zinc-300 leading-relaxed">
+                <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
                   {currentEval.topicRelevanceExplanation}
                 </p>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
                   <div className="p-3 rounded-xl border border-zinc-800 bg-zinc-900/50">
                     <span className="text-zinc-500 block">Placement Readiness</span>
                     <strong className="text-white text-sm">
@@ -356,7 +356,7 @@ export function GDResultPage() {
             </div>
 
             {/* 100-Point Rubric 9 Criteria Breakdown */}
-            <div className="p-6 md:p-8 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-6">
+            <div className="p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-5 sm:space-y-6">
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Award className="size-5 text-indigo-400" />
@@ -398,9 +398,9 @@ export function GDResultPage() {
             </div>
 
             {/* Strengths & Logical Arguments Evidence */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
               {/* Strongest Arguments & Contributions */}
-              <div className="p-6 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
+              <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
                 <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
                   <CheckCircle2 className="size-4" />
                   Strongest Arguments & Verbal Contributions
@@ -416,7 +416,7 @@ export function GDResultPage() {
               </div>
 
               {/* Evidence of Logical Reasoning */}
-              <div className="p-6 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
+              <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
                 <h4 className="text-sm font-bold text-indigo-400 flex items-center gap-2">
                   <TrendingUp className="size-4" />
                   Logical Reasoning & Examples Evidence
@@ -433,9 +433,9 @@ export function GDResultPage() {
             </div>
 
             {/* Speech Pattern Analysis & Language Switching */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
               {/* Observable Speech Patterns */}
-              <div className="p-6 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
+              <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
                 <h4 className="text-sm font-bold text-purple-400 flex items-center gap-2">
                   <Volume2 className="size-4" />
                   Observable Speech & Presentation Patterns
@@ -465,7 +465,7 @@ export function GDResultPage() {
               </div>
 
               {/* Language Switching Observation */}
-              <div className="p-6 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
+              <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
                 <h4 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
                   <Globe className="size-4" />
                   Native-Language Switching Analysis
@@ -489,9 +489,9 @@ export function GDResultPage() {
             </div>
 
             {/* Recommendations & Practice Plan */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
               {/* Practical Recommendations */}
-              <div className="p-6 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
+              <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
                 <h4 className="text-sm font-bold text-amber-400 flex items-center gap-2">
                   <Lightbulb className="size-4" />
                   Personalized Recommendations
@@ -507,12 +507,12 @@ export function GDResultPage() {
               </div>
 
               {/* Suggested Practice Plan */}
-              <div className="p-6 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
+              <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-4">
                 <h4 className="text-sm font-bold text-pink-400 flex items-center gap-2">
                   <BookOpen className="size-4" />
                   Suggested Practice Plan for Next GD
                 </h4>
-                <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/80">
+                <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-900/50 p-3.5 sm:p-4 rounded-xl border border-zinc-800/80">
                   {currentEval.suggestedPracticePlan}
                 </p>
               </div>
@@ -521,23 +521,23 @@ export function GDResultPage() {
         ) : null}
 
         {/* Complete Discussion Transcript Collapsible */}
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950/80 overflow-hidden">
+        <div className="rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-950/80 overflow-hidden">
           <button
             onClick={() => setShowFullTranscript(!showFullTranscript)}
-            className="w-full p-6 flex items-center justify-between text-left hover:bg-zinc-900/40 transition cursor-pointer"
+            className="w-full p-4 sm:p-6 flex items-center justify-between text-left hover:bg-zinc-900/40 transition cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <MessageSquare className="size-5 text-indigo-400" />
+              <MessageSquare className="size-5 text-indigo-400 shrink-0" />
               <div>
-                <h3 className="font-bold text-white text-sm">Review Full Group Discussion Transcript</h3>
-                <p className="text-xs text-zinc-500">{session.transcript.length} dialogue turns recorded</p>
+                <h3 className="font-bold text-white text-xs sm:text-sm">Review Full Group Discussion Transcript</h3>
+                <p className="text-[11px] sm:text-xs text-zinc-500">{session.transcript.length} dialogue turns recorded</p>
               </div>
             </div>
-            {showFullTranscript ? <ChevronUp className="size-5 text-zinc-400" /> : <ChevronDown className="size-5 text-zinc-400" />}
+            {showFullTranscript ? <ChevronUp className="size-5 text-zinc-400 shrink-0" /> : <ChevronDown className="size-5 text-zinc-400 shrink-0" />}
           </button>
 
           {showFullTranscript && (
-            <div className="p-6 border-t border-zinc-800 space-y-3 max-h-[500px] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-t border-zinc-800 space-y-3 max-h-[500px] overflow-y-auto">
               {session.transcript.map((seg, idx) => (
                 <div
                   key={seg.id || idx}

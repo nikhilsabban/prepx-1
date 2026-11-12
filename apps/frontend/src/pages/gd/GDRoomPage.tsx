@@ -110,6 +110,7 @@ export function GDRoomPage() {
   const [loading, setLoading] = useState(true);
   const [isEnding, setIsEnding] = useState(false);
   const [activeTab, setActiveTab] = useState<"transcript" | "participants">("transcript");
+  const [mobileView, setMobileView] = useState<"video" | "transcript">("video");
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isTogglingBookmark, setIsTogglingBookmark] = useState(false);
 
@@ -2142,31 +2143,31 @@ export function GDRoomPage() {
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col">
       {/* Top Header Bar */}
-      <div className="border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md px-4 sm:px-8 py-3 sticky top-16 z-30">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md px-3 sm:px-6 md:px-8 py-2.5 sm:py-3 sticky top-16 z-30">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
           {/* Discussion Topic & Language Banner */}
-          <div className="space-y-1.5 flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+          <div className="space-y-1 sm:space-y-1.5 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                 {session.topic.category}
               </span>
-              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-800 text-zinc-300">
+              <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-zinc-800 text-zinc-300">
                 Language: {session.expectedLanguage}
               </span>
               {session.status === "in_progress" ? (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
                   LIVE DISCUSSION (ROUND {session.round})
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
                   PREPARING ROOM
                 </span>
               )}
             </div>
 
             <h1
-              className="text-sm sm:text-base font-bold text-white leading-snug break-words whitespace-normal"
+              className="text-xs sm:text-sm md:text-base font-bold text-white leading-snug break-words whitespace-normal line-clamp-2 md:line-clamp-none"
               title={formatTopicDisplay(session.topic.question).replace(/^["']+|["']+$/g, "")}
             >
               {formatTopicDisplay(session.topic.question)}
@@ -2174,27 +2175,28 @@ export function GDRoomPage() {
           </div>
 
           {/* AI Tutor Listening Status & Moderator Actions */}
-          <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5 shrink-0 self-start md:self-center w-full md:w-auto justify-start md:justify-end">
             <button
               onClick={handleToggleBookmark}
               disabled={isTogglingBookmark}
-              className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${isBookmarked
+              className={`p-1.5 sm:p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold ${isBookmarked
                 ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
                 : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
                 }`}
               title={isBookmarked ? "Remove Bookmark" : "Bookmark Discussion"}
             >
               {isBookmarked ? (
-                <BookmarkCheck className="size-4 fill-cyan-400/20" />
+                <BookmarkCheck className="size-3.5 sm:size-4 fill-cyan-400/20" />
               ) : (
-                <Bookmark className="size-4" />
+                <Bookmark className="size-3.5 sm:size-4" />
               )}
               <span className="hidden sm:inline">{isBookmarked ? "Bookmarked" : "Bookmark"}</span>
             </button>
 
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-semibold">
-              <Sparkles className="size-3.5 text-indigo-400 animate-spin" />
-              AI Tutor Listening & Attributing
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-[11px] sm:text-xs font-semibold">
+              <Sparkles className="size-3 text-indigo-400 animate-spin" />
+              <span className="hidden md:inline">AI Tutor Listening & Attributing</span>
+              <span className="md:hidden">AI Listening</span>
             </div>
 
             {/* Murf AI Moderator Voice Briefing Button */}
@@ -2207,7 +2209,7 @@ export function GDRoomPage() {
                   triggerModeratorSpeech();
                 }
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-xl border text-xs font-semibold cursor-pointer transition-all active:scale-95 shadow-sm touch-manipulation ${isModeratorPlaying
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 min-h-[32px] sm:min-h-[36px] rounded-xl border text-[11px] sm:text-xs font-semibold cursor-pointer transition-all active:scale-95 shadow-sm touch-manipulation ${isModeratorPlaying
                 ? "border-amber-500/50 bg-amber-500/20 text-amber-300 animate-pulse shadow-amber-500/20"
                 : "border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50"
                 }`}
@@ -2217,13 +2219,13 @@ export function GDRoomPage() {
               {isModeratorPlaying ? (
                 <>
                   <VolumeX className="size-3.5 text-amber-400" />
-                  <span>Stop Moderator</span>
+                  <span>Stop Voice</span>
                 </>
               ) : (
                 <>
                   <Volume2 className="size-3.5 text-purple-400" />
-                  <span className="hidden sm:inline">AI Moderator Voice</span>
-                  <span className="text-[10px] bg-purple-500/30 border border-purple-500/40 px-1.5 py-0.2 rounded font-black text-purple-200">
+                  <span className="hidden sm:inline">AI Voice</span>
+                  <span className="text-[9px] sm:text-[10px] bg-purple-500/30 border border-purple-500/40 px-1 py-0.2 rounded font-black text-purple-200">
                     MURF
                   </span>
                 </>
@@ -2233,29 +2235,29 @@ export function GDRoomPage() {
             {session.status === "preparing" && (
               <Button
                 onClick={handleStartDiscussion}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-600/20"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] sm:text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-emerald-600/20 h-auto"
               >
-                <Play className="size-3.5" />
-                Start Discussion
+                <Play className="size-3 sm:size-3.5" />
+                <span>Start</span>
               </Button>
             )}
 
             <button
               onClick={() => setShowInviteModal(true)}
-              className="px-3 py-2 rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
             >
-              <Plus className="size-3.5" />
-              Invite ({studentParticipants.length}/5)
+              <Plus className="size-3 sm:size-3.5" />
+              <span>Invite ({studentParticipants.length}/5)</span>
             </button>
 
             {session.status === "in_progress" && (
               <Button
                 onClick={handleEndSession}
                 disabled={isEnding}
-                className="px-4 py-2 rounded-xl bg-red-600/90 hover:bg-red-600 text-white font-bold text-xs shadow-md shadow-red-600/20 flex items-center gap-1.5 active:scale-95 transition-all"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-red-600/90 hover:bg-red-600 text-white font-bold text-[11px] sm:text-xs shadow-md shadow-red-600/20 flex items-center gap-1.5 active:scale-95 transition-all h-auto"
               >
-                <PhoneOff className="size-3.5" />
-                {isEnding ? "Evaluating..." : "End Discussion"}
+                <PhoneOff className="size-3 sm:size-3.5" />
+                <span>{isEnding ? "Evaluating..." : "End"}</span>
               </Button>
             )}
           </div>
@@ -2294,18 +2296,18 @@ export function GDRoomPage() {
 
         {/* Murf AI Moderator Speech Active Banner */}
         {isModeratorPlaying && (
-          <div className="max-w-7xl mx-auto mt-2 p-2.5 rounded-xl border border-purple-500/40 bg-purple-950/40 flex items-center justify-between text-xs text-purple-200 shadow-md shadow-purple-950/50">
-            <div className="flex items-center gap-2">
-              <div className="size-2 rounded-full bg-purple-400 animate-ping" />
+          <div className="max-w-7xl mx-auto mt-2 p-2.5 rounded-xl border border-purple-500/40 bg-purple-950/40 flex items-center justify-between text-xs text-purple-200 shadow-md shadow-purple-950/50 gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="size-2 rounded-full bg-purple-400 animate-ping shrink-0" />
               <Volume2 className="size-4 text-purple-400 shrink-0" />
-              <span className="font-semibold text-white">Murf AI Moderator:</span>
-              <span className="text-zinc-300 italic truncate max-w-xl">
+              <span className="font-semibold text-white shrink-0">Murf AI Moderator:</span>
+              <span className="text-zinc-300 italic truncate max-w-[180px] sm:max-w-md lg:max-w-xl">
                 {moderatorText || "Briefing room participants on discussion rules and topic..."}
               </span>
             </div>
             <button
               onClick={stopModeratorAudio}
-              className="text-[11px] font-bold text-zinc-400 hover:text-white px-2 py-0.5 rounded bg-zinc-800 cursor-pointer"
+              className="text-[11px] font-bold text-zinc-400 hover:text-white px-2 py-0.5 rounded bg-zinc-800 cursor-pointer shrink-0"
             >
               Stop
             </button>
@@ -2314,53 +2316,86 @@ export function GDRoomPage() {
       </div>
 
       {/* Main Room Viewport */}
-      <div className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Live Video Grid (8 cols) */}
-        <div className="lg:col-span-8 flex flex-col space-y-4">
-          {/* Active Turn Header Indicator */}
-          {session.status === "in_progress" && currentSpeaker && (
-            <div className="p-3 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-zinc-950 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="size-3 rounded-full bg-emerald-400 animate-ping" />
-                <div>
-                  <div className="text-xs text-zinc-400">Current Assigned Speaker:</div>
-                  <div className="text-sm font-bold text-white flex items-center gap-2">
-                    @{currentSpeaker.username} ({currentSpeakerParticipant?.name || currentSpeaker.name})
-                    {isMyTurn && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500 text-white animate-pulse">
-                        YOUR TURN TO SPEAK
-                      </span>
+      <div className="flex-1 max-w-7xl mx-auto w-full p-3 sm:p-4 md:p-6 flex flex-col">
+        {/* Mobile View Selector: Video Grid vs Live Transcript (< lg screens) */}
+        <div className="flex lg:hidden items-center bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 mb-3 text-xs font-semibold shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileView("video")}
+            className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              mobileView === "video"
+                ? "bg-indigo-600 text-white shadow-md font-bold"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Video className="size-3.5" />
+            <span>Discussion ({session.participants.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileView("transcript")}
+            className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all relative cursor-pointer ${
+              mobileView === "transcript"
+                ? "bg-indigo-600 text-white shadow-md font-bold"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <MessageSquare className="size-3.5" />
+            <span>Attributed Transcript ({session.transcript.length})</span>
+            {(liveTranscriptPreview || Object.keys(remoteInterimTranscripts).length > 0) && (
+              <span className="size-2 rounded-full bg-emerald-400 animate-ping absolute top-2 right-2" />
+            )}
+          </button>
+        </div>
+
+        {/* 2-Column Responsive Layout: Left Video Grid (8 cols), Right Transcript (4 cols) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 flex-1 min-h-0 items-start">
+          {/* Left Column: Video Grid & Controls */}
+          <div className={`lg:col-span-8 flex flex-col space-y-3 sm:space-y-4 w-full ${mobileView === "transcript" ? "hidden lg:flex" : "flex"}`}>
+            {/* Active Turn Header Indicator */}
+            {session.status === "in_progress" && currentSpeaker && (
+              <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-zinc-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="size-2.5 sm:size-3 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-[11px] sm:text-xs text-zinc-400">Current Assigned Speaker:</div>
+                    <div className="text-xs sm:text-sm font-bold text-white flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <span className="truncate">@{currentSpeaker.username} ({currentSpeakerParticipant?.name || currentSpeaker.name})</span>
+                      {isMyTurn && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500 text-white animate-pulse shrink-0">
+                          YOUR TURN TO SPEAK
+                        </span>
+                      )}
+                    </div>
+                    {(currentSpeaker as any).nextParticipantName && (
+                      <div className="text-[10px] sm:text-[11px] text-zinc-400 mt-0.5 truncate">
+                        Next up: <span className="text-indigo-300 font-medium">{(currentSpeaker as any).nextParticipantName}</span>
+                      </div>
                     )}
                   </div>
-                  {(currentSpeaker as any).nextParticipantName && (
-                    <div className="text-[11px] text-zinc-400 mt-0.5">
-                      Next up: <span className="text-indigo-300 font-medium">{(currentSpeaker as any).nextParticipantName}</span>
-                    </div>
-                  )}
                 </div>
-              </div>
 
-              <div className="flex items-center gap-3 text-xs">
-                <div className="text-zinc-400 flex items-center gap-1">
-                  <Clock className="size-3.5" />
-                  Speaking time left: {Math.max(0, 90 - turnElapsedSeconds)}s
+                <div className="flex items-center justify-between sm:justify-end gap-3 text-xs shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/60">
+                  <div className="text-zinc-400 flex items-center gap-1 font-mono text-[11px] sm:text-xs">
+                    <Clock className="size-3.5 text-indigo-400" />
+                    Speaking time left: <span className="text-white font-bold">{Math.max(0, 90 - turnElapsedSeconds)}s</span>
+                  </div>
+                  <button
+                    onClick={handleAdminSkipTurn}
+                    className="px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <SkipForward className="size-3" />
+                    <span>Skip Turn</span>
+                  </button>
                 </div>
-                <button
-                  onClick={handleAdminSkipTurn}
-                  className="px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium text-[11px] flex items-center gap-1 active:scale-95 transition-all"
-                >
-                  <SkipForward className="size-3" />
-                  Skip Turn
-                </button>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Video Grid Tiles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 flex-1">
             {/* Local User Tile */}
             <div
-              className={`relative rounded-2xl overflow-hidden border aspect-video bg-zinc-900 flex items-center justify-center transition-all duration-300 ${!faceDetected && isVideoOn
+              className={`relative rounded-xl sm:rounded-2xl overflow-hidden border aspect-video bg-zinc-900 flex items-center justify-center transition-all duration-300 ${!faceDetected && isVideoOn
                 ? "border-red-500 ring-2 ring-red-500/50 shadow-lg shadow-red-500/20"
                 : speakingPeers[currentParticipant?.id || ""] || isMyTurn
                   ? "border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10"
@@ -2369,7 +2404,7 @@ export function GDRoomPage() {
             >
               {/* Real-time speech transcription badge */}
               {liveTranscriptPreview && (
-                <div className="absolute top-2 left-2 max-w-[85%] px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-indigo-500/50 text-[11px] text-indigo-300 font-medium truncate animate-pulse pointer-events-none z-10 flex items-center gap-1.5 shadow-lg">
+                <div className="absolute top-2 left-2 max-w-[75%] sm:max-w-[85%] px-2 sm:px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-indigo-500/50 text-[10px] sm:text-[11px] text-indigo-300 font-medium truncate animate-pulse pointer-events-none z-10 flex items-center gap-1.5 shadow-lg">
                   <span className="size-1.5 rounded-full bg-indigo-400 animate-ping shrink-0" />
                   <span className="truncate">🎙️ "{liveTranscriptPreview}"</span>
                 </div>
@@ -2377,8 +2412,8 @@ export function GDRoomPage() {
 
               {/* Face Tracking Warning Badge */}
               {!faceDetected && isVideoOn && (
-                <div className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-red-600/90 backdrop-blur-md border border-red-400 text-[11px] text-white font-bold animate-pulse pointer-events-none z-20 flex items-center gap-1.5 shadow-lg">
-                  <AlertTriangle className="size-3.5 text-white" />
+                <div className="absolute top-2 right-2 px-2 sm:px-2.5 py-1 rounded-lg bg-red-600/90 backdrop-blur-md border border-red-400 text-[10px] sm:text-[11px] text-white font-bold animate-pulse pointer-events-none z-20 flex items-center gap-1.5 shadow-lg">
+                  <AlertTriangle className="size-3 sm:size-3.5 text-white" />
                   <span>No Face Detected!</span>
                 </div>
               )}
@@ -2399,20 +2434,20 @@ export function GDRoomPage() {
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center space-y-2">
-                  <div className="size-16 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-xl text-white shadow-md">
+                  <div className="size-12 sm:size-16 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-lg sm:text-xl text-white shadow-md">
                     {currentParticipant?.username?.[0]?.toUpperCase() || "U"}
                   </div>
-                  <span className="text-xs text-zinc-400">Camera Off</span>
+                  <span className="text-[11px] sm:text-xs text-zinc-400">Camera Off</span>
                 </div>
               )}
 
               {/* Tag & Audio Badges */}
-              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] pointer-events-none">
-                <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white font-bold flex items-center gap-1.5">
+              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] sm:text-[11px] pointer-events-none">
+                <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white font-bold flex items-center gap-1.5 truncate max-w-[70%]">
                   @{currentParticipant?.username || "You"} (You)
                 </span>
                 <span
-                  className={`p-1 rounded-full ${isMicOn ? "bg-emerald-500/80 text-white" : "bg-red-500/80 text-white"
+                  className={`p-1 rounded-full shrink-0 ${isMicOn ? "bg-emerald-500/80 text-white" : "bg-red-500/80 text-white"
                     }`}
                 >
                   {isMicOn ? <Mic className="size-3" /> : <MicOff className="size-3" />}
@@ -2431,14 +2466,14 @@ export function GDRoomPage() {
                 return (
                   <div
                     key={p.id}
-                    className={`relative rounded-2xl overflow-hidden border aspect-video bg-zinc-900 flex items-center justify-center transition-all duration-300 ${isSpeaking || isPeerTurn
+                    className={`relative rounded-xl sm:rounded-2xl overflow-hidden border aspect-video bg-zinc-900 flex items-center justify-center transition-all duration-300 ${isSpeaking || isPeerTurn
                       ? "border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10"
                       : "border-zinc-800"
                       }`}
                   >
                     {/* Remote participant speech transcription badge */}
                     {remoteInterimTranscripts[p.id] && (
-                      <div className="absolute top-2 left-2 max-w-[85%] px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-emerald-500/50 text-[11px] text-emerald-300 font-medium truncate animate-pulse pointer-events-none z-10 flex items-center gap-1.5 shadow-lg">
+                      <div className="absolute top-2 left-2 max-w-[75%] sm:max-w-[85%] px-2 sm:px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-emerald-500/50 text-[10px] sm:text-[11px] text-emerald-300 font-medium truncate animate-pulse pointer-events-none z-10 flex items-center gap-1.5 shadow-lg">
                         <span className="size-1.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
                         <span className="truncate">🎙️ "{remoteInterimTranscripts[p.id]}"</span>
                       </div>
@@ -2470,27 +2505,27 @@ export function GDRoomPage() {
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center space-y-2">
-                        <div className="size-16 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center font-bold text-xl text-white shadow-md">
+                        <div className="size-12 sm:size-16 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center font-bold text-lg sm:text-xl text-white shadow-md">
                           {p.username?.[0]?.toUpperCase() || p.name[0]?.toUpperCase() || "P"}
                         </div>
-                        <span className="text-xs text-zinc-400">
+                        <span className="text-[11px] sm:text-xs text-zinc-400">
                           {p.isOnline ? "Camera Off" : "Disconnected"}
                         </span>
                       </div>
                     )}
 
                     {/* Tag & Badges */}
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] pointer-events-none">
-                      <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white font-bold flex items-center gap-1.5">
+                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] sm:text-[11px] pointer-events-none">
+                      <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white font-bold flex items-center gap-1.5 truncate max-w-[70%]">
                         @{p.username || p.name} {p.isHost && "(Moderator)"}
                         {isPeerTurn && (
-                          <span className="px-1.5 py-0.2 rounded bg-emerald-500 text-black text-[9px] font-black">
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500 text-black text-[9px] font-black shrink-0">
                             SPEAKING
                           </span>
                         )}
                       </span>
                       <span
-                        className={`p-1 rounded-full ${!p.isAudioMuted ? "bg-emerald-500/80 text-white" : "bg-red-500/80 text-white"
+                        className={`p-1 rounded-full shrink-0 ${!p.isAudioMuted ? "bg-emerald-500/80 text-white" : "bg-red-500/80 text-white"
                           }`}
                       >
                         {!p.isAudioMuted ? <Mic className="size-3" /> : <MicOff className="size-3" />}
@@ -2503,7 +2538,7 @@ export function GDRoomPage() {
 
           {/* Media Permission Warning Banner with Retry Action */}
           {mediaError && (
-            <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-xs text-amber-300 flex flex-wrap items-center justify-between gap-3">
+            <div className="p-3 sm:p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-xs text-amber-300 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-4 shrink-0 text-amber-400" />
                 <span>{mediaError}</span>
@@ -2511,7 +2546,7 @@ export function GDRoomPage() {
               <Button
                 onClick={() => initLocalMedia()}
                 size="sm"
-                className="bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs px-3.5 py-1.5 h-auto rounded-lg shadow-sm"
+                className="bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs px-3 sm:px-3.5 py-1.5 h-auto rounded-lg shadow-sm"
               >
                 Retry Permissions
               </Button>
@@ -2519,78 +2554,80 @@ export function GDRoomPage() {
           )}
 
           {/* Bottom Live Controls Bar (Google Meet Style) */}
-          <div className="p-4 rounded-2xl border border-zinc-800 bg-zinc-950/90 flex flex-wrap items-center justify-between gap-4">
+          <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-zinc-800 bg-zinc-950/90 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
             {/* Camera & Mic toggles */}
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleMicrophone}
-                className={`p-3 rounded-full font-bold transition cursor-pointer ${isMicOn
+                className={`p-2.5 sm:p-3 rounded-full font-bold transition cursor-pointer active:scale-95 ${isMicOn
                   ? "bg-zinc-800 hover:bg-zinc-700 text-white"
                   : "bg-red-600 hover:bg-red-500 text-white animate-pulse"
                   }`}
                 title={isMicOn ? "Mute Microphone" : "Unmute Microphone"}
               >
-                {isMicOn ? <Mic className="size-5" /> : <MicOff className="size-5" />}
+                {isMicOn ? <Mic className="size-4 sm:size-5" /> : <MicOff className="size-4 sm:size-5" />}
               </button>
 
               <button
                 onClick={toggleCamera}
-                className={`p-3 rounded-full font-bold transition cursor-pointer ${isVideoOn
+                className={`p-2.5 sm:p-3 rounded-full font-bold transition cursor-pointer active:scale-95 ${isVideoOn
                   ? "bg-zinc-800 hover:bg-zinc-700 text-white"
                   : "bg-red-600 hover:bg-red-500 text-white"
                   }`}
                 title={isVideoOn ? "Turn Camera Off" : "Turn Camera On"}
               >
-                {isVideoOn ? <Video className="size-5" /> : <VideoOff className="size-5" />}
+                {isVideoOn ? <Video className="size-4 sm:size-5" /> : <VideoOff className="size-4 sm:size-5" />}
               </button>
             </div>
 
             {/* Turn Action Controls (Finish / Pass Turn) */}
             {isMyTurn && (
-              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto order-last sm:order-none">
                 <Button
                   onClick={handleFinishTurn}
-                  className="flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                  className="flex-1 sm:flex-initial px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer active:scale-95 transition-all"
                 >
-                  <CheckCircle2 className="size-4" />
-                  Finish My Turn
+                  <CheckCircle2 className="size-3.5 sm:size-4" />
+                  <span>Finish My Turn</span>
                 </Button>
 
                 <Button
                   onClick={handlePassTurn}
                   variant="outline"
-                  className="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl border-amber-500/40 text-amber-300 hover:bg-amber-500/10 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                  className="flex-1 sm:flex-initial px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl border-amber-500/40 text-amber-300 hover:bg-amber-500/10 text-xs font-semibold flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer active:scale-95 transition-all"
                 >
-                  <SkipForward className="size-4" />
-                  Pass Turn
+                  <SkipForward className="size-3.5 sm:size-4" />
+                  <span>Pass Turn</span>
                 </Button>
               </div>
             )}
 
             {/* Discussion Room Status */}
-            <div className="text-xs text-zinc-400">
+            <div className="text-[11px] sm:text-xs text-zinc-400 w-full sm:w-auto text-center sm:text-right">
               Capacity: {studentParticipants.length}/5 students • Round {session.round}
             </div>
           </div>
         </div>
 
         {/* Right Column: Real-time Transcript & Participants (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950/70 h-[420px] lg:h-[680px] overflow-hidden">
+        <div className={`lg:col-span-4 flex flex-col rounded-xl sm:rounded-2xl border border-zinc-800 bg-zinc-950/70 overflow-hidden w-full ${
+          mobileView === "video" ? "hidden lg:flex" : "flex"
+        } h-[calc(100vh-16rem)] min-h-[460px] lg:h-[calc(100vh-13rem)] lg:min-h-[520px] lg:max-h-[820px]`}>
           {/* Tabs & Live STT Status */}
-          <div className="flex flex-wrap items-center justify-between border-b border-zinc-800 px-3 py-2 text-xs bg-zinc-950/80 gap-2">
+          <div className="flex flex-wrap items-center justify-between border-b border-zinc-800 px-3 py-2 text-xs bg-zinc-950/80 gap-2 shrink-0">
             <div className="flex gap-1.5 font-bold">
               <button
                 onClick={() => setActiveTab("transcript")}
-                className={`px-3 py-1.5 rounded-lg transition ${activeTab === "transcript"
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition text-[11px] sm:text-xs cursor-pointer ${activeTab === "transcript"
                     ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
                     : "text-zinc-400 hover:text-white"
                   }`}
               >
-                Attributed Transcript ({session.transcript.length})
+                Transcript ({session.transcript.length})
               </button>
               <button
                 onClick={() => setActiveTab("participants")}
-                className={`px-3 py-1.5 rounded-lg transition ${activeTab === "participants"
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition text-[11px] sm:text-xs cursor-pointer ${activeTab === "participants"
                     ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
                     : "text-zinc-400 hover:text-white"
                   }`}
@@ -2600,26 +2637,26 @@ export function GDRoomPage() {
             </div>
 
             {/* STT Status Indicator */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-medium shrink-0">
+            <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] sm:text-[11px] font-medium shrink-0">
               {sttEngine === "deepgram" ? (
                 <>
-                  <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-emerald-300">Live STT Active: Deepgram Nova-3</span>
+                  <span className="size-1.5 sm:size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-emerald-300">Live STT (Deepgram)</span>
                 </>
               ) : sttEngine === "native" ? (
                 <>
-                  <span className="size-2 rounded-full bg-blue-400 animate-pulse" />
-                  <span className="text-blue-300">Live STT Active: Web Speech API</span>
+                  <span className="size-1.5 sm:size-2 rounded-full bg-blue-400 animate-pulse" />
+                  <span className="text-blue-300">Live STT (Web Speech)</span>
                 </>
               ) : isMicOn ? (
                 <>
-                  <span className="size-2 rounded-full bg-amber-400 animate-pulse" />
-                  <span className="text-amber-300">STT Listening (Ready)</span>
+                  <span className="size-1.5 sm:size-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-amber-300">STT Ready</span>
                 </>
               ) : (
                 <>
-                  <span className="size-2 rounded-full bg-zinc-500" />
-                  <span className="text-zinc-400">Microphone Muted</span>
+                  <span className="size-1.5 sm:size-2 rounded-full bg-zinc-500" />
+                  <span className="text-zinc-400">Mic Muted</span>
                 </>
               )}
             </div>
@@ -2795,14 +2832,15 @@ export function GDRoomPage() {
           )}
         </div>
       </div>
+    </div>
 
       {/* Moderator Invite Modal */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 max-w-md w-full mx-3 space-y-4 shadow-2xl relative">
             <button
               onClick={() => setShowInviteModal(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
+              className="absolute top-4 sm:top-5 right-4 sm:right-5 text-zinc-400 hover:text-white"
             >
               <X className="size-5" />
             </button>

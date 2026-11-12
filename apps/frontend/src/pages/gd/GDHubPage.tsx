@@ -663,7 +663,7 @@ export function GDHubPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-9 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-9 gap-3 text-xs">
             <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
               <span className="font-bold text-indigo-400">1. Relevance</span>
               <div className="text-sm font-black text-white">25 pts</div>
