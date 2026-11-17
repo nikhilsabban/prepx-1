@@ -429,9 +429,9 @@ export function GDHubPage() {
               Live Multi-Participant Group Discussion Room
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white leading-tight">
+            <h1 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-white leading-tight break-words">
               AI Group Discussion Arena{" "}
-              <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent block sm:inline">
                 with Live Video & AI Tutor
               </span>
             </h1>
@@ -503,7 +503,7 @@ export function GDHubPage() {
                     </div>
                   </div>
 
-                  <h4 className="font-bold text-white text-sm line-clamp-2">
+                  <h4 className="font-bold text-white text-sm line-clamp-2 break-words">
                     {formatTopicDisplay(inv.topic.question)}
                   </h4>
 
@@ -609,20 +609,20 @@ export function GDHubPage() {
           ) : topic ? (
             <div className="space-y-6">
               <div className="space-y-3">
-                <h3 className="text-xl sm:text-2xl font-black text-white leading-snug">
+                <h3 className="text-lg sm:text-xl md:text-2xl font-black text-white leading-snug break-words">
                   {formatTopicDisplay(topic.question)}
                 </h3>
 
-                <p className="text-sm text-zinc-400 leading-relaxed max-w-4xl">
+                <p className="text-sm text-zinc-400 leading-relaxed max-w-4xl break-words">
                   {topic.description || topic.originalTitle}
                 </p>
               </div>
 
               {/* Source Attribution and External Link */}
               <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-zinc-800/60">
-                <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400 min-w-0 break-words">
                   <span>Based on reporting in:</span>
-                  <strong className="text-zinc-200">{topic.originalTitle}</strong>
+                  <strong className="text-zinc-200 break-words">{topic.originalTitle}</strong>
                   {topic.sourceUrl && (
                     <a
                       href={topic.sourceUrl}

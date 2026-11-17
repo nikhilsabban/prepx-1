@@ -165,16 +165,16 @@ export function GDResultPage() {
         </div>
 
         {/* Discussion Topic Card */}
-        <div className="p-6 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-3">
+        <div className="p-4 sm:p-6 rounded-3xl border border-zinc-800 bg-zinc-950/80 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+              <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                 {session.topic.category}
               </span>
-              <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-zinc-800 text-zinc-300">
+              <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-zinc-800 text-zinc-300">
                 Language: {session.expectedLanguage}
               </span>
-              <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-zinc-800 text-zinc-400">
+              <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-zinc-800 text-zinc-400">
                 Moderator: @{session.adminUsername}
               </span>
             </div>
@@ -183,13 +183,13 @@ export function GDResultPage() {
                 href={session.topic.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1"
+                className="text-xs text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1 shrink-0"
               >
                 Source: {session.topic.publisher} <ExternalLink className="size-3" />
               </a>
             )}
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white leading-tight">
+          <h1 className="text-lg sm:text-xl md:text-2xl font-black text-white leading-snug break-words">
             {formatTopicDisplay(session.topic.question)}
           </h1>
         </div>

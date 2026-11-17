@@ -2144,9 +2144,9 @@ export function GDRoomPage() {
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col">
       {/* Top Header Bar */}
       <div className="border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md px-3 sm:px-6 md:px-8 py-2.5 sm:py-3 sticky top-16 z-30">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
+        <div className="max-w-7xl mx-auto flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           {/* Discussion Topic & Language Banner */}
-          <div className="space-y-1 sm:space-y-1.5 flex-1 min-w-0">
+          <div className="space-y-1.5 flex-1 min-w-0 w-full">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                 {session.topic.category}
@@ -2167,7 +2167,7 @@ export function GDRoomPage() {
             </div>
 
             <h1
-              className="text-xs sm:text-sm md:text-base font-bold text-white leading-snug break-words whitespace-normal line-clamp-2 md:line-clamp-none"
+              className="text-xs sm:text-sm md:text-base lg:text-lg font-bold text-white leading-snug break-words whitespace-normal tracking-tight"
               title={formatTopicDisplay(session.topic.question).replace(/^["']+|["']+$/g, "")}
             >
               {formatTopicDisplay(session.topic.question)}
@@ -2175,7 +2175,7 @@ export function GDRoomPage() {
           </div>
 
           {/* AI Tutor Listening Status & Moderator Actions */}
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5 shrink-0 self-start md:self-center w-full md:w-auto justify-start md:justify-end">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5 shrink-0 w-full xl:w-auto justify-start xl:justify-end">
             <button
               onClick={handleToggleBookmark}
               disabled={isTogglingBookmark}
