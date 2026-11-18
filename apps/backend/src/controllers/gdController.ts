@@ -824,8 +824,14 @@ export async function transcribeGDClip(req: AuthRequest, res: Response): Promise
     const session = await gdSessionService.getSessionById(roomId);
 
     const roomParticipant = getRoomParticipant(session, userId);
-    if (!session || session.status !== "in_progress" || !roomParticipant || roomParticipant.isAi) {
-      res.status(403).json({ success: false, message: "Only a participant in this active discussion can transcribe audio." });
+    const endedAt = session?.endedAt ? new Date(session.endedAt).getTime() : Number.NaN;
+    const timeSinceEnd = Date.now() - endedAt;
+    const isRecentlyCompleted = session?.status === "completed"
+      && Number.isFinite(endedAt)
+      && timeSinceEnd >= -60_000
+      && timeSinceEnd <= 10 * 60_000;
+    if (!session || (session.status !== "in_progress" && !isRecentlyCompleted) || !roomParticipant || roomParticipant.isAi) {
+      res.status(403).json({ success: false, message: "Only a participant in an active or recently completed discussion can transcribe audio." });
       return;
     }
     if (audio.length < 9600) {

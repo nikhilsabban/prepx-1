@@ -19847,8 +19847,11 @@ async function transcribeGDClip(req, res) {
     const audio = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
     const session = await gdSessionService.getSessionById(roomId);
     const roomParticipant = getRoomParticipant(session, userId);
-    if (!session || session.status !== "in_progress" || !roomParticipant || roomParticipant.isAi) {
-      res.status(403).json({ success: false, message: "Only a participant in this active discussion can transcribe audio." });
+    const endedAt = session?.endedAt ? new Date(session.endedAt).getTime() : Number.NaN;
+    const timeSinceEnd = Date.now() - endedAt;
+    const isRecentlyCompleted = session?.status === "completed" && Number.isFinite(endedAt) && timeSinceEnd >= -6e4 && timeSinceEnd <= 10 * 6e4;
+    if (!session || session.status !== "in_progress" && !isRecentlyCompleted || !roomParticipant || roomParticipant.isAi) {
+      res.status(403).json({ success: false, message: "Only a participant in an active or recently completed discussion can transcribe audio." });
       return;
     }
     if (audio.length < 9600) {
