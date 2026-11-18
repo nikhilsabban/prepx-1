@@ -30,6 +30,20 @@ function isRecentlyCompletedDiscussion(session: any): boolean {
     && timeSinceEnd <= 10 * 60_000;
 }
 
+function removeTranscriptOverlap(previous: string, current: string): string {
+  const previousWords = previous.toLocaleLowerCase().match(/[\p{L}\p{N}']+/gu) || [];
+  const matches = Array.from(current.matchAll(/[\p{L}\p{N}']+/gu));
+  const currentWords = matches.map((match) => match[0].toLocaleLowerCase());
+  const maxOverlap = Math.min(8, previousWords.length, currentWords.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    const suffix = previousWords.slice(-overlap).map((word) => word.toLocaleLowerCase());
+    if (!suffix.every((word, index) => word === currentWords[index])) continue;
+    const start = matches[overlap]?.index;
+    return start === undefined ? "" : current.slice(start).trim();
+  }
+  return current.trim();
+}
+
 /**
  * Retrieves a random discussion topic from web RSS/Atom feeds (with fallback).
  */
@@ -824,6 +838,15 @@ export async function transcribeGDClip(req: AuthRequest, res: Response): Promise
       res.status(403).json({ success: false, message: "Only a participant in an active or recently completed discussion can transcribe audio." });
       return;
     }
+    const segmentId = typeof req.query.segmentId === "string"
+      && /^[a-zA-Z0-9:_-]{8,160}$/.test(req.query.segmentId)
+      ? req.query.segmentId
+      : `http-${roomId}-${userId}-${Date.now().toString(36)}`;
+    const existingSegment = session.transcript.find((item) => item.id === segmentId);
+    if (existingSegment) {
+      res.json({ success: true, text: existingSegment.text, confidence: existingSegment.confidence || 0, segment: existingSegment, persisted: true });
+      return;
+    }
     if (audio.length < 9600) {
       res.status(400).json({ success: false, message: "Audio segment is too short to transcribe." });
       return;
@@ -871,10 +894,43 @@ export async function transcribeGDClip(req: AuthRequest, res: Response): Promise
 
     const result: any = await upstream.json();
     const alternative = result?.results?.channels?.[0]?.alternatives?.[0];
+    const rawText = String(alternative?.transcript || "").trim();
+    const previousParticipantSegment = [...session.transcript].reverse().find((item) => item.participantId === roomParticipant.id);
+    const text = removeTranscriptOverlap(previousParticipantSegment?.text || "", rawText);
+    let segment: any = null;
+    if (text) {
+      const savedSession = await gdSessionService.addTranscriptSegment(roomId, {
+        segmentId,
+        roomId,
+        participantId: roomParticipant.id,
+        participantName: roomParticipant.name || "Participant",
+        username: roomParticipant.username || req.user?.username,
+        text,
+        durationSeconds: Math.max(1, Math.round(audio.length / (16000 * 2))),
+        language,
+        confidence: Number(alternative?.confidence) || 0,
+        isFinal: true,
+      });
+      segment = savedSession?.transcript.find((item) => item.id === segmentId) || null;
+      if (!segment || !savedSession) {
+        res.status(503).json({ success: false, message: "Transcription was recognized but could not be saved. Retry this segment." });
+        return;
+      }
+      broadcastToGDRoom(roomId, {
+        type: "new_transcript_segment",
+        payload: {
+          segment,
+          participants: savedSession.participants,
+          currentTurn: savedSession.currentTurn,
+        },
+      });
+    }
     res.json({
       success: true,
-      text: String(alternative?.transcript || "").trim(),
+      text,
       confidence: Number(alternative?.confidence) || 0,
+      segment,
+      persisted: Boolean(segment),
     });
   } catch (error: any) {
     console.error("[GD STT] Segment transcription error:", error?.message || error);

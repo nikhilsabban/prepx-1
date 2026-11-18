@@ -643,7 +643,7 @@ export function GDRoomPage() {
     text: string,
     durationSeconds?: number,
     segmentIdOverride?: string,
-    persistDirectly = false,
+    persistedAlready = false,
   ) {
     const textToSubmit = text.trim();
     if (!textToSubmit || !sessionId) return;
@@ -704,7 +704,7 @@ export function GDRoomPage() {
     };
 
     let sentViaWs = false;
-    if (!persistDirectly && wsRef.current?.readyState === WebSocket.OPEN) {
+    if (!persistedAlready && wsRef.current?.readyState === WebSocket.OPEN) {
       try {
         wsRef.current.send(
           JSON.stringify({
@@ -730,7 +730,7 @@ export function GDRoomPage() {
     }
 
     // If WebSocket is not open or sending threw an error, fall back to REST endpoint immediately
-    if (!sentViaWs) {
+    if (!sentViaWs && !persistedAlready) {
       try {
         const res = await submitTranscriptSegment(sessionId, payload);
         if (res?.lastSegment) {
@@ -814,7 +814,7 @@ export function GDRoomPage() {
             event.text.trim(),
             undefined,
             event.segmentId,
-            event.segmentId.startsWith("http-"),
+            Boolean(event.persisted),
           );
         }
       },

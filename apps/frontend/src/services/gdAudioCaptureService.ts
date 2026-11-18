@@ -26,6 +26,7 @@ export interface GDNormalizedTranscriptEvent {
   confidence: number;
   provider: string;
   timestamp: string;
+  persisted?: boolean;
 }
 
 export async function fetchGDTranscriptionCredentials(): Promise<GDTranscriptionCredentials> {
@@ -92,8 +93,8 @@ export class GDAudioCaptureSession {
   private transcriptionSequence = 0;
   private transcriptionFailures = 0;
   private previousFinalText = "";
-  private readonly restChunkSamples = 128_000; // 8 seconds at 16 kHz, with 0.5 seconds carried into the next chunk.
-  private readonly restOverlapSamples = 8_000;
+  private readonly restChunkSamples = 96_000; // 6 seconds at 16 kHz, with 0.75 seconds carried into the next chunk.
+  private readonly restOverlapSamples = 12_000;
 
   constructor(options: GDAudioCaptureOptions) {
     this.options = options;
@@ -387,32 +388,47 @@ export class GDAudioCaptureSession {
     }
 
     const audio = new Int16Array(samples).buffer;
+    this.transcriptionSequence += 1;
+    const segmentId = `http-${this.options.sessionId}-${this.options.participantId}-${Date.now().toString(36)}-${this.transcriptionSequence}`;
     this.transcriptionQueue = this.transcriptionQueue.then(async () => {
       try {
         const language = this.options.language || this.credentials?.language || "en-IN";
-        const response = await api.post<{ text?: string; confidence?: number }>(
-          `/api/v1/gd/rooms/${this.options.sessionId}/transcription/segment?language=${encodeURIComponent(language)}`,
-          audio,
-          { headers: { "Content-Type": "audio/l16; rate=16000; channels=1" }, timeout: 25000 },
-        );
+        const url = `/api/v1/gd/rooms/${this.options.sessionId}/transcription/segment?language=${encodeURIComponent(language)}&segmentId=${encodeURIComponent(segmentId)}`;
+        let response;
+        for (let attempt = 0; ; attempt++) {
+          try {
+            response = await api.post<{ text?: string; confidence?: number; persisted?: boolean }>(
+              url,
+              audio,
+              { headers: { "Content-Type": "audio/l16; rate=16000; channels=1" }, timeout: 25000 },
+            );
+            break;
+          } catch (error: any) {
+            const status = error?.response?.status;
+            const isRetryable = !status || status === 408 || status === 429 || status >= 500;
+            if (!isRetryable || attempt >= 2) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt));
+          }
+        }
+        if (!response) throw new Error("Speech recognition returned no response.");
         this.transcriptionFailures = 0;
         const text = this.removeRepeatedOverlap(String(response.data?.text || "").trim());
         if (!text) return;
         this.previousFinalText = String(response.data?.text || "").trim();
-        this.transcriptionSequence += 1;
         this.options.onFinal?.({
           type: "gd:transcription:final",
           sessionId: this.options.sessionId,
           participantId: this.options.participantId,
           participantName: this.options.participantName,
           username: this.options.username,
-          segmentId: `http-${this.options.sessionId}-${this.options.participantId}-${Date.now().toString(36)}-${this.transcriptionSequence}`,
+          segmentId,
           sequenceNumber: this.transcriptionSequence,
           text,
           isFinal: true,
           confidence: Number(response.data?.confidence) || 0,
           provider: "deepgram",
           timestamp: new Date().toISOString(),
+          persisted: Boolean(response.data?.persisted),
         });
       } catch (error: any) {
         this.transcriptionFailures += 1;

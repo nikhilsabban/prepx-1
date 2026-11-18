@@ -1080,9 +1080,6 @@ class GDSessionService {
           "metrics.totalWords": words,
           "metrics.totalDurationSeconds": duration,
         },
-        $set: {
-          status: "in_progress",
-        },
       }
     );
 
