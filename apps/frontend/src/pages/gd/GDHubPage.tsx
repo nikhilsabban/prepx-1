@@ -97,7 +97,7 @@ export function GDHubPage() {
         "gd_declined_invitations",
         JSON.stringify(Array.from(declinedRoomIdsRef.current))
       );
-    } catch {}
+    } catch { }
     setDeclinedRoomIds(new Set(declinedRoomIdsRef.current));
     setMyInvitations((prev) => prev.filter((i) => i.roomId !== roomId));
   }
@@ -183,9 +183,9 @@ export function GDHubPage() {
             declinedRoomIdsRef.current.add(rmId);
             setMyInvitations((prev) => prev.filter((i) => i.roomId !== rmId));
           }
-        } catch {}
+        } catch { }
       };
-    } catch {}
+    } catch { }
 
     return () => {
       isCancelled = true;
@@ -567,345 +567,344 @@ export function GDHubPage() {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                  selectedCategory === cat
+                className={`px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${selectedCategory === cat
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "bg-zinc-900/90 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80 hover:bg-zinc-800"
-                }`}
+                  }`}
               >
                 {cat}
               </button>
             ))}
-          </div>
         </div>
+      </div>
 
-        {/* Live Topic Spotlight Card */}
-        <div className="rounded-2xl border border-zinc-800/90 bg-zinc-950/80 p-6 md:p-8 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="size-3 rounded-full bg-emerald-500 animate-ping" />
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Fresh Topic Spotlight from the Web
+      {/* Live Topic Spotlight Card */}
+      <div className="rounded-2xl border border-zinc-800/90 bg-zinc-950/80 p-6 md:p-8 space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="size-3 rounded-full bg-emerald-500 animate-ping" />
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+              Fresh Topic Spotlight from the Web
+            </span>
+          </div>
+
+          {topic && (
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
+                {topic.publisher}
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-indigo-400 font-medium">
+                {topic.category}
               </span>
             </div>
+          )}
+        </div>
 
-            {topic && (
-              <div className="flex items-center gap-2 text-xs text-zinc-400">
-                <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
-                  {topic.publisher}
-                </span>
-                <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-indigo-400 font-medium">
-                  {topic.category}
-                </span>
-              </div>
-            )}
+        {loadingTopic ? (
+          <div className="py-12 flex flex-col items-center justify-center space-y-3">
+            <RefreshCw className="size-8 text-indigo-500 animate-spin" />
+            <p className="text-sm text-zinc-400">Discovering verified discussion topics from web feeds...</p>
           </div>
+        ) : topic ? (
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-black text-white leading-snug break-words">
+                {formatTopicDisplay(topic.question)}
+              </h3>
 
-          {loadingTopic ? (
-            <div className="py-12 flex flex-col items-center justify-center space-y-3">
-              <RefreshCw className="size-8 text-indigo-500 animate-spin" />
-              <p className="text-sm text-zinc-400">Discovering verified discussion topics from web feeds...</p>
+              <p className="text-sm text-zinc-400 leading-relaxed max-w-4xl break-words">
+                {topic.description || topic.originalTitle}
+              </p>
             </div>
-          ) : topic ? (
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <h3 className="text-lg sm:text-xl md:text-2xl font-black text-white leading-snug break-words">
-                  {formatTopicDisplay(topic.question)}
-                </h3>
 
-                <p className="text-sm text-zinc-400 leading-relaxed max-w-4xl break-words">
-                  {topic.description || topic.originalTitle}
-                </p>
+            {/* Source Attribution and External Link */}
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-zinc-800/60">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400 min-w-0 break-words">
+                <span>Based on reporting in:</span>
+                <strong className="text-zinc-200 break-words">{topic.originalTitle}</strong>
+                {topic.sourceUrl && (
+                  <a
+                    href={topic.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 underline font-medium ml-2"
+                  >
+                    Read Original Article
+                    <ExternalLink className="size-3" />
+                  </a>
+                )}
               </div>
 
-              {/* Source Attribution and External Link */}
-              <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-zinc-800/60">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400 min-w-0 break-words">
-                  <span>Based on reporting in:</span>
-                  <strong className="text-zinc-200 break-words">{topic.originalTitle}</strong>
-                  {topic.sourceUrl && (
-                    <a
-                      href={topic.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 underline font-medium ml-2"
-                    >
-                      Read Original Article
-                      <ExternalLink className="size-3" />
-                    </a>
+              <Button
+                onClick={() => {
+                  setCustomQuestion(topic.question);
+                  setShowCreateModal(true);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm cursor-pointer shadow-md shadow-indigo-600/30 flex items-center gap-2"
+              >
+                Configure Room with This Topic
+                <ArrowRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* 100-Point Evaluation Rubric Preview */}
+      <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-6 md:p-8 space-y-6">
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <Award className="size-5 text-indigo-400" />
+            Campus Placement 100-Point GD Evaluation Rubric
+          </h2>
+          <p className="text-xs text-zinc-400">
+            Evaluated strictly on transcript evidence and audio delivery metrics per individual student.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-9 gap-3 text-xs">
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-indigo-400">1. Relevance</span>
+            <div className="text-sm font-black text-white">25 pts</div>
+            <p className="text-[11px] text-zinc-500">Topic understanding & depth</p>
+          </div>
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-purple-400">2. Reasoning</span>
+            <div className="text-sm font-black text-white">15 pts</div>
+            <p className="text-[11px] text-zinc-500">Logical arguments & data</p>
+          </div>
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-pink-400">3. Clarity</span>
+            <div className="text-sm font-black text-white">15 pts</div>
+            <p className="text-[11px] text-zinc-500">Structure & articulation</p>
+          </div>
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-blue-400">4. Fluency</span>
+            <div className="text-sm font-black text-white">10 pts</div>
+            <p className="text-[11px] text-zinc-500">Pace & control</p>
+          </div>
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-emerald-400">5. Listening</span>
+            <div className="text-sm font-black text-white">10 pts</div>
+            <p className="text-[11px] text-zinc-500">Responses to peers</p>
+          </div>
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-amber-400">6. Balance</span>
+            <div className="text-sm font-black text-white">10 pts</div>
+            <p className="text-[11px] text-zinc-500">Turn share & fairness</p>
+          </div>
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-cyan-400">7. Language</span>
+            <div className="text-sm font-black text-white">5 pts</div>
+            <p className="text-[11px] text-zinc-500">Consistency in language</p>
+          </div>
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-rose-400">8. Delivery</span>
+            <div className="text-sm font-black text-white">5 pts</div>
+            <p className="text-[11px] text-zinc-500">Intelligibility & mumbling</p>
+          </div>
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
+            <span className="font-bold text-orange-400">9. Etiquette</span>
+            <div className="text-sm font-black text-white">5 pts</div>
+            <p className="text-[11px] text-zinc-500">Respect & collaboration</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Previous GD Sessions History */}
+      {history.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <Clock className="size-5 text-indigo-400" />
+            Your Discussion History & Evaluations
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {history.map((s) => (
+              <div
+                key={s._id}
+                onClick={() => navigate(`/group-discussion/result/${s._id}`)}
+                className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/60 hover:border-zinc-700 transition cursor-pointer space-y-3"
+              >
+                <div className="flex items-center justify-between text-xs">
+                  <span className="px-2.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-medium">
+                    {s.topic?.category || "General"}
+                  </span>
+                  {s.evaluations && s.evaluations.length > 0 ? (
+                    <span className="font-bold text-emerald-400 flex items-center gap-1">
+                      Top Score: {s.evaluations[0]?.overallScore}/100
+                    </span>
+                  ) : (
+                    <span className="text-zinc-500 capitalize">{s.status}</span>
                   )}
                 </div>
 
-                <Button
-                  onClick={() => {
-                    setCustomQuestion(topic.question);
-                    setShowCreateModal(true);
-                  }}
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm cursor-pointer shadow-md shadow-indigo-600/30 flex items-center gap-2"
-                >
-                  Configure Room with This Topic
-                  <ArrowRight className="size-4" />
-                </Button>
+                <h4 className="font-bold text-white text-sm line-clamp-2">
+                  {formatTopicDisplay(s.topic?.question || "")}
+                </h4>
+
+                <div className="flex items-center justify-between text-xs text-zinc-500 pt-2 border-t border-zinc-800/80">
+                  <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+                  <span className="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
+                    View Results & Leaderboard <ArrowRight className="size-3" />
+                  </span>
+                </div>
               </div>
-            </div>
-          ) : null}
-        </div>
-
-        {/* 100-Point Evaluation Rubric Preview */}
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-6 md:p-8 space-y-6">
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Award className="size-5 text-indigo-400" />
-              Campus Placement 100-Point GD Evaluation Rubric
-            </h2>
-            <p className="text-xs text-zinc-400">
-              Evaluated strictly on transcript evidence and audio delivery metrics per individual student.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-9 gap-3 text-xs">
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-indigo-400">1. Relevance</span>
-              <div className="text-sm font-black text-white">25 pts</div>
-              <p className="text-[11px] text-zinc-500">Topic understanding & depth</p>
-            </div>
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-purple-400">2. Reasoning</span>
-              <div className="text-sm font-black text-white">15 pts</div>
-              <p className="text-[11px] text-zinc-500">Logical arguments & data</p>
-            </div>
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-pink-400">3. Clarity</span>
-              <div className="text-sm font-black text-white">15 pts</div>
-              <p className="text-[11px] text-zinc-500">Structure & articulation</p>
-            </div>
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-blue-400">4. Fluency</span>
-              <div className="text-sm font-black text-white">10 pts</div>
-              <p className="text-[11px] text-zinc-500">Pace & control</p>
-            </div>
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-emerald-400">5. Listening</span>
-              <div className="text-sm font-black text-white">10 pts</div>
-              <p className="text-[11px] text-zinc-500">Responses to peers</p>
-            </div>
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-amber-400">6. Balance</span>
-              <div className="text-sm font-black text-white">10 pts</div>
-              <p className="text-[11px] text-zinc-500">Turn share & fairness</p>
-            </div>
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-cyan-400">7. Language</span>
-              <div className="text-sm font-black text-white">5 pts</div>
-              <p className="text-[11px] text-zinc-500">Consistency in language</p>
-            </div>
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-rose-400">8. Delivery</span>
-              <div className="text-sm font-black text-white">5 pts</div>
-              <p className="text-[11px] text-zinc-500">Intelligibility & mumbling</p>
-            </div>
-            <div className="p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 space-y-1">
-              <span className="font-bold text-orange-400">9. Etiquette</span>
-              <div className="text-sm font-black text-white">5 pts</div>
-              <p className="text-[11px] text-zinc-500">Respect & collaboration</p>
-            </div>
+            ))}
           </div>
         </div>
+      )}
 
-        {/* Previous GD Sessions History */}
-        {history.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Clock className="size-5 text-indigo-400" />
-              Your Discussion History & Evaluations
-            </h2>
+      {/* Create Room Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 max-w-2xl w-full space-y-5 sm:space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
+            >
+              <X className="size-5" />
+            </button>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {history.map((s) => (
-                <div
-                  key={s._id}
-                  onClick={() => navigate(`/group-discussion/result/${s._id}`)}
-                  className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/60 hover:border-zinc-700 transition cursor-pointer space-y-3"
+            <div className="space-y-1">
+              <h3 className="text-xl font-black text-white flex items-center gap-2">
+                <Plus className="size-5 text-indigo-400" />
+                Configure Group Discussion Room
+              </h3>
+              <p className="text-xs text-zinc-400">
+                As the room creator, you will act as the Moderator. Invite up to 5 student participants.
+              </p>
+            </div>
+
+            <form onSubmit={handleCreateRoomSubmit} className="space-y-5">
+              {/* Topic Question */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                  Discussion Topic Question
+                </label>
+                <textarea
+                  rows={3}
+                  value={customQuestion}
+                  onChange={(e) => setCustomQuestion(e.target.value)}
+                  required
+                  placeholder="Enter discussion prompt..."
+                  className="w-full p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-sm focus:border-indigo-500 outline-none"
+                />
+              </div>
+
+              {/* Expected Language */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                  <Globe className="size-3.5 text-indigo-400" />
+                  Expected Discussion Language
+                </label>
+                <select
+                  value={expectedLanguage}
+                  onChange={(e) => setExpectedLanguage(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-sm focus:border-indigo-500 outline-none"
                 >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="px-2.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-medium">
-                      {s.topic?.category || "General"}
-                    </span>
-                    {s.evaluations && s.evaluations.length > 0 ? (
-                      <span className="font-bold text-emerald-400 flex items-center gap-1">
-                        Top Score: {s.evaluations[0]?.overallScore}/100
+                  {LANGUAGES.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {lang} {lang === "English" && "(Default)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search & Invite Registered Students by Username */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                    <Users className="size-3.5 text-indigo-400" />
+                    Invite Students by Username ({selectedInvitees.length}/5)
+                  </label>
+                  <span className="text-[11px] text-zinc-500">Max 5 students</span>
+                </div>
+
+                {/* Selected invitee pills */}
+                {selectedInvitees.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedInvitees.map((username) => (
+                      <span
+                        key={username}
+                        className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-xs font-semibold flex items-center gap-1.5"
+                      >
+                        @{username}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveInvitee(username)}
+                          className="hover:text-white"
+                        >
+                          <X className="size-3" />
+                        </button>
                       </span>
-                    ) : (
-                      <span className="text-zinc-500 capitalize">{s.status}</span>
+                    ))}
+                  </div>
+                )}
+
+                {selectedInvitees.length < 5 && (
+                  <div className="relative">
+                    <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5">
+                      <Search className="size-4 text-zinc-500" />
+                      <input
+                        type="text"
+                        value={userSearchQuery}
+                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                        placeholder="Search PrepX students by username..."
+                        className="bg-transparent text-sm text-white placeholder-zinc-500 outline-none flex-1"
+                      />
+                      {isSearchingUsers && <RefreshCw className="size-3.5 animate-spin text-indigo-400" />}
+                    </div>
+
+                    {/* Search Results Dropdown */}
+                    {searchResults.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-zinc-900 border border-zinc-800 rounded-xl max-h-48 overflow-y-auto p-1 shadow-2xl">
+                        {searchResults.map((u) => (
+                          <div
+                            key={u.id}
+                            onClick={() => handleSelectInvitee(u.username)}
+                            className="p-2.5 rounded-lg hover:bg-zinc-800/80 cursor-pointer flex items-center justify-between text-xs transition"
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="size-6 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white">
+                                {u.username[0]?.toUpperCase()}
+                              </div>
+                              <div>
+                                <span className="font-bold text-white block">@{u.username}</span>
+                                <span className="text-zinc-400 text-[11px]">{u.fullName}</span>
+                              </div>
+                            </div>
+                            <span className="text-indigo-400 text-[11px] font-semibold">Invite +</span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-
-                  <h4 className="font-bold text-white text-sm line-clamp-2">
-                    {formatTopicDisplay(s.topic?.question || "")}
-                  </h4>
-
-                  <div className="flex items-center justify-between text-xs text-zinc-500 pt-2 border-t border-zinc-800/80">
-                    <span>{new Date(s.createdAt).toLocaleDateString()}</span>
-                    <span className="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
-                      View Results & Leaderboard <ArrowRight className="size-3" />
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Create Room Modal */}
-        {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 max-w-2xl w-full space-y-5 sm:space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-              >
-                <X className="size-5" />
-              </button>
-
-              <div className="space-y-1">
-                <h3 className="text-xl font-black text-white flex items-center gap-2">
-                  <Plus className="size-5 text-indigo-400" />
-                  Configure Group Discussion Room
-                </h3>
-                <p className="text-xs text-zinc-400">
-                  As the room creator, you will act as the Moderator. Invite up to 5 student participants.
-                </p>
+                )}
               </div>
 
-              <form onSubmit={handleCreateRoomSubmit} className="space-y-5">
-                {/* Topic Question */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
-                    Discussion Topic Question
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={customQuestion}
-                    onChange={(e) => setCustomQuestion(e.target.value)}
-                    required
-                    placeholder="Enter discussion prompt..."
-                    className="w-full p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-sm focus:border-indigo-500 outline-none"
-                  />
-                </div>
-
-                {/* Expected Language */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-                    <Globe className="size-3.5 text-indigo-400" />
-                    Expected Discussion Language
-                  </label>
-                  <select
-                    value={expectedLanguage}
-                    onChange={(e) => setExpectedLanguage(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-sm focus:border-indigo-500 outline-none"
-                  >
-                    {LANGUAGES.map((lang) => (
-                      <option key={lang} value={lang}>
-                        {lang} {lang === "English" && "(Default)"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Search & Invite Registered Students by Username */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-                      <Users className="size-3.5 text-indigo-400" />
-                      Invite Students by Username ({selectedInvitees.length}/5)
-                    </label>
-                    <span className="text-[11px] text-zinc-500">Max 5 students</span>
-                  </div>
-
-                  {/* Selected invitee pills */}
-                  {selectedInvitees.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {selectedInvitees.map((username) => (
-                        <span
-                          key={username}
-                          className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-xs font-semibold flex items-center gap-1.5"
-                        >
-                          @{username}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveInvitee(username)}
-                            className="hover:text-white"
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {selectedInvitees.length < 5 && (
-                    <div className="relative">
-                      <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5">
-                        <Search className="size-4 text-zinc-500" />
-                        <input
-                          type="text"
-                          value={userSearchQuery}
-                          onChange={(e) => setUserSearchQuery(e.target.value)}
-                          placeholder="Search PrepX students by username..."
-                          className="bg-transparent text-sm text-white placeholder-zinc-500 outline-none flex-1"
-                        />
-                        {isSearchingUsers && <RefreshCw className="size-3.5 animate-spin text-indigo-400" />}
-                      </div>
-
-                      {/* Search Results Dropdown */}
-                      {searchResults.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-zinc-900 border border-zinc-800 rounded-xl max-h-48 overflow-y-auto p-1 shadow-2xl">
-                          {searchResults.map((u) => (
-                            <div
-                              key={u.id}
-                              onClick={() => handleSelectInvitee(u.username)}
-                              className="p-2.5 rounded-lg hover:bg-zinc-800/80 cursor-pointer flex items-center justify-between text-xs transition"
-                            >
-                              <div className="flex items-center gap-2">
-                                <div className="size-6 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white">
-                                  {u.username[0]?.toUpperCase()}
-                                </div>
-                                <div>
-                                  <span className="font-bold text-white block">@{u.username}</span>
-                                  <span className="text-zinc-400 text-[11px]">{u.fullName}</span>
-                                </div>
-                              </div>
-                              <span className="text-indigo-400 text-[11px] font-semibold">Invite +</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="px-5 py-2.5 rounded-xl border border-zinc-800 hover:bg-zinc-800 text-xs text-zinc-300 font-semibold"
-                  >
-                    Cancel
-                  </button>
-                  <Button
-                    type="submit"
-                    disabled={isCreatingRoom || !customQuestion.trim()}
-                    className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs"
-                  >
-                    {isCreatingRoom ? "Initializing Room..." : "Launch Discussion Room"}
-                  </Button>
-                </div>
-              </form>
-            </div>
+              <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-zinc-800 hover:bg-zinc-800 text-xs text-zinc-300 font-semibold"
+                >
+                  Cancel
+                </button>
+                <Button
+                  type="submit"
+                  disabled={isCreatingRoom || !customQuestion.trim()}
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs"
+                >
+                  {isCreatingRoom ? "Initializing Room..." : "Launch Discussion Room"}
+                </Button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
+    </div >
   );
 }
 

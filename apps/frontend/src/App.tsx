@@ -4,14 +4,9 @@ import { BrowserRouter, Routes, Route } from "react-router";
 
 import { AuthProvider } from "./context/AuthContext";
 import { GamificationProvider } from "./context/GamificationContext";
-import { CelebrationModal } from "./components/gamification/CelebrationModal";
-import { GamificationHubModal } from "./components/gamification/GamificationHubModal";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { Form } from "./components/Form";
-import { Login } from "./pages/Login";
-import { Signup } from "./pages/Signup";
 import { SkeletonPage } from "./components/ui/skeleton";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -46,6 +41,15 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 }
 
 // Route-level code splitting with deployment-resilient auto-recovery
+const Form = lazyWithRetry(() => import("./components/Form").then((m) => ({ default: m.Form })));
+const Login = lazyWithRetry(() => import("./pages/Login").then((m) => ({ default: m.Login })));
+const Signup = lazyWithRetry(() => import("./pages/Signup").then((m) => ({ default: m.Signup })));
+const CelebrationModal = lazyWithRetry(() =>
+  import("./components/gamification/CelebrationModal").then((m) => ({ default: m.CelebrationModal }))
+);
+const GamificationHubModal = lazyWithRetry(() =>
+  import("./components/gamification/GamificationHubModal").then((m) => ({ default: m.GamificationHubModal }))
+);
 const Dashboard = lazyWithRetry(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Profile = lazyWithRetry(() => import("./pages/Profile").then((m) => ({ default: m.Profile })));
 const AIInterview = lazyWithRetry(() => import("./pages/AIInterview").then((m) => ({ default: m.AIInterview })));
@@ -324,8 +328,10 @@ export function App() {
               pauseOnHover
               theme="dark"
             />
-            <CelebrationModal />
-            <GamificationHubModal />
+            <Suspense fallback={null}>
+              <CelebrationModal />
+              <GamificationHubModal />
+            </Suspense>
           </div>
         </BrowserRouter>
       </GamificationProvider>

@@ -1136,6 +1136,7 @@ var init_sttVerificationService = __esm({
 // src/index.ts
 import express from "express";
 import cors from "cors";
+import compression from "compression";
 import mongoose15 from "mongoose";
 
 // src/config/db.ts
@@ -21603,6 +21604,16 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
+  })
+);
+app.use(
+  compression({
+    threshold: 1024,
+    // Compress responses > 1KB
+    filter: (req, res) => {
+      if (req.headers["x-no-compression"]) return false;
+      return compression.filter(req, res);
+    }
   })
 );
 app.use((_req, _res, next) => {

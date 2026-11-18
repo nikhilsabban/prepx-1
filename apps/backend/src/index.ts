@@ -9,6 +9,7 @@ process.on("unhandledRejection", (reason, promise) => {
 
 import express from "express";
 import cors from "cors";
+import compression from "compression";
 import mongoose from "mongoose";
 import { connectDB } from "./config/db";
 import { createRateLimiter } from "./middleware/rateLimiter";
@@ -68,6 +69,17 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  })
+);
+
+// High-performance gzip/deflate compression for JSON & text responses
+app.use(
+  compression({
+    threshold: 1024, // Compress responses > 1KB
+    filter: (req, res) => {
+      if (req.headers["x-no-compression"]) return false;
+      return compression.filter(req, res);
+    },
   })
 );
 

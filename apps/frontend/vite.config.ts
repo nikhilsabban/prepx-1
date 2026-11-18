@@ -36,12 +36,32 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
+    cssCodeSplit: true,
+    minify: "esbuild",
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react": ["react", "react-dom", "react-router"],
-          "vendor-icons": ["lucide-react"],
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("mermaid")) return "vendor-mermaid";
+            if (id.includes("cytoscape")) return "vendor-cytoscape";
+            if (id.includes("katex")) return "vendor-katex";
+            if (id.includes("@monaco-editor") || id.includes("monaco-editor")) return "vendor-monaco";
+            if (id.includes("framer-motion")) return "vendor-framer";
+            if (id.includes("react-markdown") || id.includes("remark-gfm")) return "vendor-markdown";
+            if (id.includes("canvas-confetti")) return "vendor-confetti";
+            if (id.includes("@react-oauth")) return "vendor-oauth";
+            if (id.includes("react-toastify")) return "vendor-toastify";
+            if (id.includes("lucide-react")) return "vendor-icons";
+            if (
+              id.includes("react-router") ||
+              id.includes("react-dom") ||
+              id.includes("/react/") ||
+              id.includes("scheduler")
+            ) {
+              return "vendor-react";
+            }
+          }
         },
       },
     },

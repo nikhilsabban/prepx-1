@@ -31,8 +31,9 @@ export function Form() {
   }, [location]);
 
   // Instant zero-flash redirect for logged-in users
-  if (isAuthenticated && user?.id) {
-    return <Navigate to={`/${user.id}`} replace />;
+  const currentUserId = user?.id || (user as any)?._id;
+  if (isAuthenticated && currentUserId) {
+    return <Navigate to={`/${currentUserId}`} replace />;
   }
 
   if (isLoading && token) {

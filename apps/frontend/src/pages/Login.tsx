@@ -48,8 +48,9 @@ export function Login() {
     };
   }, [otpSent, resendTimer]);
 
-  if (isAuthenticated && user?.id) {
-    return <Navigate to={`/${user.id}`} replace />;
+  const currentUserId = user?.id || (user as any)?._id;
+  if (isAuthenticated && currentUserId) {
+    return <Navigate to={`/${currentUserId}`} replace />;
   }
 
   if (isLoading && token) {
