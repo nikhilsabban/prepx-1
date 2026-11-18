@@ -1,9 +1,11 @@
 import api from "./api";
+import { BACKEND_URL } from "../lib/config";
 
 export interface GDTranscriptionCredentials {
   configured: boolean;
   proxyUrl: string;
   token: string;
+  key?: string;
   model: string;
   language: string;
   provider: "deepgram" | "murf" | "native";
@@ -26,7 +28,6 @@ export interface GDNormalizedTranscriptEvent {
   confidence: number;
   provider: string;
   timestamp: string;
-  persisted?: boolean;
 }
 
 export async function fetchGDTranscriptionCredentials(): Promise<GDTranscriptionCredentials> {
@@ -36,13 +37,13 @@ export async function fetchGDTranscriptionCredentials(): Promise<GDTranscription
   } catch {
     return {
       configured: false,
-      proxyUrl: "/api/v1/gd/transcription/stream",
+      proxyUrl: "",
       token: "",
       model: "nova-3",
       language: "en-IN",
       provider: "native",
       sampleRate: 16000,
-      encoding: "linear16",
+      encoding: "webm-opus",
     };
   }
 }
@@ -69,497 +70,275 @@ export interface GDAudioCaptureOptions {
 }
 
 /**
- * Resilient Participant-Isolated Real-Time Audio Capture & Streaming Engine for PrepX GD.
- * Uses browser MediaStream + AudioContext + AudioWorklet (with ScriptProcessor fallback)
- * to stream signed 16-bit 16kHz PCM frames to Deepgram Nova-3.
+ * GD's streaming capture mirrors the AI Interview flow: one MediaRecorder
+ * session sends 200ms WebM/Opus chunks through an authenticated backend socket.
  */
 export class GDAudioCaptureSession {
-  private options: GDAudioCaptureOptions;
-  private audioContext: AudioContext | null = null;
-  private sourceNode: MediaStreamAudioSourceNode | null = null;
-  private workletNode: AudioWorkletNode | null = null;
-  private scriptProcessorNode: ScriptProcessorNode | null = null;
+  private readonly options: GDAudioCaptureOptions;
   private socket: WebSocket | null = null;
-  private isDestroyed: boolean = false;
-  private isPaused: boolean = false;
+  private recorder: MediaRecorder | null = null;
   private status: GDTranscriptionStatus = "idle";
-  private reconnectAttempts: number = 0;
-  private credentials: GDTranscriptionCredentials | null = null;
-  private localStream: MediaStream | null = null;
-  private keepAlivePingTimer: any = null;
-  private useHttpTranscription = false;
-  private bufferedPcm: number[] = [];
-  private transcriptionQueue: Promise<void> = Promise.resolve();
-  private transcriptionSequence = 0;
-  private transcriptionFailures = 0;
-  private previousFinalText = "";
-  private readonly restChunkSamples = 96_000; // 6 seconds at 16 kHz, with 0.75 seconds carried into the next chunk.
-  private readonly restOverlapSamples = 12_000;
+  private isDestroyed = false;
+  private isPaused = false;
+  private sequence = 0;
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private startTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: GDAudioCaptureOptions) {
     this.options = options;
   }
 
-  private setStatus(s: GDTranscriptionStatus, detail?: string) {
-    this.status = s;
-    this.options.onStatusChange?.(s, detail);
+  private setStatus(status: GDTranscriptionStatus, detail?: string) {
+    this.status = status;
+    this.options.onStatusChange?.(status, detail);
   }
 
   public getStatus(): GDTranscriptionStatus {
     return this.status;
   }
 
-  /**
-   * Initializes audio processing and opens isolated real-time transcription WebSocket.
-   */
   public async start(mediaStream: MediaStream): Promise<void> {
     if (this.isDestroyed) return;
-    this.localStream = mediaStream;
     this.isPaused = false;
-    this.setStatus("connecting", "Initializing speech recognition engine...");
+    this.setStatus("connecting", "Connecting to the speech recognition service...");
 
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
-    const wsHost = backendUrl.replace(/^https?:\/\//i, "");
-
-    // 1. Fetch credentials
-    this.credentials = await fetchGDTranscriptionCredentials();
-
-    // Vercel Functions cannot keep the realtime socket open, so send short PCM clips
-    // to the authenticated HTTP transcription endpoint instead.
-    if (wsHost.includes(".vercel.app") && this.credentials?.configured && this.credentials.provider === "deepgram") {
-      this.useHttpTranscription = true;
-      await this.initAudioProcessing(mediaStream);
-      if (this.status !== "error") this.setStatus("listening", "Cloud speech recognition is listening");
-      return;
-    }
-
-    if (wsHost.includes(".vercel.app") || !this.credentials?.configured || !this.credentials?.token) {
-      this.setStatus("error", "Serverless environment or missing STT key, using native browser STT.");
-      this.options.onError?.(new Error("WebSocket unavailable in current serverless environment."));
-      return;
-    }
-
-    // 2. Open WebSocket
-    await this.connectWebSocket();
-
-    // 3. Initialize Audio Processing pipeline
-    await this.initAudioProcessing(mediaStream);
-  }
-
-  private async connectWebSocket(): Promise<void> {
+    const credentials = await fetchGDTranscriptionCredentials();
     if (this.isDestroyed) return;
-
-    if (this.socket) {
-      try {
-        this.socket.close();
-      } catch {}
-      this.socket = null;
+    if (!credentials.configured || !credentials.token || !credentials.proxyUrl) {
+      const error = new Error("Cloud speech recognition is not configured.");
+      this.setStatus("error", error.message);
+      this.options.onError?.(error);
+      return;
     }
 
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
-    const wsProtocol = backendUrl.startsWith("https") ? "wss:" : "ws:";
+    const backendUrl = BACKEND_URL || window.location.origin;
     const wsHost = backendUrl.replace(/^https?:\/\//i, "");
-
-    // Guard against Vercel serverless environment or missing credentials
-    if (wsHost.includes(".vercel.app") || !this.credentials?.configured || !this.credentials?.token) {
-      this.setStatus("error", "Serverless environment or missing STT key, using native browser STT.");
-      this.options.onError?.(new Error("WebSocket unavailable in current serverless environment."));
+    const isVercelHost = wsHost.includes(".vercel.app");
+    let wsUrl: URL;
+    let directDeepgram = false;
+    let protocols: string[] | undefined;
+    if (credentials.key) {
+      directDeepgram = true;
+      wsUrl = new URL("wss://api.deepgram.com/v1/listen");
+      wsUrl.searchParams.set("model", this.options.model || credentials.model || "nova-3");
+      wsUrl.searchParams.set("language", this.options.language || credentials.language || "en-IN");
+      wsUrl.searchParams.set("smart_format", "true");
+      wsUrl.searchParams.set("punctuate", "true");
+      wsUrl.searchParams.set("interim_results", "true");
+      wsUrl.searchParams.set("no_delay", "true");
+      wsUrl.searchParams.set("endpointing", "350");
+      wsUrl.searchParams.set("utterance_end_ms", "1000");
+      wsUrl.searchParams.set("filler_words", "true");
+      protocols = ["token", credentials.key];
+    } else if (credentials.proxyUrl && !isVercelHost) {
+      wsUrl = new URL(credentials.proxyUrl, backendUrl);
+      wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+      wsUrl.searchParams.set("token", credentials.token);
+      wsUrl.searchParams.set("sessionId", this.options.sessionId);
+      wsUrl.searchParams.set("participantId", this.options.participantId);
+      wsUrl.searchParams.set("participantName", this.options.participantName);
+      wsUrl.searchParams.set("username", this.options.username);
+      wsUrl.searchParams.set("language", this.options.language || credentials.language || "en-IN");
+      wsUrl.searchParams.set("model", this.options.model || credentials.model || "nova-3");
+    } else {
+      const error = new Error("No supported cloud speech connection is available.");
+      this.fail(error.message);
       return;
     }
-
-    const proxyPath = this.credentials?.proxyUrl || "/api/v1/gd/transcription/stream";
-    const token = this.credentials?.token || "";
-    const lang = this.options.language || this.credentials?.language || "en-IN";
-    const model = this.options.model || this.credentials?.model || "nova-3";
-
-    const wsUrl = `${wsProtocol}//${wsHost}${proxyPath}?token=${encodeURIComponent(
-      token
-    )}&sessionId=${encodeURIComponent(this.options.sessionId)}&participantId=${encodeURIComponent(
-      this.options.participantId
-    )}&username=${encodeURIComponent(this.options.username)}&participantName=${encodeURIComponent(
-      this.options.participantName
-    )}&language=${encodeURIComponent(lang)}&model=${encodeURIComponent(model)}`;
-
-    const socket = new WebSocket(wsUrl);
-    this.socket = socket;
-    socket.binaryType = "arraybuffer";
-
-    socket.onopen = () => {
-      if (this.isDestroyed) return;
-      this.reconnectAttempts = 0;
-      this.setStatus("listening", "Listening to your contributions");
-
-      // Send periodic ping to keep socket connection alive through quiet periods
-      if (this.keepAlivePingTimer) clearInterval(this.keepAlivePingTimer);
-      this.keepAlivePingTimer = setInterval(() => {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-          try {
-            this.socket.send(JSON.stringify({ type: "ping" }));
-          } catch {}
-        }
-      }, 4000);
-    };
-
-    socket.onmessage = (event) => {
-      try {
-        if (typeof event.data !== "string") return;
-        const data = JSON.parse(event.data);
-
-        if (data.type === "gd:transcription:connected") {
-          this.setStatus("listening", data.message || "Connected to Deepgram Nova-3");
-        } else if (data.type === "gd:transcription:interim") {
-          this.options.onInterim?.(data);
-        } else if (data.type === "gd:transcription:final") {
-          this.options.onFinal?.(data);
-        } else if (data.type === "gd:transcription:reconnecting") {
-          this.setStatus("reconnecting", data.message || "Reconnecting to speech engine...");
-        } else if (data.type === "gd:transcription:error") {
-          this.setStatus("error", data.message || "Speech recognition error");
-          this.options.onError?.(new Error(data.message));
-        }
-      } catch {}
-    };
-
-    socket.onerror = () => {
-      if (this.isDestroyed) return;
-      this.setStatus("reconnecting", "Speech connection interrupted, attempting recovery...");
-    };
-
-    socket.onclose = () => {
-      if (this.keepAlivePingTimer) {
-        clearInterval(this.keepAlivePingTimer);
-        this.keepAlivePingTimer = null;
-      }
-      if (this.isDestroyed || this.isPaused) return;
-      this.scheduleReconnect();
-    };
-  }
-
-  private scheduleReconnect() {
-    if (this.isDestroyed || this.isPaused) return;
-
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
-    const wsHost = backendUrl.replace(/^https?:\/\//i, "");
-    if (wsHost.includes(".vercel.app") || !this.credentials?.configured || !this.credentials?.token) {
-      return;
-    }
-
-    this.reconnectAttempts++;
-    if (this.reconnectAttempts > 3) {
-      this.setStatus("error", "Speech engine connection lost. Using native browser STT.");
-      this.options.onError?.(new Error("Speech engine connection limit reached."));
-      return;
-    }
-
-    const delay = Math.min(4000, 500 * Math.pow(2, this.reconnectAttempts - 1) + Math.random() * 200);
-    this.setStatus("reconnecting", `Reconnecting in ${(delay / 1000).toFixed(1)}s...`);
-
-    setTimeout(() => {
-      if (!this.isDestroyed && !this.isPaused) {
-        this.connectWebSocket().catch(() => {});
-      }
-    }, delay);
-  }
-
-  private async initAudioProcessing(mediaStream: MediaStream): Promise<void> {
-    if (this.isDestroyed) return;
 
     try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      const audioCtx = new AudioContextClass({ latencyHint: "interactive" });
-      this.audioContext = audioCtx;
+      const socket = new WebSocket(wsUrl.toString(), protocols);
+      socket.binaryType = "arraybuffer";
+      this.socket = socket;
 
-      if (audioCtx.state === "suspended") {
-        await audioCtx.resume();
-      }
-
-      const source = audioCtx.createMediaStreamSource(mediaStream);
-      this.sourceNode = source;
-
-      // Try AudioWorklet first
-      let workletLoaded = false;
-      if (audioCtx.audioWorklet) {
-        try {
-          await audioCtx.audioWorklet.addModule("/worklets/gd-audio-processor.js");
-          const worklet = new AudioWorkletNode(audioCtx, "gd-audio-processor");
-          this.workletNode = worklet;
-
-          worklet.port.onmessage = (e) => {
-            if (e.data?.command === "flushed") {
-              if (this.useHttpTranscription) this.flushHttpAudio(true);
-              return;
-            }
-            if (this.isDestroyed) return;
-            const buffer = e.data as ArrayBuffer;
-            this.sendAudioFrame(buffer);
-          };
-
-          source.connect(worklet);
-          workletLoaded = true;
-        } catch (workletErr) {
-          console.warn("[GDAudioCapture] AudioWorklet failed, using ScriptProcessor fallback:", workletErr);
+      this.startTimeout = setTimeout(() => {
+        if (!this.isDestroyed && this.status === "connecting") {
+          this.fail("Speech recognition did not connect in time.");
         }
-      }
+      }, 12_000);
 
-      // ScriptProcessor fallback for 100% browser compatibility
-      if (!workletLoaded) {
-        this.initScriptProcessorFallback(audioCtx, source);
-      }
-    } catch (err: any) {
-      console.error("[GDAudioCapture] Audio initialization failed:", err);
-      this.setStatus("error", err.message);
-      this.options.onError?.(err);
-    }
-  }
-
-  private initScriptProcessorFallback(audioCtx: AudioContext, source: MediaStreamAudioSourceNode) {
-    const bufferSize = 4096;
-    const scriptNode = audioCtx.createScriptProcessor(bufferSize, 1, 1);
-    this.scriptProcessorNode = scriptNode;
-
-    const targetSampleRate = 16000;
-    const chunkSize = 2048;
-    const pcmBuffer: number[] = [];
-
-    scriptNode.onaudioprocess = (e) => {
-      if (this.isPaused || this.isDestroyed) return;
-      const channelData = e.inputBuffer.getChannelData(0);
-      const currentRate = audioCtx.sampleRate;
-
-      const ratio = currentRate / targetSampleRate;
-      const newLength = Math.floor(channelData.length / ratio);
-
-      for (let i = 0; i < newLength; i++) {
-        const srcIndex = i * ratio;
-        const indexFloor = Math.floor(srcIndex);
-        const indexCeil = Math.min(channelData.length - 1, Math.ceil(srcIndex));
-        const fraction = srcIndex - indexFloor;
-        const floorSample = channelData[indexFloor] ?? 0;
-        const ceilSample = channelData[indexCeil] ?? 0;
-        const sample = floorSample * (1 - fraction) + ceilSample * fraction;
-
-        const s = Math.max(-1, Math.min(1, sample));
-        const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
-        pcmBuffer.push(Math.round(int16));
-
-        if (pcmBuffer.length >= chunkSize) {
-          const chunk = new Int16Array(pcmBuffer.splice(0, chunkSize));
-          this.sendAudioFrame(chunk.buffer);
-        }
-      }
-    };
-
-    source.connect(scriptNode);
-    // Silent output destination to keep Chrome ScriptProcessor running
-    const silentGain = audioCtx.createGain();
-    silentGain.gain.value = 0;
-    scriptNode.connect(silentGain);
-    silentGain.connect(audioCtx.destination);
-  }
-
-  private sendAudioFrame(buffer: ArrayBuffer): void {
-    if (!buffer.byteLength) return;
-    if (!this.useHttpTranscription) {
-      if (this.socket && this.socket.readyState === WebSocket.OPEN) this.socket.send(buffer);
-      return;
-    }
-
-    const samples = new Int16Array(buffer);
-    for (let i = 0; i < samples.length; i++) this.bufferedPcm.push(samples[i]);
-    if (this.bufferedPcm.length >= this.restChunkSamples) this.flushHttpAudio(false);
-  }
-
-  private flushHttpAudio(finalChunk: boolean): void {
-    const minimumSamples = 4_800; // Preserve short trailing words while dropping residual noise.
-    if (this.bufferedPcm.length < (finalChunk ? minimumSamples : this.restChunkSamples)) {
-      if (finalChunk) {
-        this.bufferedPcm = [];
-        this.transcriptionQueue = this.transcriptionQueue.then(() => { this.previousFinalText = ""; });
-      }
-      return;
-    }
-
-    const sampleCount = finalChunk ? this.bufferedPcm.length : this.restChunkSamples;
-    const samples = this.bufferedPcm.splice(0, sampleCount);
-    if (!finalChunk) {
-      this.bufferedPcm = [...samples.slice(-this.restOverlapSamples), ...this.bufferedPcm];
-    } else {
-      this.bufferedPcm = [];
-    }
-
-    const audio = new Int16Array(samples).buffer;
-    this.transcriptionSequence += 1;
-    const segmentId = `http-${this.options.sessionId}-${this.options.participantId}-${Date.now().toString(36)}-${this.transcriptionSequence}`;
-    this.transcriptionQueue = this.transcriptionQueue.then(async () => {
-      try {
-        const language = this.options.language || this.credentials?.language || "en-IN";
-        const url = `/api/v1/gd/rooms/${this.options.sessionId}/transcription/segment?language=${encodeURIComponent(language)}&segmentId=${encodeURIComponent(segmentId)}`;
-        let response;
-        for (let attempt = 0; ; attempt++) {
-          try {
-            response = await api.post<{ text?: string; confidence?: number; persisted?: boolean }>(
-              url,
-              audio,
-              { headers: { "Content-Type": "audio/l16; rate=16000; channels=1" }, timeout: 25000 },
-            );
-            break;
-          } catch (error: any) {
-            const status = error?.response?.status;
-            const isRetryable = !status || status === 408 || status === 429 || status >= 500;
-            if (!isRetryable || attempt >= 2) throw error;
-            await new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt));
+      socket.onopen = () => {
+        if (this.isDestroyed) return;
+        if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
+        this.keepAliveTimer = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "KeepAlive" }));
           }
+        }, 4_000);
+        if (directDeepgram) {
+          if (this.startTimeout) clearTimeout(this.startTimeout);
+          this.startTimeout = null;
+          this.setStatus("listening", "Listening to your contributions");
+          this.startRecorder(mediaStream);
         }
-        if (!response) throw new Error("Speech recognition returned no response.");
-        this.transcriptionFailures = 0;
-        const text = this.removeRepeatedOverlap(String(response.data?.text || "").trim());
+      };
+
+      socket.onmessage = (message) => {
+        if (typeof message.data !== "string" || this.isDestroyed) return;
+        let data: any;
+        try {
+          data = JSON.parse(message.data);
+        } catch {
+          return;
+        }
+
+        if (data.type === "ready" || data.type === "gd:transcription:connected" || data.type === "Metadata") {
+          if (this.startTimeout) clearTimeout(this.startTimeout);
+          this.startTimeout = null;
+          this.setStatus("listening", data.message || "Listening to your contributions");
+          this.startRecorder(mediaStream);
+          return;
+        }
+        if (data.type === "status" || data.type === "gd:transcription:reconnecting") {
+          this.setStatus("reconnecting", data.message || "Reconnecting to speech recognition...");
+          return;
+        }
+        if (data.type === "error" || data.type === "gd:transcription:error") {
+          this.fail(data.message || "Speech recognition failed.");
+          return;
+        }
+
+        const text = String(data.transcript || data.text || data.channel?.alternatives?.[0]?.transcript || "").trim();
         if (!text) return;
-        this.previousFinalText = String(response.data?.text || "").trim();
-        this.options.onFinal?.({
-          type: "gd:transcription:final",
+        const isFinal = data.is_final === true || data.speech_final === true || data.type === "final" || data.type === "gd:transcription:final";
+        const event: GDNormalizedTranscriptEvent = {
+          type: isFinal ? "gd:transcription:final" : "gd:transcription:interim",
           sessionId: this.options.sessionId,
           participantId: this.options.participantId,
           participantName: this.options.participantName,
           username: this.options.username,
-          segmentId,
-          sequenceNumber: this.transcriptionSequence,
+          segmentId: String(data.segmentId || `gd-${this.options.sessionId}-${this.options.participantId}-${Date.now().toString(36)}-${++this.sequence}`),
+          sequenceNumber: Number(data.sequenceNumber) || this.sequence,
           text,
-          isFinal: true,
-          confidence: Number(response.data?.confidence) || 0,
-          provider: "deepgram",
+          isFinal,
+          startTime: Number.isFinite(data.start) ? Number(data.start) : undefined,
+          endTime: Number.isFinite(data.end) ? Number(data.end) : undefined,
+          confidence: Number(data.confidence ?? data.channel?.alternatives?.[0]?.confidence) || 0,
+          provider: String(data.provider || credentials.provider),
           timestamp: new Date().toISOString(),
-          persisted: Boolean(response.data?.persisted),
-        });
-      } catch (error: any) {
-        this.transcriptionFailures += 1;
-        if (this.transcriptionFailures >= 3) {
-          this.useHttpTranscription = false;
-          this.setStatus("error", "Cloud speech recognition is unavailable; switching to browser recognition.");
-          this.options.onError?.(error instanceof Error ? error : new Error("Cloud transcription failed"));
-        } else {
-          this.setStatus("reconnecting", "Retrying cloud speech recognition...");
-        }
-      }
-    });
-    if (finalChunk) {
-      this.transcriptionQueue = this.transcriptionQueue.then(() => { this.previousFinalText = ""; });
+        };
+        if (isFinal) this.options.onFinal?.(event);
+        else this.options.onInterim?.(event);
+      };
+
+      socket.onerror = () => {
+        if (!this.isDestroyed) this.setStatus("reconnecting", "Speech connection interrupted.");
+      };
+      socket.onclose = () => {
+        this.clearTimers();
+        this.stopRecorder();
+        if (!this.isDestroyed && !this.isPaused) this.fail("Speech connection closed.");
+      };
+    } catch (error: any) {
+      this.fail(error?.message || "Could not start speech recognition.");
     }
   }
 
-  private removeRepeatedOverlap(text: string): string {
-    if (!this.previousFinalText || !text) return text;
-    const previousWords = this.previousFinalText.toLowerCase().match(/[\p{L}\p{N}']+/gu) || [];
-    const currentWordMatches = Array.from(text.matchAll(/[\p{L}\p{N}']+/gu));
-    const currentWords = currentWordMatches.map((match) => match[0]);
-    const currentLower = currentWords.map((word) => word.toLowerCase());
-    const maxOverlap = Math.min(3, previousWords.length, currentWords.length);
-    for (let overlap = maxOverlap; overlap > 0; overlap--) {
-      const previousTail = previousWords.slice(-overlap).map((word) => word.toLowerCase());
-      if (previousTail.every((word, index) => word === currentLower[index])) {
-        const nextWordPosition = currentWordMatches[overlap]?.index;
-        if (nextWordPosition === undefined) return "";
-        return text.slice(nextWordPosition).trim();
-      }
-    }
-    return text;
-  }
-
-  public pause(): void {
-    this.isPaused = true;
-    this.setStatus("paused", "Microphone muted");
-    if (this.workletNode) {
-      try {
-        this.workletNode.port.postMessage({ command: "pause" });
-      } catch {}
-    } else if (this.useHttpTranscription) {
-      this.flushHttpAudio(true);
-    }
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      try {
-        this.socket.send(JSON.stringify({ type: "gd:transcription:stop" }));
-      } catch {}
-    }
-  }
-
-  public resume(): void {
-    this.isPaused = false;
-    this.setStatus("listening", "Listening to your contributions");
-    if (this.audioContext && this.audioContext.state === "suspended") {
-      this.audioContext.resume().catch(() => {});
-    }
-    if (this.workletNode) {
-      try {
-        this.workletNode.port.postMessage({ command: "resume" });
-      } catch {}
-    }
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      try {
-        this.socket.send(JSON.stringify({ type: "gd:transcription:start" }));
-      } catch {}
-    } else if (this.localStream) {
-      this.connectWebSocket().catch(() => {});
-    }
-  }
-
-  public stop(): void {
-    this.pause();
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      try {
-        this.socket.send(JSON.stringify({ type: "Finalize" }));
-      } catch {}
-    }
-  }
-
-  public destroy(): void {
-    if (this.useHttpTranscription) this.flushHttpAudio(true);
-    this.pause();
-    this.isDestroyed = true;
-    this.isPaused = true;
-
-    if (this.keepAlivePingTimer) {
-      clearInterval(this.keepAlivePingTimer);
-      this.keepAlivePingTimer = null;
+  private startRecorder(stream: MediaStream) {
+    if (this.isDestroyed || this.isPaused || this.recorder) return;
+    if (typeof MediaRecorder === "undefined") {
+      this.fail("This browser does not support continuous audio recording.");
+      return;
     }
 
-    if (this.workletNode) {
-      try {
-        this.workletNode.disconnect();
-      } catch {}
-      this.workletNode = null;
+    const audioTracks = stream.getAudioTracks();
+    if (!audioTracks.length) {
+      this.fail("No microphone audio track is available.");
+      return;
     }
-
-    if (this.scriptProcessorNode) {
-      try {
-        this.scriptProcessorNode.disconnect();
-      } catch {}
-      this.scriptProcessorNode = null;
-    }
-
-    if (this.sourceNode) {
-      try {
-        this.sourceNode.disconnect();
-      } catch {}
-      this.sourceNode = null;
-    }
-
-    if (this.audioContext) {
-      try {
-        this.audioContext.close();
-      } catch {}
-      this.audioContext = null;
-    }
-
-    if (this.socket) {
-      try {
-        if (this.socket.readyState === WebSocket.OPEN) {
+    // Group Discussion keeps camera and microphone in one WebRTC stream. STT must
+    // record audio only, as the AI Interview recorder does, or the proxy receives video.
+    const audioOnlyStream = new MediaStream(audioTracks);
+    const supportedTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+    const mimeType = supportedTypes.find((type) => MediaRecorder.isTypeSupported?.(type));
+    try {
+      const recorder = new MediaRecorder(audioOnlyStream, mimeType ? { mimeType } : undefined);
+      this.recorder = recorder;
+      recorder.ondataavailable = (event) => {
+        if (!event.data?.size || this.socket?.readyState !== WebSocket.OPEN) return;
+        this.socket.send(event.data);
+      };
+      recorder.onpause = () => {
+        if (this.socket?.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify({ type: "Finalize" }));
         }
-        this.socket.close();
-      } catch {}
-      this.socket = null;
+      };
+      recorder.onerror = () => this.fail("Microphone recording failed.");
+      recorder.start(200);
+    } catch (error: any) {
+      this.fail(error?.message || "Could not start microphone recording.");
     }
+  }
 
+  private fail(message: string) {
+    if (this.isDestroyed || this.status === "error") return;
+    const error = new Error(message);
+    this.setStatus("error", message);
+    this.options.onError?.(error);
+    this.stopRecorder();
+    this.clearTimers();
+    try {
+      this.socket?.close();
+    } catch {}
+    this.socket = null;
+  }
+
+  private stopRecorder() {
+    if (!this.recorder) return;
+    this.recorder.ondataavailable = null;
+    this.recorder.onpause = null;
+    this.recorder.onerror = null;
+    try {
+      if (this.recorder.state !== "inactive") this.recorder.stop();
+    } catch {}
+    this.recorder = null;
+  }
+
+  private clearTimers() {
+    if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
+    if (this.startTimeout) clearTimeout(this.startTimeout);
+    this.keepAliveTimer = null;
+    this.startTimeout = null;
+  }
+
+  public pause() {
+    this.isPaused = true;
+    if (this.recorder?.state === "recording") this.recorder.pause();
+    this.setStatus("paused", "Microphone paused");
+  }
+
+  public resume() {
+    if (this.isDestroyed) return;
+    this.isPaused = false;
+    if (this.recorder?.state === "paused") {
+      this.recorder.resume();
+      this.setStatus("listening", "Listening to your contributions");
+    } else if (!this.recorder && this.socket?.readyState === WebSocket.OPEN) {
+      this.setStatus("listening", "Listening to your contributions");
+    }
+  }
+
+  public destroy() {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
+    this.isPaused = true;
+    this.clearTimers();
+    const socket = this.socket;
+    const recorder = this.recorder;
+    this.recorder = null;
+    const closeSocket = () => {
+      try {
+        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "Finalize" }));
+        socket?.close();
+      } catch {}
+    };
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = () => setTimeout(closeSocket, 250);
+      try { recorder.stop(); } catch { closeSocket(); }
+    } else {
+      closeSocket();
+    }
+    this.socket = null;
     this.setStatus("idle");
   }
 }
-

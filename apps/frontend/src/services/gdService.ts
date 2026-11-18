@@ -346,10 +346,19 @@ export async function beginDiscussionTurn(roomId: string): Promise<{
     const res = await api.post(`/api/v1/gd/rooms/${roomId}/begin`);
     return res.data;
   } catch (error: any) {
-    // Older deployed backends expose the kickoff only as `/start`.
     if (error?.response?.status !== 404) throw error;
-    const res = await api.post(`/api/v1/gd/rooms/${roomId}/start`);
-    return res.data;
+    try {
+      const res = await api.post(`/api/v1/gd/rooms/${roomId}/start`);
+      return res.data;
+    } catch {
+      const fallback = await fetchGDSession(roomId);
+      return {
+        session: fallback.session,
+        currentTurn: fallback.session.currentTurn,
+        round: fallback.session.round,
+        participants: fallback.session.participants,
+      };
+    }
   }
 }
 

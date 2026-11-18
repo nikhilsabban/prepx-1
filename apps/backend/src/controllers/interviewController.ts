@@ -154,9 +154,13 @@ export async function getDeepgramKey(req: AuthRequest, res: Response): Promise<v
     expiresIn: "1h",
   });
 
+  // Detect Vercel serverless environment (where persistent WebSockets are not supported)
+  const isVercel = !!process.env.VERCEL || (req.headers.host || "").includes("vercel.app");
+
   res.json({
     configured: true,
-    proxyUrl: "/api/v1/interview/stt-stream",
+    proxyUrl: isVercel ? "" : "/api/v1/interview/stt-stream",
+    key: hasDeepgram ? process.env.DEEPGRAM_API_KEY : undefined,
     token: sttToken,
     recommendedModel: defaultModel,
     defaultLanguage,

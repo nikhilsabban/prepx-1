@@ -2,608 +2,263 @@ import { Server as HttpServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-import path from "path";
-import { randomUUID } from "crypto";
-import { gdSessionService, broadcastToGDRoom } from "./gdSessionService";
+import { gdSessionService } from "./gdSessionService";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
-if (!process.env.DEEPGRAM_API_KEY) {
-  dotenv.config({ path: path.resolve(process.cwd(), "backend/.env") });
-}
+dotenv.config();
 
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
-const MURF_API_KEY = process.env.MURF_API_KEY || "";
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
 const DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-3";
 const DEEPGRAM_LANGUAGE = process.env.DEEPGRAM_LANGUAGE || "en-IN";
 
-interface GDTranscriptionClient extends WebSocket {
+interface GDStreamClient extends WebSocket {
   isAlive?: boolean;
   sessionId?: string;
   participantId?: string;
-  turnId?: string;
-  streamId?: string;
   participantName?: string;
   username?: string;
   language?: string;
   model?: string;
-  upstreamSocket?: WebSocket | null;
-  audioQueue?: Buffer[];
-  sequenceCounter?: number;
-  isActive?: boolean;
-  reconnectAttempts?: number;
-  lastActiveAt?: number;
-  cachedSession?: any;
-  lastSessionCheckAt?: number;
-  keepAliveTimer?: NodeJS.Timeout | null;
+  upstream?: WebSocket | null;
+  queuedAudio?: Buffer[];
+  sequence?: number;
+  keepAlive?: ReturnType<typeof setInterval> | null;
 }
 
-export interface GDNormalizedTranscriptEvent {
-  type: "gd:transcription:interim" | "gd:transcription:final";
-  sessionId: string;
-  participantId: string;
-  participantName: string;
-  username: string;
-  segmentId: string;
-  sequenceNumber: number;
-  turnId?: string;
-  streamId?: string;
-  text: string;
-  isFinal: boolean;
-  startTime?: number;
-  endTime?: number;
-  confidence: number;
-  provider: "deepgram" | "murf" | "fallback";
-  timestamp: string;
-}
-
-/**
- * Distributed, Participant-Isolated Real-Time STT Transcription Gateway for PrepX Group Discussions.
- * Mounts on `/api/v1/gd/transcription/stream` and `/ws/gd-transcription`.
- * Accepts 16kHz signed 16-bit little-endian PCM audio frames from each participant's AudioWorklet.
- */
+/** WebM/Opus MediaRecorder stream proxy used only by Group Discussion. */
 export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
-  // Map of `${sessionId}:${participantId}` -> active GDTranscriptionClient
-  const activeStreams = new Map<string, GDTranscriptionClient>();
-
   server.on("upgrade", async (request, socket, head) => {
     const { pathname, searchParams } = new URL(request.url || "", `http://${request.headers.host}`);
+    if (pathname !== "/api/v1/gd/transcription/stream" && pathname !== "/ws/gd-transcription") return;
 
-    if (pathname === "/api/v1/gd/transcription/stream" || pathname === "/ws/gd-transcription") {
-      let token = searchParams.get("token");
-      if (!token && request.headers.authorization) {
-        token = request.headers.authorization.replace(/^Bearer\s+/i, "");
-      }
-
-      const protocols = request.headers["sec-websocket-protocol"]
-        ?.split(",")
-        .map((p) => p.trim());
-      if (!token && protocols && protocols.length >= 2 && protocols[0] === "access_token") {
-        token = protocols[1];
-      }
-
-      const sessionId = searchParams.get("sessionId") || searchParams.get("roomId") || "";
-      let decoded: any;
-      try {
-        if (!token) throw new Error("Missing token");
-        decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.purpose !== "gd_transcription") throw new Error("Invalid token purpose");
-      } catch {
-        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-        socket.destroy();
-        return;
-      }
-
-      const authedUserId = String(decoded.userId || decoded.id || decoded._id || decoded.sub || "");
-      const session = await gdSessionService.getSessionById(sessionId);
-      const participant = session?.participants.find(
-        (candidate) => candidate.userId?.toString() === authedUserId || candidate.id === authedUserId
-      );
-      const requestedParticipantId = searchParams.get("participantId") || "";
-      if (!session || !participant || (requestedParticipantId && requestedParticipantId !== participant.id)) {
-        socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
-        socket.destroy();
-        return;
-      }
-
-      const participantId = participant.id;
-      const username = participant.username || "";
-      const participantName = participant.name || username || "Participant";
-      const language = searchParams.get("language") || DEEPGRAM_LANGUAGE;
-      const model = searchParams.get("model") || DEEPGRAM_MODEL;
-
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        const client = ws as GDTranscriptionClient;
-        client.sessionId = sessionId;
-        client.participantId = participantId;
-        client.participantName = participantName;
-        client.username = username.toLowerCase().trim();
-        client.turnId = session.currentTurn?.participantId === participantId
-          ? `${participantId}:${session.currentTurn.round}:${new Date(session.currentTurn.startedAt).getTime()}`
-          : "";
-        client.streamId = randomUUID();
-        client.language = language;
-        client.model = model;
-        client.sequenceCounter = 0;
-        client.isActive = true;
-        client.reconnectAttempts = 0;
-        client.lastActiveAt = Date.now();
-
-        wss.emit("connection", client, request);
-      });
-    }
-  });
-
-  wss.on("connection", async (client: GDTranscriptionClient) => {
-    client.isAlive = true;
-    client.audioQueue = [];
-
-    const streamKey = `${client.sessionId}:${client.participantId}`;
-    // Replace any stale client for this participant
-    const existing = activeStreams.get(streamKey);
-    if (existing && existing !== client && existing.readyState === WebSocket.OPEN) {
-      try {
-        existing.close(1000, "Replaced by newer participant stream connection");
-      } catch {}
-    }
-    activeStreams.set(streamKey, client);
-
-    client.on("pong", () => {
-      client.isAlive = true;
-      client.lastActiveAt = Date.now();
-    });
-
-    // Check upstream credentials
-    const hasDeepgram = !!DEEPGRAM_API_KEY.trim();
-    const hasMurf = !!MURF_API_KEY.trim();
-
-    if (!hasDeepgram && !hasMurf) {
-      console.error("[GD Transcription Gateway] Neither DEEPGRAM_API_KEY nor MURF_API_KEY is configured.");
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(
-          JSON.stringify({
-            type: "gd:transcription:error",
-            message: "Speech recognition service is not configured on server.",
-          })
-        );
-        client.close(1011, "STT server configuration missing");
-      }
+    let decoded: any;
+    try {
+      const token = searchParams.get("token") || request.headers.authorization?.replace(/^Bearer\s+/i, "");
+      if (!token) throw new Error("Missing transcription ticket");
+      decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded.purpose !== "gd_transcription") throw new Error("Invalid transcription ticket");
+    } catch {
+      socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+      socket.destroy();
       return;
     }
 
-    // Connect upstream to STT provider
-    await setupUpstream(client);
+    const sessionId = searchParams.get("sessionId") || searchParams.get("roomId") || "";
+    const userId = String(decoded.userId || decoded.id || decoded._id || decoded.sub || "");
+    const requestedParticipantId = searchParams.get("participantId") || "";
+    const session = await gdSessionService.getSessionById(sessionId).catch(() => null);
+    const participant = session?.participants.find((item) =>
+      item.userId?.toString() === userId || item.id === userId
+    );
 
-    // Handle incoming client audio frames and control messages
-    client.on("message", async (data: WebSocket.RawData, isBinary: boolean) => {
-      client.lastActiveAt = Date.now();
+    if (
+      !session ||
+      session.status !== "in_progress" ||
+      !participant ||
+      participant.isAi ||
+      (requestedParticipantId && requestedParticipantId !== participant.id)
+    ) {
+      socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+      socket.destroy();
+      return;
+    }
 
-      if (isBinary) {
-        if (!client.isActive) return;
-
-        // Throttle session status check to once every 1200ms to avoid hammering MongoDB
-        const now = Date.now();
-        if (!client.cachedSession || now - (client.lastSessionCheckAt || 0) > 1200) {
-          try {
-            client.cachedSession = await gdSessionService.getSessionById(client.sessionId || "");
-            client.lastSessionCheckAt = now;
-          } catch (error: any) {
-            // Keep using cached session on transient DB error
-          }
-        }
-
-        const currentSession = client.cachedSession;
-        const currentTurn = currentSession?.currentTurn;
-        const currentTurnId = currentTurn
-          ? `${currentTurn.participantId}:${currentTurn.round}:${new Date(currentTurn.startedAt).getTime()}`
-          : "";
-
-        // If the GD session has not begun or is paused for briefing, ignore audio quietly without closing the socket
-        if (currentSession?.status !== "in_progress") {
-          return;
-        }
-
-        // Dynamically bind to the participant's turn as turns advance across rounds
-        if (currentTurn?.participantId === client.participantId) {
-          client.turnId = currentTurnId;
-        } else {
-          // Audio from non-speaking participant: drop chunk silently to maintain upstream hygiene, DO NOT terminate WebSocket
-          return;
-        }
-
-        const chunk = Buffer.from(data as any);
-        const upstream = client.upstreamSocket;
-
-        if (upstream && upstream.readyState === WebSocket.OPEN) {
-          upstream.send(chunk);
-        } else {
-          // Buffer audio frames while handshake is pending (up to 250 frames ~30s of 128ms PCM frames)
-          if (client.audioQueue && client.audioQueue.length < 250) {
-            client.audioQueue.push(chunk);
-          }
-        }
-      } else {
-        try {
-          const str = data.toString();
-          const parsed = JSON.parse(str);
-          const type = parsed.type;
-
-          if (type === "ping" || type === "keepalive") {
-            client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
-            if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket.OPEN) {
-              try { client.upstreamSocket.send(JSON.stringify({ type: "KeepAlive" })); } catch {}
-            }
-          } else if (type === "KeepAlive") {
-            if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket.OPEN) {
-              try { client.upstreamSocket.send(JSON.stringify({ type: "KeepAlive" })); } catch {}
-            }
-          } else if (type === "gd:transcription:start" || type === "start") {
-            client.isActive = true;
-            client.send(JSON.stringify({ type: "gd:transcription:resumed", participantId: client.participantId }));
-          } else if (type === "gd:transcription:stop" || type === "stop" || type === "Finalize") {
-            client.isActive = false;
-            if (client.upstreamSocket && client.upstreamSocket.readyState === WebSocket.OPEN) {
-              try { client.upstreamSocket.send(JSON.stringify({ type: "Finalize" })); } catch {}
-            }
-          }
-        } catch {
-          // Ignore malformed text packets
-        }
-      }
-    });
-
-    client.on("close", () => {
-      activeStreams.delete(streamKey);
-      client.audioQueue = [];
-      teardownUpstream(client);
-    });
-
-    client.on("error", (err: Error) => {
-      console.warn(`[GD Transcription Gateway] Client socket error for ${streamKey}:`, err.message);
-      teardownUpstream(client);
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      const client = ws as GDStreamClient;
+      client.sessionId = sessionId;
+      client.participantId = participant.id;
+      client.participantName = participant.name || participant.username || "Participant";
+      client.username = participant.username || "";
+      client.language = searchParams.get("language") || DEEPGRAM_LANGUAGE;
+      client.model = searchParams.get("model") || DEEPGRAM_MODEL;
+      client.sequence = 0;
+      client.queuedAudio = [];
+      client.upstream = null;
+      client.keepAlive = null;
+      wss.emit("connection", client);
     });
   });
 
-  // Background heartbeat to detect hung TCP connections
-  const heartbeatInterval = setInterval(() => {
-    wss.clients.forEach((ws) => {
-      const client = ws as GDTranscriptionClient;
-      if (client.isAlive === false) {
-        teardownUpstream(client);
-        return client.terminate();
+  wss.on("connection", (client: GDStreamClient) => {
+    client.isAlive = true;
+    let ended = false;
+
+    const closeUpstream = () => {
+      if (client.keepAlive) clearInterval(client.keepAlive);
+      client.keepAlive = null;
+      const upstream = client.upstream;
+      client.upstream = null;
+      if (upstream) {
+        try { upstream.close(); } catch {}
+      }
+    };
+
+    client.on("pong", () => { client.isAlive = true; });
+    client.on("close", () => {
+      ended = true;
+      closeUpstream();
+      client.queuedAudio = [];
+    });
+    client.on("error", () => {
+      ended = true;
+      closeUpstream();
+    });
+
+    if (!DEEPGRAM_API_KEY.trim()) {
+      client.send(JSON.stringify({ type: "error", message: "Deepgram speech recognition is not configured." }));
+      client.close(1011, "STT not configured");
+      return;
+    }
+
+    client.on("message", (data, isBinary) => {
+      if (isBinary) {
+        const audio = Buffer.from(data as any);
+        if (client.upstream?.readyState === WebSocket.OPEN) {
+          client.upstream.send(audio);
+        } else if (client.queuedAudio && client.queuedAudio.length < 250) {
+          client.queuedAudio.push(audio);
+        }
+        return;
+      }
+
+      try {
+        const message = JSON.parse(data.toString());
+        if (message.type === "ping" || message.type === "keepalive") {
+          if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+          if (client.upstream?.readyState === WebSocket.OPEN) {
+            client.upstream.send(JSON.stringify({ type: "KeepAlive" }));
+          }
+        } else if (message.type === "Finalize" || message.type === "finalize") {
+          if (client.upstream?.readyState === WebSocket.OPEN) {
+            client.upstream.send(JSON.stringify({ type: "Finalize" }));
+          }
+        }
+      } catch {
+        // Ignore malformed control packets.
+      }
+    });
+
+    const connectDeepgram = async () => {
+      try {
+        const session = await gdSessionService.getSessionById(client.sessionId || "");
+        const topicText = `${session?.topic?.question || ""} ${session?.topic?.originalTitle || ""} ${session?.topic?.category || ""} ${session?.topic?.description || ""}`;
+        const keyterms = Array.from(new Set(topicText.replace(/[^a-zA-Z0-9\s-]/g, " ").split(/\s+/)))
+          .filter((word) => word.length >= 3 && !["and", "the", "for", "with", "this", "that", "from"].includes(word.toLowerCase()))
+          .slice(0, 30);
+
+        const url = new URL("wss://api.deepgram.com/v1/listen");
+        url.searchParams.set("model", client.model || DEEPGRAM_MODEL);
+        url.searchParams.set("language", client.language || DEEPGRAM_LANGUAGE);
+        url.searchParams.set("smart_format", "true");
+        url.searchParams.set("punctuate", "true");
+        url.searchParams.set("interim_results", "true");
+        url.searchParams.set("no_delay", "true");
+        url.searchParams.set("endpointing", "350");
+        url.searchParams.set("utterance_end_ms", "1000");
+        url.searchParams.set("filler_words", "true");
+        for (const keyterm of keyterms) url.searchParams.append("keyterm", keyterm);
+
+        const upstream = new WebSocket(url.toString(), {
+          headers: { Authorization: `Token ${DEEPGRAM_API_KEY.trim()}` },
+        });
+        client.upstream = upstream;
+
+        upstream.on("open", () => {
+          if (ended) return upstream.close();
+          client.keepAlive = setInterval(() => {
+            if (upstream.readyState === WebSocket.OPEN) {
+              try { upstream.send(JSON.stringify({ type: "KeepAlive" })); } catch {}
+            }
+          }, 3500);
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: "ready",
+              status: "listening",
+              provider: "deepgram",
+              model: client.model || DEEPGRAM_MODEL,
+              language: client.language || DEEPGRAM_LANGUAGE,
+              participantId: client.participantId,
+              message: "Deepgram streaming is ready.",
+            }));
+          }
+          for (const audio of client.queuedAudio || []) {
+            if (upstream.readyState === WebSocket.OPEN) upstream.send(audio);
+          }
+          client.queuedAudio = [];
+        });
+
+        upstream.on("message", (data) => {
+          if (client.readyState !== WebSocket.OPEN) return;
+          try {
+            const parsed = JSON.parse(data.toString());
+            const alternative = parsed.channel?.alternatives?.[0];
+            const transcript = String(alternative?.transcript || parsed.transcript || "").trim();
+            if (!transcript) return;
+            const isFinal = parsed.is_final === true || parsed.speech_final === true;
+            client.sequence = (client.sequence || 0) + 1;
+            client.send(JSON.stringify({
+              type: isFinal ? "final" : "partial",
+              transcript,
+              is_final: isFinal,
+              speech_final: parsed.speech_final === true,
+              confidence: Number(alternative?.confidence) || 0,
+              start: parsed.start,
+              duration: parsed.duration,
+              sequenceNumber: client.sequence,
+              segmentId: `gd-${client.sessionId}-${client.participantId}-${client.sequence}-${Date.now().toString(36)}`,
+              participantId: client.participantId,
+              participantName: client.participantName,
+              username: client.username,
+              provider: "deepgram",
+              channel: { alternatives: [{ transcript, confidence: Number(alternative?.confidence) || 0 }] },
+            }));
+          } catch {
+            // Ignore non-JSON provider messages.
+          }
+        });
+
+        upstream.on("error", (error) => {
+          if (ended || client.readyState !== WebSocket.OPEN) return;
+          console.warn("[GD STT] Deepgram stream error:", error.message);
+          client.send(JSON.stringify({ type: "error", message: "Deepgram speech recognition disconnected." }));
+          client.close(1011, "STT upstream error");
+        });
+        upstream.on("close", () => {
+          if (ended || client.readyState !== WebSocket.OPEN) return;
+          client.send(JSON.stringify({ type: "error", message: "Deepgram speech recognition closed." }));
+          client.close(1011, "STT upstream closed");
+        });
+      } catch (error: any) {
+        console.error("[GD STT] Could not start streaming connection:", error?.message || error);
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: "error", message: "Could not start Deepgram speech recognition." }));
+          client.close(1011, "STT setup failed");
+        }
+      }
+    };
+
+    void connectDeepgram();
+  });
+
+  const heartbeat = setInterval(() => {
+    for (const socket of wss.clients) {
+      const client = socket as GDStreamClient;
+      if (!client.isAlive) {
+        closeClient(client);
+        continue;
       }
       client.isAlive = false;
       client.ping();
-    });
+    }
   }, 15000);
-
-  wss.on("close", () => {
-    clearInterval(heartbeatInterval);
-  });
-
-  /**
-   * Initializes isolated upstream STT WebSocket (Deepgram Nova-3 Linear16).
-   */
-  async function setupUpstream(client: GDTranscriptionClient) {
-    teardownUpstream(client);
-
-    try {
-      // 1. Fetch GD Session topic for dynamic technical & Indian context keyterm prompting
-      let topicKeyterms: string[] = [];
-      if (client.sessionId) {
-        try {
-          const session = await gdSessionService.getSessionById(client.sessionId);
-          if (session?.topic) {
-            const rawText = `${session.topic.question} ${session.topic.originalTitle || ""} ${session.topic.category || ""} ${session.topic.description || ""}`;
-            topicKeyterms = Array.from(
-              new Set(
-                rawText
-                  .replace(/[^a-zA-Z0-9\s-]/g, " ")
-                  .split(/\s+/)
-                  .filter((w) => w.length >= 3 && !["and", "the", "for", "with", "this", "that", "from"].includes(w.toLowerCase()))
-              )
-            ).slice(0, 30);
-          }
-        } catch {}
-      }
-
-      // 2. Build Deepgram URL with explicit linear16 16kHz PCM configuration
-      const dgModel = DEEPGRAM_MODEL || client.model || "nova-3";
-      const dgLang = DEEPGRAM_LANGUAGE || client.language || "en-IN";
-
-      const urlObj = new URL("wss://api.deepgram.com/v1/listen");
-      urlObj.searchParams.set("model", dgModel);
-      urlObj.searchParams.set("language", dgLang);
-      urlObj.searchParams.set("encoding", "linear16");
-      urlObj.searchParams.set("sample_rate", "16000");
-      urlObj.searchParams.set("channels", "1");
-      urlObj.searchParams.set("smart_format", "true");
-      urlObj.searchParams.set("punctuate", "true");
-      urlObj.searchParams.set("interim_results", "true");
-      urlObj.searchParams.set("no_delay", "true");
-      urlObj.searchParams.set("endpointing", "800"); // Keep short natural pauses inside the same phrase.
-      urlObj.searchParams.set("utterance_end_ms", "1500");
-      urlObj.searchParams.set("filler_words", "true");
-
-      for (const kt of topicKeyterms) {
-        if (kt.trim()) {
-          urlObj.searchParams.append("keyterm", kt.trim());
-        }
-      }
-
-      const upstreamSocket = new WebSocket(urlObj.toString(), {
-        headers: {
-          Authorization: `Token ${DEEPGRAM_API_KEY.trim()}`,
-        },
-      });
-
-      client.upstreamSocket = upstreamSocket;
-
-      upstreamSocket.on("open", () => {
-        client.reconnectAttempts = 0;
-        // KeepAlive heartbeat every 3.5s so Deepgram never times out during pauses or thinking periods
-        if (client.keepAliveTimer) clearInterval(client.keepAliveTimer);
-        client.keepAliveTimer = setInterval(() => {
-          if (upstreamSocket && upstreamSocket.readyState === WebSocket.OPEN) {
-            try {
-              upstreamSocket.send(JSON.stringify({ type: "KeepAlive" }));
-            } catch {}
-          }
-        }, 3500);
-
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(
-            JSON.stringify({
-              type: "gd:transcription:connected",
-              status: "listening",
-              provider: "deepgram",
-              model: dgModel,
-              language: dgLang,
-              participantId: client.participantId,
-              sessionId: client.sessionId,
-              message: "Deepgram Nova-3 PCM stream established.",
-            })
-          );
-        }
-
-        // Flush buffered audio frames
-        if (client.audioQueue && client.audioQueue.length > 0) {
-          for (const frame of client.audioQueue) {
-            if (upstreamSocket.readyState === WebSocket.OPEN) {
-              upstreamSocket.send(frame);
-            }
-          }
-          client.audioQueue = [];
-        }
-      });
-
-      upstreamSocket.on("message", async (data: WebSocket.Data) => {
-        try {
-          const raw = data.toString();
-          const parsed = JSON.parse(raw);
-
-          const alt = parsed.channel?.alternatives?.[0];
-          const transcriptText = (alt?.transcript || parsed.transcript || parsed.text || "").trim();
-
-          if (!transcriptText) return;
-
-          const isFinal = parsed.is_final === true || parsed.speech_final === true;
-          const confidence = alt?.confidence ?? (isFinal ? 0.98 : 0.85);
-
-          client.sequenceCounter = (client.sequenceCounter || 0) + 1;
-          const segmentId = `seg-${client.sessionId}-${client.participantId}-${client.sequenceCounter}-${Date.now().toString(36)}`;
-
-          const normalizedEvent: GDNormalizedTranscriptEvent = {
-            type: isFinal ? "gd:transcription:final" : "gd:transcription:interim",
-            sessionId: client.sessionId || "",
-            participantId: client.participantId || "candidate",
-            participantName: client.participantName || "Candidate",
-            username: client.username || "candidate",
-            segmentId,
-            sequenceNumber: client.sequenceCounter,
-            turnId: client.turnId,
-            streamId: client.streamId,
-            text: transcriptText,
-            isFinal,
-            startTime: parsed.start,
-            endTime: parsed.start !== undefined && parsed.duration !== undefined ? parsed.start + parsed.duration : undefined,
-            confidence,
-            provider: "deepgram",
-            timestamp: new Date().toISOString(),
-          };
-
-          // Send back to speaking client
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(normalizedEvent));
-          }
-
-          if (isFinal) {
-            // 1. Atomically persist final segment to MongoDB
-            let savedSession = null;
-            if (client.sessionId) {
-              savedSession = await gdSessionService.addTranscriptSegment(client.sessionId, {
-                segmentId,
-                roomId: client.sessionId,
-                participantId: client.participantId || "candidate",
-                participantName: client.participantName || "Candidate",
-                speakerId: client.participantId || "candidate",
-                streamId: client.streamId,
-                username: client.username,
-                text: transcriptText,
-                durationSeconds: parsed.duration ? Math.max(1, Math.round(parsed.duration)) : Math.max(1, Math.round(transcriptText.split(/\s+/).length / 2.5)),
-                isInterruption: false,
-                confidence,
-                sequenceNumber: client.sequenceCounter,
-                turnId: client.turnId,
-                startTime: parsed.start,
-                endTime: parsed.start !== undefined && parsed.duration !== undefined ? parsed.start + parsed.duration : undefined,
-              });
-            }
-
-            // 2. Broadcast finalized segment to all participants in the GD room
-            const payload = {
-              segment: savedSession?.transcript.slice(-1)[0] || {
-                id: segmentId,
-                roomId: client.sessionId,
-                participantId: client.participantId,
-                participantName: client.participantName,
-                speakerId: client.participantId,
-                username: client.username,
-                text: transcriptText,
-                durationSeconds: parsed.duration || 3,
-                confidence,
-                timestamp: new Date(),
-              },
-              participants: savedSession?.participants,
-              currentTurn: savedSession?.currentTurn,
-            };
-
-            // Standard participant-attributed transcript event
-            broadcastToGDRoom(client.sessionId || "", {
-              type: "gd:transcript",
-              roomId: client.sessionId || "",
-              participantId: client.participantId || "candidate",
-              participantName: client.participantName || "Candidate",
-              speakerId: client.participantId || "candidate",
-              turnId: client.turnId,
-              streamId: client.streamId,
-              text: transcriptText,
-              isFinal: true,
-              startTime: parsed.start ?? 0,
-              endTime: parsed.start !== undefined && parsed.duration !== undefined ? parsed.start + parsed.duration : undefined,
-              timestamp: Date.now(),
-              durationSeconds: parsed.duration || 3,
-              payload,
-            });
-
-            // Modern normalized event
-            broadcastToGDRoom(client.sessionId || "", {
-              type: "gd:transcription:final",
-              payload: normalizedEvent,
-            });
-
-            // Backward-compatible event for existing GDRoomPage listeners
-            broadcastToGDRoom(client.sessionId || "", {
-              type: "new_transcript_segment",
-              payload,
-            });
-          } else {
-            // Standard participant-attributed interim transcript event
-            broadcastToGDRoom(client.sessionId || "", {
-              type: "gd:transcript",
-              roomId: client.sessionId || "",
-              participantId: client.participantId || "candidate",
-              turnId: client.turnId,
-              streamId: client.streamId,
-              participantName: client.participantName || "Candidate",
-              speakerId: client.participantId || "candidate",
-              text: transcriptText,
-              isFinal: false,
-              startTime: parsed.start ?? 0,
-              endTime: parsed.start !== undefined && parsed.duration !== undefined ? parsed.start + parsed.duration : undefined,
-              timestamp: Date.now(),
-            });
-
-            // Interim broadcast: show live preview to everyone in room without DB write
-            broadcastToGDRoom(client.sessionId || "", {
-              type: "gd:transcription:interim",
-              payload: normalizedEvent,
-            });
-
-            // Backward-compatible interim event
-            broadcastToGDRoom(client.sessionId || "", {
-              type: "participant_interim_transcript",
-              payload: {
-                participantId: client.participantId,
-                username: client.username,
-                participantName: client.participantName,
-                text: transcriptText,
-              },
-            });
-          }
-        } catch (err: any) {
-          console.warn("[GD Transcription Gateway] Error processing transcript packet:", err.message);
-        }
-      });
-
-      upstreamSocket.on("error", (err: Error) => {
-        if (client.keepAliveTimer) {
-          clearInterval(client.keepAliveTimer);
-          client.keepAliveTimer = null;
-        }
-        console.warn(`[GD Transcription Gateway] Deepgram upstream error for participant ${client.participantId}:`, err.message);
-        handleUpstreamReconnect(client);
-      });
-
-      upstreamSocket.on("close", () => {
-        if (client.keepAliveTimer) {
-          clearInterval(client.keepAliveTimer);
-          client.keepAliveTimer = null;
-        }
-        if (client.readyState === WebSocket.OPEN && client.isActive) {
-          handleUpstreamReconnect(client);
-        }
-      });
-    } catch (err: any) {
-      if (client.keepAliveTimer) {
-        clearInterval(client.keepAliveTimer);
-        client.keepAliveTimer = null;
-      }
-      console.error("[GD Transcription Gateway] Upstream initialization failed:", err.message);
-      handleUpstreamReconnect(client);
-    }
-  }
-
-  function handleUpstreamReconnect(client: GDTranscriptionClient) {
-    teardownUpstream(client);
-    if (client.readyState !== WebSocket.OPEN) return;
-
-    client.reconnectAttempts = (client.reconnectAttempts || 0) + 1;
-    if (client.reconnectAttempts > 5) {
-      client.send(
-        JSON.stringify({
-          type: "gd:transcription:error",
-          message: "Unable to maintain speech recognition connection. Please check your network.",
-        })
-      );
-      return;
-    }
-
-    // Exponential backoff with jitter (500ms, 1000ms, 2000ms...)
-    const delay = Math.min(5000, 500 * Math.pow(2, client.reconnectAttempts - 1) + Math.random() * 300);
-    client.send(
-      JSON.stringify({
-        type: "gd:transcription:reconnecting",
-        attempt: client.reconnectAttempts,
-        message: "Reconnecting speech recognition engine...",
-      })
-    );
-
-    setTimeout(() => {
-      if (client.readyState === WebSocket.OPEN) {
-        setupUpstream(client);
-      }
-    }, delay);
-  }
-
-  function teardownUpstream(client: GDTranscriptionClient) {
-    if (client.keepAliveTimer) {
-      clearInterval(client.keepAliveTimer);
-      client.keepAliveTimer = null;
-    }
-    const upstream = client.upstreamSocket;
-    if (upstream) {
-      try {
-        if (upstream.readyState === WebSocket.OPEN) {
-          upstream.send(JSON.stringify({ type: "CloseStream" }));
-        }
-        upstream.close();
-      } catch {}
-      client.upstreamSocket = null;
-    }
-  }
-
+  wss.on("close", () => clearInterval(heartbeat));
   return wss;
+}
+
+function closeClient(client: GDStreamClient) {
+  if (client.keepAlive) clearInterval(client.keepAlive);
+  try { client.upstream?.close(); } catch {}
+  client.terminate();
 }

@@ -1,4 +1,4 @@
-import { raw, Router } from "express";
+import { Router } from "express";
 import {
   getRandomTopic,
   getTopicsPool,
@@ -22,7 +22,6 @@ import {
   getGDBookmarks,
   getModeratorSpeech,
   getGDTranscriptionCredentials,
-  transcribeGDClip,
 } from "../controllers/gdController";
 import { protect, optionalAuth } from "../middleware/authMiddleware";
 
@@ -56,10 +55,15 @@ router.post("/sessions/:sessionId/join", protect as any, joinGDRoom as any);
 
 // Discussion & Turn management
 router.post("/rooms/:roomId/start", protect as any, startGDSession as any);
+router.post("/sessions/:sessionId/start", protect as any, startGDSession as any);
 router.post("/rooms/:roomId/begin", protect as any, beginGDSessionTurn as any);
+router.post("/sessions/:sessionId/begin", protect as any, beginGDSessionTurn as any);
 router.post("/rooms/:roomId/turns/finish", protect as any, finishStudentTurn as any);
+router.post("/sessions/:sessionId/turns/finish", protect as any, finishStudentTurn as any);
 router.post("/rooms/:roomId/turns/pass", protect as any, passStudentTurn as any);
+router.post("/sessions/:sessionId/turns/pass", protect as any, passStudentTurn as any);
 router.post("/rooms/:roomId/turns/skip", protect as any, skipStudentTurn as any);
+router.post("/sessions/:sessionId/turns/skip", protect as any, skipStudentTurn as any);
 router.post("/rooms/:roomId/moderator-speech", optionalAuth as any, getModeratorSpeech as any);
 router.post("/sessions/:sessionId/moderator-speech", optionalAuth as any, getModeratorSpeech as any);
 
@@ -67,12 +71,6 @@ router.post("/sessions/:sessionId/moderator-speech", optionalAuth as any, getMod
 router.get("/transcription/credentials", protect as any, getGDTranscriptionCredentials as any);
 router.get("/rooms/:roomId/stt-credentials", protect as any, getGDTranscriptionCredentials as any);
 router.get("/sessions/:sessionId/stt-credentials", protect as any, getGDTranscriptionCredentials as any);
-router.post(
-  "/rooms/:roomId/transcription/segment",
-  protect as any,
-  raw({ type: "audio/l16", limit: "1mb" }) as any,
-  transcribeGDClip as any,
-);
 router.post("/sessions/:sessionId/transcript", protect as any, appendTranscriptSegment as any);
 router.post("/rooms/:roomId/transcript", protect as any, appendTranscriptSegment as any);
 router.post("/rooms/:roomId/end", protect as any, endGDSession as any);

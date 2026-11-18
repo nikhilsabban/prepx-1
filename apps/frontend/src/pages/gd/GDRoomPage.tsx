@@ -50,7 +50,6 @@ import {
   type IGDCurrentTurn,
 } from "../../services/gdService";
 import { GDAudioCaptureSession } from "../../services/gdAudioCaptureService";
-import { fetchSTTCredentials } from "../../services/interviewService";
 import { toast } from "react-toastify";
 import { getErrorMessage } from "../../lib/utils";
 import { BACKEND_URL } from "../../lib/config";
@@ -422,9 +421,6 @@ export function GDRoomPage() {
       } else {
         startMurfOrNativeSTT();
       }
-      if (sttEngine === "native") {
-        startSpeechRecognition();
-      }
     } else if (!isMicOnRef.current) {
       if (audioTrack) audioTrack.enabled = false;
       audioCaptureSessionRef.current?.pause();
@@ -638,12 +634,11 @@ export function GDRoomPage() {
     }
   }
 
-  // Resilient transcript dispatcher: sends via WebSocket if connected, otherwise submits via REST API and updates local state optimistically
+  // Final speech is saved through the authenticated REST route so turn changes cannot drop it.
   async function dispatchTranscriptSegment(
     text: string,
     durationSeconds?: number,
     segmentIdOverride?: string,
-    persistedAlready = false,
   ) {
     const textToSubmit = text.trim();
     if (!textToSubmit || !sessionId) return;
@@ -703,57 +698,28 @@ export function GDRoomPage() {
       isFinal: true,
     };
 
-    let sentViaWs = false;
-    if (!persistedAlready && wsRef.current?.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "gd:transcript",
-            roomId: sessionId,
-            sessionId,
-            participantId: participant.id,
-            participantName: participant.name,
-            speakerId: participant.id,
-            text: textToSubmit,
-            durationSeconds: calculatedDuration,
-            startTime: 0,
-            endTime: calculatedDuration,
-            timestamp: Date.now(),
-            isFinal: true,
-            payload,
-          })
-        );
-        sentViaWs = true;
-      } catch (wsErr) {
-        console.warn("WebSocket send transcript segment error, falling back to REST:", wsErr);
+    try {
+      const res = await submitTranscriptSegment(sessionId, payload);
+      if (res?.lastSegment) {
+        setSession((prev) => {
+          if (!prev) return prev;
+          const updatedTranscript = prev.transcript.map((s) =>
+            s.id === segmentId ? { ...res.lastSegment, timestamp: new Date(res.lastSegment.timestamp) } : s
+          );
+          const hasSegment = updatedTranscript.some((s) => s.id === res.lastSegment.id);
+          return {
+            ...prev,
+            transcript: hasSegment ? updatedTranscript : [...updatedTranscript, res.lastSegment],
+            participants: res.participants || prev.participants,
+          };
+        });
       }
-    }
-
-    // If WebSocket is not open or sending threw an error, fall back to REST endpoint immediately
-    if (!sentViaWs && !persistedAlready) {
-      try {
-        const res = await submitTranscriptSegment(sessionId, payload);
-        if (res?.lastSegment) {
-          setSession((prev) => {
-            if (!prev) return prev;
-            const updatedTranscript = prev.transcript.map((s) =>
-              s.id === segmentId ? { ...res.lastSegment, timestamp: new Date(res.lastSegment.timestamp) } : s
-            );
-            const hasSegment = updatedTranscript.some((s) => s.id === res.lastSegment.id);
-            return {
-              ...prev,
-              transcript: hasSegment ? updatedTranscript : [...updatedTranscript, res.lastSegment],
-              participants: res.participants || prev.participants,
-            };
-          });
-        }
-      } catch (err: any) {
-        console.warn("Failed to record transcript segment via REST:", err);
-      }
+    } catch (err: any) {
+      console.warn("Failed to record transcript segment via REST:", err);
     }
   }
 
-  // 4. Distributed, Participant-Isolated Real-Time AudioWorklet & Deepgram Nova-3 PCM Capture
+  // 4. Continuous MediaRecorder stream through the authenticated GD transcription proxy
   function startMurfOrNativeSTT() {
     if (!isMicOnRef.current || !localStreamRef.current || sessionRef.current?.status !== "in_progress" || !isMyTurnRef.current) return;
 
@@ -810,16 +776,12 @@ export function GDRoomPage() {
           } catch { }
         }
         if (event?.text && event.text.trim().length >= 2) {
-          dispatchTranscriptSegment(
-            event.text.trim(),
-            undefined,
-            event.segmentId,
-            Boolean(event.persisted),
-          );
+          dispatchTranscriptSegment(event.text.trim(), undefined, event.segmentId);
         }
       },
       onStatusChange: (status) => {
         if (status === "listening") {
+          stopSpeechRecognition();
           setSttEngine("deepgram");
         } else if (status === "paused") {
           setLiveTranscriptPreview("");
@@ -831,13 +793,13 @@ export function GDRoomPage() {
         }
       },
       onError: (err) => {
-        console.warn("[GDRoom] AudioWorklet PCM streaming notice:", err.message);
+      console.warn("[GDRoom] Streaming speech recognition notice:", err.message);
       },
     });
 
     audioCaptureSessionRef.current = sessionCapture;
     sessionCapture.start(localStreamRef.current).catch((err) => {
-      console.warn("[GDRoom] AudioWorklet start failed, using native fallback:", err);
+      console.warn("[GDRoom] Speech streaming start failed, using native fallback:", err);
       startSpeechRecognition();
     });
   }
@@ -1807,7 +1769,7 @@ export function GDRoomPage() {
       murfSocketRef.current = null;
     }
 
-    // 4. Destroy AudioWorklet PCM capture session
+    // 4. Destroy the continuous MediaRecorder transcription session
     if (audioCaptureSessionRef.current) {
       try {
         audioCaptureSessionRef.current.destroy();

@@ -433,25 +433,35 @@ export function Interview() {
             const wsProtocol = wsBase.startsWith("https") ? "wss:" : "ws:";
             const wsHost = wsBase.replace(/^https?:\/\//i, "");
 
-            let socket: WebSocket;
-            if (creds.proxyUrl) {
+            let socket: WebSocket | null = null;
+            const isVercelHost = wsHost.includes(".vercel.app");
+
+            if (creds.key) {
+              // Direct Deepgram cloud WebSocket (bypasses serverless WebSocket limitations on Vercel)
+              const directUrl = `wss://api.deepgram.com/v1/listen?model=${encodeURIComponent(
+                creds.recommendedModel || "nova-3"
+              )}&language=${encodeURIComponent(
+                creds.defaultLanguage || "en-IN"
+              )}&smart_format=true&punctuate=true&interim_results=true&no_delay=true&endpointing=350&utterance_end_ms=1000&filler_words=true`;
+              socket = new WebSocket(directUrl, ["token", creds.key]);
+            } else if (creds.proxyUrl && !isVercelHost) {
+              // Dedicated / local server WebSocket proxy
               const wsUrl = `${wsProtocol}//${wsHost}${creds.proxyUrl}?token=${encodeURIComponent(
                 creds.token || ""
               )}&model=${encodeURIComponent(creds.recommendedModel || "nova-3")}&language=${encodeURIComponent(
                 creds.defaultLanguage || "en-IN"
               )}&interviewId=${encodeURIComponent(interviewId)}`;
               socket = new WebSocket(wsUrl);
-            } else if (creds.key) {
-              const legacyUrl =
-                "wss://api.deepgram.com/v1/listen?model=nova-3&language=en-IN&smart_format=true&punctuate=true&interim_results=true&no_delay=true&endpointing=350&utterance_end_ms=1000&filler_words=true";
-              socket = new WebSocket(legacyUrl, ["token", creds.key]);
-            } else {
-              throw new Error("STT configuration unavailable");
             }
 
-            socketRef.current = socket;
+            if (!socket) {
+              // On Vercel without direct key or when proxy unavailable, smoothly use native browser Speech Recognition
+              startNativeSpeechRecognition();
+              setSttStatus("listening");
+            } else {
+              socketRef.current = socket;
 
-            socket.onopen = () => {
+              socket.onopen = () => {
               hasDeepgramSTT = true;
               hasDeepgramRef.current = true;
               setSttStatus("listening");
@@ -555,6 +565,7 @@ export function Interview() {
 
             socket.onerror = handleSocketDisconnect;
             socket.onclose = handleSocketDisconnect;
+            }
           }
         } catch (dgErr) {
           console.warn("STT WebSocket fallback to browser engine:", dgErr);

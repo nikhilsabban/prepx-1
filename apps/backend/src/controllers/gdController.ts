@@ -30,20 +30,6 @@ function isRecentlyCompletedDiscussion(session: any): boolean {
     && timeSinceEnd <= 10 * 60_000;
 }
 
-function removeTranscriptOverlap(previous: string, current: string): string {
-  const previousWords = previous.toLocaleLowerCase().match(/[\p{L}\p{N}']+/gu) || [];
-  const matches = Array.from(current.matchAll(/[\p{L}\p{N}']+/gu));
-  const currentWords = matches.map((match) => match[0].toLocaleLowerCase());
-  const maxOverlap = Math.min(8, previousWords.length, currentWords.length);
-  for (let overlap = maxOverlap; overlap > 0; overlap--) {
-    const suffix = previousWords.slice(-overlap).map((word) => word.toLocaleLowerCase());
-    if (!suffix.every((word, index) => word === currentWords[index])) continue;
-    const start = matches[overlap]?.index;
-    return start === undefined ? "" : current.slice(start).trim();
-  }
-  return current.trim();
-}
-
 /**
  * Retrieves a random discussion topic from web RSS/Atom feeds (with fallback).
  */
@@ -528,7 +514,7 @@ export async function skipStudentTurn(req: AuthRequest, res: Response): Promise<
 export async function appendTranscriptSegment(req: AuthRequest, res: Response): Promise<void> {
   try {
     const sessionId = getParam(req.params.sessionId || req.params.roomId);
-    const { participantId, participantName, username, text, durationSeconds, isInterruption, language, confidence } = req.body;
+    const { id, segmentId, participantId, participantName, username, text, durationSeconds, isInterruption, language, confidence } = req.body;
 
     if (!sessionId || !text?.trim()) {
       res.status(400).json({ success: false, message: "Valid text and sessionId are required" });
@@ -546,6 +532,7 @@ export async function appendTranscriptSegment(req: AuthRequest, res: Response): 
     const speakerUsername = registeredParticipant.username || req.user?.username;
 
     const session = await gdSessionService.addTranscriptSegment(sessionId, {
+      segmentId: typeof segmentId === "string" ? segmentId : (typeof id === "string" ? id : undefined),
       participantId: speakerId,
       participantName: speakerName,
       username: speakerUsername,
@@ -561,7 +548,9 @@ export async function appendTranscriptSegment(req: AuthRequest, res: Response): 
       return;
     }
 
-    const lastSeg = session.transcript.slice(-1)[0];
+    const requestedSegmentId = typeof segmentId === "string" ? segmentId : (typeof id === "string" ? id : "");
+    const lastSeg = (requestedSegmentId && session.transcript.find((item) => item.id === requestedSegmentId))
+      || session.transcript.slice(-1)[0];
     broadcastToGDRoom(sessionId, {
       type: "new_transcript_segment",
       payload: {
@@ -812,6 +801,7 @@ export async function getGDTranscriptionCredentials(req: AuthRequest, res: Respo
     res.json({
       configured: true,
       proxyUrl: "/api/v1/gd/transcription/stream",
+      key: hasDeepgram ? process.env.DEEPGRAM_API_KEY : undefined,
       token,
       model: defaultModel,
       language: defaultLanguage,
@@ -824,116 +814,3 @@ export async function getGDTranscriptionCredentials(req: AuthRequest, res: Respo
   }
 }
 
-/** Transcribes a short PCM segment through Deepgram for serverless deployments. */
-export async function transcribeGDClip(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const roomId = getParam(req.params.roomId);
-    const userId = req.user?._id?.toString() || req.user?.id?.toString() || "";
-    const audio = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
-    const session = await gdSessionService.getSessionById(roomId);
-
-    const roomParticipant = getRoomParticipant(session, userId);
-    const isRecentlyCompleted = isRecentlyCompletedDiscussion(session);
-    if (!session || (session.status !== "in_progress" && !isRecentlyCompleted) || !roomParticipant || roomParticipant.isAi) {
-      res.status(403).json({ success: false, message: "Only a participant in an active or recently completed discussion can transcribe audio." });
-      return;
-    }
-    const segmentId = typeof req.query.segmentId === "string"
-      && /^[a-zA-Z0-9:_-]{8,160}$/.test(req.query.segmentId)
-      ? req.query.segmentId
-      : `http-${roomId}-${userId}-${Date.now().toString(36)}`;
-    const existingSegment = session.transcript.find((item) => item.id === segmentId);
-    if (existingSegment) {
-      res.json({ success: true, text: existingSegment.text, confidence: existingSegment.confidence || 0, segment: existingSegment, persisted: true });
-      return;
-    }
-    if (audio.length < 9600) {
-      res.status(400).json({ success: false, message: "Audio segment is too short to transcribe." });
-      return;
-    }
-
-    const apiKey = process.env.DEEPGRAM_API_KEY?.trim();
-    if (!apiKey) {
-      res.status(503).json({ success: false, message: "Cloud speech recognition is not configured." });
-      return;
-    }
-
-    const language = typeof req.query.language === "string"
-      ? req.query.language
-      : process.env.DEEPGRAM_LANGUAGE || "en-IN";
-    const url = new URL("https://api.deepgram.com/v1/listen");
-    url.searchParams.set("model", process.env.DEEPGRAM_MODEL || "nova-3");
-    url.searchParams.set("language", language);
-    url.searchParams.set("encoding", "linear16");
-    url.searchParams.set("sample_rate", "16000");
-    url.searchParams.set("channels", "1");
-    url.searchParams.set("smart_format", "true");
-    url.searchParams.set("punctuate", "true");
-    url.searchParams.set("filler_words", "true");
-
-    const topicText = `${session.topic?.question || ""} ${session.topic?.originalTitle || ""} ${session.topic?.category || ""}`;
-    const keyterms = Array.from(new Set(topicText.replace(/[^a-zA-Z0-9\s-]/g, " ").split(/\s+/)))
-      .filter((term) => term.length >= 3 && !["and", "the", "for", "with", "this", "that", "from"].includes(term.toLowerCase()))
-      .slice(0, 20);
-    for (const term of keyterms) url.searchParams.append("keyterm", term);
-
-    const upstream = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${apiKey}`,
-        "Content-Type": "audio/l16; rate=16000; channels=1",
-      },
-      body: audio,
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!upstream.ok) {
-      console.warn("[GD STT] Deepgram segment transcription failed:", upstream.status);
-      res.status(502).json({ success: false, message: "Cloud speech recognition could not process this segment." });
-      return;
-    }
-
-    const result: any = await upstream.json();
-    const alternative = result?.results?.channels?.[0]?.alternatives?.[0];
-    const rawText = String(alternative?.transcript || "").trim();
-    const previousParticipantSegment = [...session.transcript].reverse().find((item) => item.participantId === roomParticipant.id);
-    const text = removeTranscriptOverlap(previousParticipantSegment?.text || "", rawText);
-    let segment: any = null;
-    if (text) {
-      const savedSession = await gdSessionService.addTranscriptSegment(roomId, {
-        segmentId,
-        roomId,
-        participantId: roomParticipant.id,
-        participantName: roomParticipant.name || "Participant",
-        username: roomParticipant.username || req.user?.username,
-        text,
-        durationSeconds: Math.max(1, Math.round(audio.length / (16000 * 2))),
-        language,
-        confidence: Number(alternative?.confidence) || 0,
-        isFinal: true,
-      });
-      segment = savedSession?.transcript.find((item) => item.id === segmentId) || null;
-      if (!segment || !savedSession) {
-        res.status(503).json({ success: false, message: "Transcription was recognized but could not be saved. Retry this segment." });
-        return;
-      }
-      broadcastToGDRoom(roomId, {
-        type: "new_transcript_segment",
-        payload: {
-          segment,
-          participants: savedSession.participants,
-          currentTurn: savedSession.currentTurn,
-        },
-      });
-    }
-    res.json({
-      success: true,
-      text,
-      confidence: Number(alternative?.confidence) || 0,
-      segment,
-      persisted: Boolean(segment),
-    });
-  } catch (error: any) {
-    console.error("[GD STT] Segment transcription error:", error?.message || error);
-    res.status(502).json({ success: false, message: "Cloud speech recognition is temporarily unavailable." });
-  }
-}
