@@ -11,10 +11,13 @@ class GDAudioProcessor extends AudioWorkletProcessor {
     this.chunkSize = 2048; // 2048 samples = 128ms of audio at 16kHz (optimal for real-time STT)
     this.buffer = [];
     this.isPaused = false;
+    this.resamplePosition = 0;
 
     this.port.onmessage = (event) => {
       if (event.data && event.data.command === "pause") {
+        this.flushBuffer();
         this.isPaused = true;
+        this.port.postMessage({ command: "flushed" });
       } else if (event.data && event.data.command === "resume") {
         this.isPaused = false;
       }
@@ -30,44 +33,27 @@ class GDAudioProcessor extends AudioWorkletProcessor {
     const channelData = input[0];
     const currentSampleRate = sampleRate; // Global AudioWorklet scope sampleRate
 
-    if (currentSampleRate === this.targetSampleRate) {
-      // Direct pass-through if browser is already running at 16kHz
-      for (let i = 0; i < channelData.length; i++) {
-        const s = Math.max(-1, Math.min(1, channelData[i]));
-        const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
-        this.buffer.push(Math.round(int16));
+    const ratio = currentSampleRate / this.targetSampleRate;
+    let position = this.resamplePosition;
+    for (; position < channelData.length; position += ratio) {
+      const indexFloor = Math.floor(position);
+      const indexCeil = Math.min(channelData.length - 1, indexFloor + 1);
+      const fraction = position - indexFloor;
+      const sample = channelData[indexFloor] * (1 - fraction) + channelData[indexCeil] * fraction;
+      const clipped = Math.max(-1, Math.min(1, sample));
+      this.buffer.push(Math.round(clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff));
 
-        if (this.buffer.length >= this.chunkSize) {
-          const pcmChunk = new Int16Array(this.buffer.splice(0, this.chunkSize));
-          this.port.postMessage(pcmChunk.buffer, [pcmChunk.buffer]);
-        }
-      }
-    } else {
-      // Linear interpolation downsampling
-      const ratio = currentSampleRate / this.targetSampleRate;
-      const newLength = Math.floor(channelData.length / ratio);
-
-      for (let i = 0; i < newLength; i++) {
-        const srcIndex = i * ratio;
-        const indexFloor = Math.floor(srcIndex);
-        const indexCeil = Math.min(channelData.length - 1, Math.ceil(srcIndex));
-        const fraction = srcIndex - indexFloor;
-
-        const sample =
-          channelData[indexFloor] * (1 - fraction) + channelData[indexCeil] * fraction;
-
-        const s = Math.max(-1, Math.min(1, sample));
-        const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
-        this.buffer.push(Math.round(int16));
-
-        if (this.buffer.length >= this.chunkSize) {
-          const pcmChunk = new Int16Array(this.buffer.splice(0, this.chunkSize));
-          this.port.postMessage(pcmChunk.buffer, [pcmChunk.buffer]);
-        }
-      }
+      if (this.buffer.length >= this.chunkSize) this.flushBuffer(this.chunkSize);
     }
+    this.resamplePosition = position - channelData.length;
 
     return true;
+  }
+
+  flushBuffer(sampleCount = this.buffer.length) {
+    if (sampleCount <= 0) return;
+    const pcmChunk = new Int16Array(this.buffer.splice(0, sampleCount));
+    this.port.postMessage(pcmChunk.buffer, [pcmChunk.buffer]);
   }
 }
 

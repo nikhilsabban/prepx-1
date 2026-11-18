@@ -793,6 +793,9 @@ class GDSessionService {
       });
     }
 
+    // Preserve the old schema field for compatibility, without numbered rounds.
+    session.round = 1;
+
     // 2. Only invited/joined students take speaking slots; the host moderates the room.
     // If no other students are present (e.g. host testing or practicing solo), allow non-AI participants so turns advance.
     const studentParticipants = session.participants.filter(
@@ -812,12 +815,11 @@ class GDSessionService {
     const onlineStudents = allStudents.filter((p) => p.isOnline !== false);
     const activeStudents = onlineStudents.length > 1 ? onlineStudents : allStudents;
 
-    // 3. Find eligible students who have NOT yet spoken in the current round
+    // 3. Rotate through active participants before anyone receives another turn
     let eligibleStudents = activeStudents.filter((p) => !p.hasSpokenInCurrentRound);
 
-    // If all active students have had an opportunity in this round, advance round
+    // Once everyone has had a turn, start another continuous rotation
     if (eligibleStudents.length === 0) {
-      session.round = (session.round || 1) + 1;
       for (const p of activeStudents) {
         p.hasSpokenInCurrentRound = false;
       }

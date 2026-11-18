@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { raw, Router } from "express";
 import {
   getRandomTopic,
   getTopicsPool,
@@ -22,6 +22,7 @@ import {
   getGDBookmarks,
   getModeratorSpeech,
   getGDTranscriptionCredentials,
+  transcribeGDClip,
 } from "../controllers/gdController";
 import { protect, optionalAuth } from "../middleware/authMiddleware";
 
@@ -66,6 +67,12 @@ router.post("/sessions/:sessionId/moderator-speech", optionalAuth as any, getMod
 router.get("/transcription/credentials", protect as any, getGDTranscriptionCredentials as any);
 router.get("/rooms/:roomId/stt-credentials", protect as any, getGDTranscriptionCredentials as any);
 router.get("/sessions/:sessionId/stt-credentials", protect as any, getGDTranscriptionCredentials as any);
+router.post(
+  "/rooms/:roomId/transcription/segment",
+  protect as any,
+  raw({ type: "audio/l16", limit: "1mb" }) as any,
+  transcribeGDClip as any,
+);
 router.post("/sessions/:sessionId/transcript", protect as any, appendTranscriptSegment as any);
 router.post("/rooms/:roomId/transcript", protect as any, appendTranscriptSegment as any);
 router.post("/rooms/:roomId/end", protect as any, endGDSession as any);

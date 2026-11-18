@@ -86,6 +86,14 @@ export class GDAudioCaptureSession {
   private credentials: GDTranscriptionCredentials | null = null;
   private localStream: MediaStream | null = null;
   private keepAlivePingTimer: any = null;
+  private useHttpTranscription = false;
+  private bufferedPcm: number[] = [];
+  private transcriptionQueue: Promise<void> = Promise.resolve();
+  private transcriptionSequence = 0;
+  private transcriptionFailures = 0;
+  private previousFinalText = "";
+  private readonly restChunkSamples = 128_000; // 8 seconds at 16 kHz, with 0.5 seconds carried into the next chunk.
+  private readonly restOverlapSamples = 8_000;
 
   constructor(options: GDAudioCaptureOptions) {
     this.options = options;
@@ -115,8 +123,15 @@ export class GDAudioCaptureSession {
     // 1. Fetch credentials
     this.credentials = await fetchGDTranscriptionCredentials();
 
-    // Vercel serverless functions do not host persistent WebSockets.
-    // If backend is on *.vercel.app or STT is not configured, fallback to native browser STT cleanly without failing WebSockets.
+    // Vercel Functions cannot keep the realtime socket open, so send short PCM clips
+    // to the authenticated HTTP transcription endpoint instead.
+    if (wsHost.includes(".vercel.app") && this.credentials?.configured && this.credentials.provider === "deepgram") {
+      this.useHttpTranscription = true;
+      await this.initAudioProcessing(mediaStream);
+      if (this.status !== "error") this.setStatus("listening", "Cloud speech recognition is listening");
+      return;
+    }
+
     if (wsHost.includes(".vercel.app") || !this.credentials?.configured || !this.credentials?.token) {
       this.setStatus("error", "Serverless environment or missing STT key, using native browser STT.");
       this.options.onError?.(new Error("WebSocket unavailable in current serverless environment."));
@@ -269,11 +284,13 @@ export class GDAudioCaptureSession {
           this.workletNode = worklet;
 
           worklet.port.onmessage = (e) => {
-            if (this.isPaused || this.isDestroyed) return;
-            const buffer = e.data as ArrayBuffer;
-            if (this.socket && this.socket.readyState === WebSocket.OPEN && buffer.byteLength > 0) {
-              this.socket.send(buffer);
+            if (e.data?.command === "flushed") {
+              if (this.useHttpTranscription) this.flushHttpAudio(true);
+              return;
             }
+            if (this.isDestroyed) return;
+            const buffer = e.data as ArrayBuffer;
+            this.sendAudioFrame(buffer);
           };
 
           source.connect(worklet);
@@ -326,9 +343,7 @@ export class GDAudioCaptureSession {
 
         if (pcmBuffer.length >= chunkSize) {
           const chunk = new Int16Array(pcmBuffer.splice(0, chunkSize));
-          if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(chunk.buffer);
-          }
+          this.sendAudioFrame(chunk.buffer);
         }
       }
     };
@@ -341,6 +356,98 @@ export class GDAudioCaptureSession {
     silentGain.connect(audioCtx.destination);
   }
 
+  private sendAudioFrame(buffer: ArrayBuffer): void {
+    if (!buffer.byteLength) return;
+    if (!this.useHttpTranscription) {
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) this.socket.send(buffer);
+      return;
+    }
+
+    const samples = new Int16Array(buffer);
+    for (let i = 0; i < samples.length; i++) this.bufferedPcm.push(samples[i]);
+    if (this.bufferedPcm.length >= this.restChunkSamples) this.flushHttpAudio(false);
+  }
+
+  private flushHttpAudio(finalChunk: boolean): void {
+    const minimumSamples = 4_800; // Preserve short trailing words while dropping residual noise.
+    if (this.bufferedPcm.length < (finalChunk ? minimumSamples : this.restChunkSamples)) {
+      if (finalChunk) {
+        this.bufferedPcm = [];
+        this.transcriptionQueue = this.transcriptionQueue.then(() => { this.previousFinalText = ""; });
+      }
+      return;
+    }
+
+    const sampleCount = finalChunk ? this.bufferedPcm.length : this.restChunkSamples;
+    const samples = this.bufferedPcm.splice(0, sampleCount);
+    if (!finalChunk) {
+      this.bufferedPcm = [...samples.slice(-this.restOverlapSamples), ...this.bufferedPcm];
+    } else {
+      this.bufferedPcm = [];
+    }
+
+    const audio = new Int16Array(samples).buffer;
+    this.transcriptionQueue = this.transcriptionQueue.then(async () => {
+      try {
+        const language = this.options.language || this.credentials?.language || "en-IN";
+        const response = await api.post<{ text?: string; confidence?: number }>(
+          `/api/v1/gd/rooms/${this.options.sessionId}/transcription/segment?language=${encodeURIComponent(language)}`,
+          audio,
+          { headers: { "Content-Type": "audio/l16; rate=16000; channels=1" }, timeout: 25000 },
+        );
+        this.transcriptionFailures = 0;
+        const text = this.removeRepeatedOverlap(String(response.data?.text || "").trim());
+        if (!text) return;
+        this.previousFinalText = String(response.data?.text || "").trim();
+        this.transcriptionSequence += 1;
+        this.options.onFinal?.({
+          type: "gd:transcription:final",
+          sessionId: this.options.sessionId,
+          participantId: this.options.participantId,
+          participantName: this.options.participantName,
+          username: this.options.username,
+          segmentId: `http-${this.options.sessionId}-${this.options.participantId}-${Date.now().toString(36)}-${this.transcriptionSequence}`,
+          sequenceNumber: this.transcriptionSequence,
+          text,
+          isFinal: true,
+          confidence: Number(response.data?.confidence) || 0,
+          provider: "deepgram",
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error: any) {
+        this.transcriptionFailures += 1;
+        if (this.transcriptionFailures >= 3) {
+          this.useHttpTranscription = false;
+          this.setStatus("error", "Cloud speech recognition is unavailable; switching to browser recognition.");
+          this.options.onError?.(error instanceof Error ? error : new Error("Cloud transcription failed"));
+        } else {
+          this.setStatus("reconnecting", "Retrying cloud speech recognition...");
+        }
+      }
+    });
+    if (finalChunk) {
+      this.transcriptionQueue = this.transcriptionQueue.then(() => { this.previousFinalText = ""; });
+    }
+  }
+
+  private removeRepeatedOverlap(text: string): string {
+    if (!this.previousFinalText || !text) return text;
+    const previousWords = this.previousFinalText.toLowerCase().match(/[\p{L}\p{N}']+/gu) || [];
+    const currentWordMatches = Array.from(text.matchAll(/[\p{L}\p{N}']+/gu));
+    const currentWords = currentWordMatches.map((match) => match[0]);
+    const currentLower = currentWords.map((word) => word.toLowerCase());
+    const maxOverlap = Math.min(3, previousWords.length, currentWords.length);
+    for (let overlap = maxOverlap; overlap > 0; overlap--) {
+      const previousTail = previousWords.slice(-overlap).map((word) => word.toLowerCase());
+      if (previousTail.every((word, index) => word === currentLower[index])) {
+        const nextWordPosition = currentWordMatches[overlap]?.index;
+        if (nextWordPosition === undefined) return "";
+        return text.slice(nextWordPosition).trim();
+      }
+    }
+    return text;
+  }
+
   public pause(): void {
     this.isPaused = true;
     this.setStatus("paused", "Microphone muted");
@@ -348,6 +455,8 @@ export class GDAudioCaptureSession {
       try {
         this.workletNode.port.postMessage({ command: "pause" });
       } catch {}
+    } else if (this.useHttpTranscription) {
+      this.flushHttpAudio(true);
     }
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       try {
@@ -386,6 +495,8 @@ export class GDAudioCaptureSession {
   }
 
   public destroy(): void {
+    if (this.useHttpTranscription) this.flushHttpAudio(true);
+    this.pause();
     this.isDestroyed = true;
     this.isPaused = true;
 

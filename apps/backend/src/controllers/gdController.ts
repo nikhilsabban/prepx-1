@@ -15,6 +15,14 @@ function getParam(param: string | string[] | undefined): string {
   return param || "";
 }
 
+function isActiveOrRecentlyFinishedSpeaker(session: any, userId: string): boolean {
+  if (session?.currentTurn?.participantId === userId) return true;
+  const cutoff = Date.now() - 120_000;
+  return (session?.turnHistory || []).some((turn: any) =>
+    turn.participantId === userId && new Date(turn.endedAt).getTime() >= cutoff
+  );
+}
+
 /**
  * Retrieves a random discussion topic from web RSS/Atom feeds (with fallback).
  */
@@ -508,8 +516,8 @@ export async function appendTranscriptSegment(req: AuthRequest, res: Response): 
 
     const speakerId = req.user?._id?.toString() || "";
     const room = await gdSessionService.getSessionById(sessionId);
-    if (!room || room.status !== "in_progress" || room.currentTurn?.participantId !== speakerId) {
-      res.status(403).json({ success: false, message: "Only the active speaker can submit transcript text." });
+    if (!room || room.status !== "in_progress" || !isActiveOrRecentlyFinishedSpeaker(room, speakerId)) {
+      res.status(403).json({ success: false, message: "Only the active or recently finished speaker can submit transcript text." });
       return;
     }
     const registeredParticipant = room.participants.find((participant) => participant.id === speakerId);
@@ -728,7 +736,7 @@ export async function getModeratorSpeech(req: Request, res: Response): Promise<v
 
     const textToSynthesize =
       textOverride?.trim() ||
-      `Welcome, everyone. Today's group discussion topic is: ${topicTitle}. ${topicDesc} Each participant will receive one turn per round in a randomized order, so everyone has an equal opportunity to contribute. Each speaking turn is limited to 90 seconds. You may pass at any time, and you will remain eligible in later rounds. Please keep your microphone muted while another participant is speaking; only the assigned active speaker's microphone is captured and transcribed. The live transcript is associated with the speaker and saved for the final report. After the discussion, PrepX will generate a separate performance analysis for each participant using their finalized transcript. Please listen respectfully and build on the points raised by others. I will begin the first turn after this briefing.`;
+      `Welcome, everyone. Today's group discussion topic is: ${topicTitle}. ${topicDesc} Participants will take turns speaking continuously, with the order rotating fairly so everyone can contribute throughout the discussion. Each speaking turn is limited to 90 seconds. You may pass at any time. Please keep your microphone muted while another participant is speaking; only the assigned active speaker's microphone is captured and transcribed. The live transcript is associated with the speaker and saved for the final report. After the discussion, PrepX will generate a separate performance analysis for each participant using their finalized transcript. Please listen respectfully and build on the points raised by others. I will begin the first turn after this briefing.`;
 
     const { synthesizeSpeech } = await import("../services/murfService");
     const tts = await synthesizeSpeech(textToSynthesize, "en-US-terrell");
@@ -796,5 +804,75 @@ export async function getGDTranscriptionCredentials(req: AuthRequest, res: Respo
     });
   } catch (error: any) {
     res.status(500).json({ configured: false, message: error.message });
+  }
+}
+
+/** Transcribes a short PCM segment through Deepgram for serverless deployments. */
+export async function transcribeGDClip(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const roomId = getParam(req.params.roomId);
+    const userId = req.user?._id?.toString() || req.user?.id?.toString() || "";
+    const audio = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+    const session = await gdSessionService.getSessionById(roomId);
+
+    if (!session || session.status !== "in_progress" || !isActiveOrRecentlyFinishedSpeaker(session, userId)) {
+      res.status(403).json({ success: false, message: "Only the active or recently finished speaker can transcribe audio." });
+      return;
+    }
+    if (audio.length < 9600) {
+      res.status(400).json({ success: false, message: "Audio segment is too short to transcribe." });
+      return;
+    }
+
+    const apiKey = process.env.DEEPGRAM_API_KEY?.trim();
+    if (!apiKey) {
+      res.status(503).json({ success: false, message: "Cloud speech recognition is not configured." });
+      return;
+    }
+
+    const language = typeof req.query.language === "string"
+      ? req.query.language
+      : process.env.DEEPGRAM_LANGUAGE || "en-IN";
+    const url = new URL("https://api.deepgram.com/v1/listen");
+    url.searchParams.set("model", process.env.DEEPGRAM_MODEL || "nova-3");
+    url.searchParams.set("language", language);
+    url.searchParams.set("encoding", "linear16");
+    url.searchParams.set("sample_rate", "16000");
+    url.searchParams.set("channels", "1");
+    url.searchParams.set("smart_format", "true");
+    url.searchParams.set("punctuate", "true");
+    url.searchParams.set("filler_words", "true");
+
+    const topicText = `${session.topic?.question || ""} ${session.topic?.originalTitle || ""} ${session.topic?.category || ""}`;
+    const keyterms = Array.from(new Set(topicText.replace(/[^a-zA-Z0-9\s-]/g, " ").split(/\s+/)))
+      .filter((term) => term.length >= 3 && !["and", "the", "for", "with", "this", "that", "from"].includes(term.toLowerCase()))
+      .slice(0, 20);
+    for (const term of keyterms) url.searchParams.append("keyterm", term);
+
+    const upstream = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": "audio/l16; rate=16000; channels=1",
+      },
+      body: audio,
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!upstream.ok) {
+      console.warn("[GD STT] Deepgram segment transcription failed:", upstream.status);
+      res.status(502).json({ success: false, message: "Cloud speech recognition could not process this segment." });
+      return;
+    }
+
+    const result: any = await upstream.json();
+    const alternative = result?.results?.channels?.[0]?.alternatives?.[0];
+    res.json({
+      success: true,
+      text: String(alternative?.transcript || "").trim(),
+      confidence: Number(alternative?.confidence) || 0,
+    });
+  } catch (error: any) {
+    console.error("[GD STT] Segment transcription error:", error?.message || error);
+    res.status(502).json({ success: false, message: "Cloud speech recognition is temporarily unavailable." });
   }
 }

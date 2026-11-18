@@ -323,8 +323,8 @@ export function initGDTranscriptionGateway(server: HttpServer): WebSocketServer 
       urlObj.searchParams.set("punctuate", "true");
       urlObj.searchParams.set("interim_results", "true");
       urlObj.searchParams.set("no_delay", "true");
-      urlObj.searchParams.set("endpointing", "300"); // 300ms pause indicates natural phrase boundary
-      urlObj.searchParams.set("utterance_end_ms", "1000");
+      urlObj.searchParams.set("endpointing", "800"); // Keep short natural pauses inside the same phrase.
+      urlObj.searchParams.set("utterance_end_ms", "1500");
       urlObj.searchParams.set("filler_words", "true");
 
       for (const kt of topicKeyterms) {

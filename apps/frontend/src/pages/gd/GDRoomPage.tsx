@@ -101,6 +101,30 @@ export function formatTopicDisplay(raw: string): string {
   return `"${str}"`;
 }
 
+function getGroupDiscussionSpeechLocale(language?: string): string {
+  const normalized = language?.trim().toLowerCase() || "";
+  if (/^[a-z]{2}-[a-z]{2}$/i.test(normalized)) return normalized;
+  const locales: Record<string, string> = {
+    english: "en-IN",
+    en: "en-IN",
+    hindi: "hi-IN",
+    hi: "hi-IN",
+    bengali: "bn-IN",
+    bn: "bn-IN",
+    tamil: "ta-IN",
+    ta: "ta-IN",
+    telugu: "te-IN",
+    te: "te-IN",
+    marathi: "mr-IN",
+    mr: "mr-IN",
+    kannada: "kn-IN",
+    kn: "kn-IN",
+    malayalam: "ml-IN",
+    ml: "ml-IN",
+  };
+  return locales[normalized] || "en-IN";
+}
+
 export function GDRoomPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
@@ -157,6 +181,7 @@ export function GDRoomPage() {
   // Silence alert & timers
   const [silenceWarning, setSilenceWarning] = useState<string | null>(null);
   const [turnElapsedSeconds, setTurnElapsedSeconds] = useState(0);
+  const [discussionElapsedSeconds, setDiscussionElapsedSeconds] = useState(0);
 
   // Moderator Invite Modal
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -731,14 +756,6 @@ export function GDRoomPage() {
     const participant = currentParticipantRef.current || currentParticipant;
     if (!participant || !sessionId) return;
 
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
-    if (backendUrl.includes(".vercel.app")) {
-      // Vercel serverless platform does not host persistent WebSockets.
-      // Activate browser native SpeechRecognition directly without attempting WebSocket connection.
-      startSpeechRecognition();
-      return;
-    }
-
     if (audioCaptureSessionRef.current) {
       audioCaptureSessionRef.current.resume();
       setSttEngine("deepgram");
@@ -750,7 +767,7 @@ export function GDRoomPage() {
       participantId: participant.id,
       participantName: participant.name,
       username: participant.username || "participant",
-      language: "en-IN",
+      language: getGroupDiscussionSpeechLocale(sessionRef.current?.expectedLanguage),
       onInterim: (event) => {
         setLiveTranscriptPreview(event.text);
         if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -798,12 +815,14 @@ export function GDRoomPage() {
         } else if (status === "paused") {
           setLiveTranscriptPreview("");
         } else if (status === "error") {
+          const failedCapture = audioCaptureSessionRef.current;
+          audioCaptureSessionRef.current = null;
+          failedCapture?.destroy();
           startSpeechRecognition();
         }
       },
       onError: (err) => {
         console.warn("[GDRoom] AudioWorklet PCM streaming notice:", err.message);
-        startSpeechRecognition();
       },
     });
 
@@ -965,7 +984,7 @@ export function GDRoomPage() {
         (session?.topic as any)?.originalTitle ||
         "Today's Discussion";
       const topicTitle = formatTopicDisplay(rawTitle).replace(/^["']+|["']+$/g, "");
-      const fallbackText = `Welcome to today's Group Discussion on ${topicTitle}. Every participant receives one turn per round in a randomized order. Each turn lasts up to 90 seconds, and you may pass at any time while remaining eligible in later rounds. Keep your microphone muted when you are not the active speaker; only the assigned speaker is captured and transcribed. Your finalized transcript is saved, and PrepX will prepare a separate evidence-based analysis for each participant after the discussion. I will start the first turn after this briefing.`;
+      const fallbackText = `Welcome to today's Group Discussion on ${topicTitle}. Participants will take turns speaking continuously, with the order rotating fairly so everyone can contribute throughout the discussion. Each speaking turn lasts up to 90 seconds, and you may pass at any time. Keep your microphone muted when you are not the active speaker; only the assigned speaker is captured and transcribed. Your finalized transcript is saved, and PrepX will prepare a separate evidence-based analysis for each participant after the discussion. I will start the first turn after this briefing.`;
       speakBrowserFallback(fallbackText);
     }
   }
@@ -999,7 +1018,7 @@ export function GDRoomPage() {
       recognition.interimResults = true;
       recognition.maxAlternatives = 3;
 
-      recognition.lang = "en-IN";
+      recognition.lang = getGroupDiscussionSpeechLocale(sessionRef.current?.expectedLanguage);
 
       recognition.onstart = () => {
         isSpeechActiveRef.current = true;
@@ -1474,6 +1493,7 @@ export function GDRoomPage() {
                 return {
                   ...prev,
                   status: "in_progress",
+                  startedAt: payload.startedAt || prev.startedAt || new Date().toISOString(),
                   currentTurn: payload.currentTurn,
                   round: payload.round,
                   participants: payload.participants,
@@ -1487,7 +1507,7 @@ export function GDRoomPage() {
             case "turn_changed": {
               setSilenceWarning(null);
               setTurnElapsedSeconds(0);
-              toast.info(`Next Turn: @${payload.currentTurn?.username || "Participant"} (Round ${payload.round})`);
+              toast.info(`Next Turn: @${payload.currentTurn?.username || "Participant"}`);
               setSession((prev) => {
                 if (!prev) return prev;
                 return {
@@ -1690,6 +1710,21 @@ export function GDRoomPage() {
 
     return () => clearInterval(interval);
   }, [session?.status, session?.currentTurn?.participantId, session?.currentTurn?.startedAt]);
+
+  useEffect(() => {
+    if (session?.status !== "in_progress") {
+      setDiscussionElapsedSeconds(0);
+      return;
+    }
+
+    const startedAt = new Date(session.startedAt || session.createdAt).getTime();
+    const updateElapsed = () => {
+      setDiscussionElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    };
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [session?.status, session?.startedAt, session?.createdAt]);
 
   // Auto-scroll transcript container
   useEffect(() => {
@@ -2235,7 +2270,9 @@ export function GDRoomPage() {
               {session.status === "in_progress" ? (
                 <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  LIVE DISCUSSION (ROUND {session.round})
+                  LIVE DISCUSSION · {discussionElapsedSeconds >= 3600
+                    ? `${Math.floor(discussionElapsedSeconds / 3600)}:${String(Math.floor((discussionElapsedSeconds % 3600) / 60)).padStart(2, "0")}:${String(discussionElapsedSeconds % 60).padStart(2, "0")}`
+                    : `${String(Math.floor(discussionElapsedSeconds / 60)).padStart(2, "0")}:${String(discussionElapsedSeconds % 60).padStart(2, "0")}`}
                 </span>
               ) : (
                 <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
@@ -2682,7 +2719,7 @@ export function GDRoomPage() {
 
             {/* Discussion Room Status */}
             <div className="text-[11px] sm:text-xs text-zinc-400 w-full sm:w-auto text-center sm:text-right">
-              Capacity: {studentParticipants.length}/5 students • Round {session.round}
+              Capacity: {studentParticipants.length}/5 students
             </div>
           </div>
         </div>

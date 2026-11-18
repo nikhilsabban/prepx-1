@@ -4895,8 +4895,8 @@ function calculateATSScore(input) {
 // src/services/ai/aiAnalysisService.ts
 import { Groq as Groq2 } from "groq-sdk";
 function getGroqKeyPool() {
-  const raw = process.env.GROQ_API_KEY || "";
-  return raw.split(",").map((k) => k.trim()).filter(Boolean);
+  const raw2 = process.env.GROQ_API_KEY || "";
+  return raw2.split(",").map((k) => k.trim()).filter(Boolean);
 }
 async function analyzeResumeWithAI(req) {
   const keys = getGroqKeyPool();
@@ -16338,8 +16338,8 @@ Important: Output raw JSON only. Do not wrap in markdown or backticks.`;
           max_tokens: 1500,
           temperature: 0.2
         });
-        const raw = response.choices?.[0]?.message?.content?.trim() || "";
-        const clean = raw.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+        const raw2 = response.choices?.[0]?.message?.content?.trim() || "";
+        const clean = raw2.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
         fixedResult = JSON.parse(clean);
         if (fixedResult && fixedResult.fixedCode) break;
       } catch (err) {
@@ -16607,7 +16607,7 @@ router4.get("/bookmarks", protect, getUserBookmarks);
 var codingRoutes_default = router4;
 
 // src/routes/gdRoutes.ts
-import { Router as Router5 } from "express";
+import { raw, Router as Router5 } from "express";
 
 // src/controllers/gdController.ts
 import mongoose14 from "mongoose";
@@ -16778,15 +16778,15 @@ var GDGroqService = class {
    * Safely calls chatCompletion and extracts/parses JSON object.
    */
   async chatCompletionJson(messages, options = {}) {
-    const raw = await this.chatCompletion(messages, {
+    const raw2 = await this.chatCompletion(messages, {
       ...options,
       responseFormatJson: false
     });
-    if (!raw) return null;
+    if (!raw2) return null;
     try {
-      return JSON.parse(raw);
+      return JSON.parse(raw2);
     } catch (parseErr) {
-      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || raw.match(/\{[\s\S]*\}/);
+      const jsonMatch = raw2.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || raw2.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
           const candidate = jsonMatch[1] || jsonMatch[0];
@@ -16971,15 +16971,15 @@ var GDTopicDiscoveryService = class {
   /**
    * Cleans HTML markup, unescapes decimal/hex/named entities, and trims text.
    */
-  sanitizeText(raw) {
-    if (!raw) return "";
+  sanitizeText(raw2) {
+    if (!raw2) return "";
     let str = "";
-    if (typeof raw === "string") {
-      str = raw;
-    } else if (typeof raw === "object") {
-      str = raw["#text"] || raw.value || raw.title || raw.text || "";
+    if (typeof raw2 === "string") {
+      str = raw2;
+    } else if (typeof raw2 === "object") {
+      str = raw2["#text"] || raw2.value || raw2.title || raw2.text || "";
     } else {
-      str = String(raw);
+      str = String(raw2);
     }
     str = str.replace(/<!\[CDATA\[(.*?)\]\]>/gs, "$1").replace(/<[^>]*>/g, " ");
     const decodeEntities = (input) => {
@@ -18901,6 +18901,7 @@ var GDSessionService = class {
         wordsSpoken: wordsSpoken || 0
       });
     }
+    session.round = 1;
     const studentParticipants = session.participants.filter(
       (p) => !p.isAi && !p.isHost && p.role !== "admin"
     );
@@ -18914,7 +18915,6 @@ var GDSessionService = class {
     const activeStudents = onlineStudents.length > 1 ? onlineStudents : allStudents;
     let eligibleStudents = activeStudents.filter((p) => !p.hasSpokenInCurrentRound);
     if (eligibleStudents.length === 0) {
-      session.round = (session.round || 1) + 1;
       for (const p of activeStudents) {
         p.hasSpokenInCurrentRound = false;
       }
@@ -19206,6 +19206,13 @@ init_User();
 function getParam(param) {
   if (Array.isArray(param)) return param[0] || "";
   return param || "";
+}
+function isActiveOrRecentlyFinishedSpeaker(session, userId) {
+  if (session?.currentTurn?.participantId === userId) return true;
+  const cutoff = Date.now() - 12e4;
+  return (session?.turnHistory || []).some(
+    (turn) => turn.participantId === userId && new Date(turn.endedAt).getTime() >= cutoff
+  );
 }
 async function getRandomTopic(req, res) {
   try {
@@ -19593,8 +19600,8 @@ async function appendTranscriptSegment(req, res) {
     }
     const speakerId = req.user?._id?.toString() || "";
     const room = await gdSessionService.getSessionById(sessionId);
-    if (!room || room.status !== "in_progress" || room.currentTurn?.participantId !== speakerId) {
-      res.status(403).json({ success: false, message: "Only the active speaker can submit transcript text." });
+    if (!room || room.status !== "in_progress" || !isActiveOrRecentlyFinishedSpeaker(room, speakerId)) {
+      res.status(403).json({ success: false, message: "Only the active or recently finished speaker can submit transcript text." });
       return;
     }
     const registeredParticipant = room.participants.find((participant) => participant.id === speakerId);
@@ -19767,7 +19774,7 @@ async function getModeratorSpeech(req, res) {
     }
     const topicTitle = session.topic?.question || session.topic?.originalTitle || session.topic?.title || "Today's Discussion";
     const topicDesc = session.topic?.description || "";
-    const textToSynthesize = textOverride?.trim() || `Welcome, everyone. Today's group discussion topic is: ${topicTitle}. ${topicDesc} Each participant will receive one turn per round in a randomized order, so everyone has an equal opportunity to contribute. Each speaking turn is limited to 90 seconds. You may pass at any time, and you will remain eligible in later rounds. Please keep your microphone muted while another participant is speaking; only the assigned active speaker's microphone is captured and transcribed. The live transcript is associated with the speaker and saved for the final report. After the discussion, PrepX will generate a separate performance analysis for each participant using their finalized transcript. Please listen respectfully and build on the points raised by others. I will begin the first turn after this briefing.`;
+    const textToSynthesize = textOverride?.trim() || `Welcome, everyone. Today's group discussion topic is: ${topicTitle}. ${topicDesc} Participants will take turns speaking continuously, with the order rotating fairly so everyone can contribute throughout the discussion. Each speaking turn is limited to 90 seconds. You may pass at any time. Please keep your microphone muted while another participant is speaking; only the assigned active speaker's microphone is captured and transcribed. The live transcript is associated with the speaker and saved for the final report. After the discussion, PrepX will generate a separate performance analysis for each participant using their finalized transcript. Please listen respectfully and build on the points raised by others. I will begin the first turn after this briefing.`;
     const { synthesizeSpeech: synthesizeSpeech2 } = await Promise.resolve().then(() => (init_murfService(), murfService_exports));
     const tts = await synthesizeSpeech2(textToSynthesize, "en-US-terrell");
     res.json({
@@ -19826,6 +19833,64 @@ async function getGDTranscriptionCredentials(req, res) {
     res.status(500).json({ configured: false, message: error.message });
   }
 }
+async function transcribeGDClip(req, res) {
+  try {
+    const roomId = getParam(req.params.roomId);
+    const userId = req.user?._id?.toString() || req.user?.id?.toString() || "";
+    const audio = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+    const session = await gdSessionService.getSessionById(roomId);
+    if (!session || session.status !== "in_progress" || !isActiveOrRecentlyFinishedSpeaker(session, userId)) {
+      res.status(403).json({ success: false, message: "Only the active or recently finished speaker can transcribe audio." });
+      return;
+    }
+    if (audio.length < 9600) {
+      res.status(400).json({ success: false, message: "Audio segment is too short to transcribe." });
+      return;
+    }
+    const apiKey = process.env.DEEPGRAM_API_KEY?.trim();
+    if (!apiKey) {
+      res.status(503).json({ success: false, message: "Cloud speech recognition is not configured." });
+      return;
+    }
+    const language = typeof req.query.language === "string" ? req.query.language : process.env.DEEPGRAM_LANGUAGE || "en-IN";
+    const url = new URL("https://api.deepgram.com/v1/listen");
+    url.searchParams.set("model", process.env.DEEPGRAM_MODEL || "nova-3");
+    url.searchParams.set("language", language);
+    url.searchParams.set("encoding", "linear16");
+    url.searchParams.set("sample_rate", "16000");
+    url.searchParams.set("channels", "1");
+    url.searchParams.set("smart_format", "true");
+    url.searchParams.set("punctuate", "true");
+    url.searchParams.set("filler_words", "true");
+    const topicText = `${session.topic?.question || ""} ${session.topic?.originalTitle || ""} ${session.topic?.category || ""}`;
+    const keyterms = Array.from(new Set(topicText.replace(/[^a-zA-Z0-9\s-]/g, " ").split(/\s+/))).filter((term) => term.length >= 3 && !["and", "the", "for", "with", "this", "that", "from"].includes(term.toLowerCase())).slice(0, 20);
+    for (const term of keyterms) url.searchParams.append("keyterm", term);
+    const upstream = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": "audio/l16; rate=16000; channels=1"
+      },
+      body: audio,
+      signal: AbortSignal.timeout(2e4)
+    });
+    if (!upstream.ok) {
+      console.warn("[GD STT] Deepgram segment transcription failed:", upstream.status);
+      res.status(502).json({ success: false, message: "Cloud speech recognition could not process this segment." });
+      return;
+    }
+    const result = await upstream.json();
+    const alternative = result?.results?.channels?.[0]?.alternatives?.[0];
+    res.json({
+      success: true,
+      text: String(alternative?.transcript || "").trim(),
+      confidence: Number(alternative?.confidence) || 0
+    });
+  } catch (error) {
+    console.error("[GD STT] Segment transcription error:", error?.message || error);
+    res.status(502).json({ success: false, message: "Cloud speech recognition is temporarily unavailable." });
+  }
+}
 
 // src/routes/gdRoutes.ts
 var router5 = Router5();
@@ -19857,6 +19922,12 @@ router5.post("/sessions/:sessionId/moderator-speech", optionalAuth, getModerator
 router5.get("/transcription/credentials", protect, getGDTranscriptionCredentials);
 router5.get("/rooms/:roomId/stt-credentials", protect, getGDTranscriptionCredentials);
 router5.get("/sessions/:sessionId/stt-credentials", protect, getGDTranscriptionCredentials);
+router5.post(
+  "/rooms/:roomId/transcription/segment",
+  protect,
+  raw({ type: "audio/l16", limit: "1mb" }),
+  transcribeGDClip
+);
 router5.post("/sessions/:sessionId/transcript", protect, appendTranscriptSegment);
 router5.post("/rooms/:roomId/transcript", protect, appendTranscriptSegment);
 router5.post("/rooms/:roomId/end", protect, endGDSession);
@@ -20980,8 +21051,8 @@ function initGDTranscriptionGateway(server) {
       urlObj.searchParams.set("punctuate", "true");
       urlObj.searchParams.set("interim_results", "true");
       urlObj.searchParams.set("no_delay", "true");
-      urlObj.searchParams.set("endpointing", "300");
-      urlObj.searchParams.set("utterance_end_ms", "1000");
+      urlObj.searchParams.set("endpointing", "800");
+      urlObj.searchParams.set("utterance_end_ms", "1500");
       urlObj.searchParams.set("filler_words", "true");
       for (const kt of topicKeyterms) {
         if (kt.trim()) {
@@ -21030,8 +21101,8 @@ function initGDTranscriptionGateway(server) {
       });
       upstreamSocket.on("message", async (data) => {
         try {
-          const raw = data.toString();
-          const parsed = JSON.parse(raw);
+          const raw2 = data.toString();
+          const parsed = JSON.parse(raw2);
           const alt = parsed.channel?.alternatives?.[0];
           const transcriptText = (alt?.transcript || parsed.transcript || parsed.text || "").trim();
           if (!transcriptText) return;
