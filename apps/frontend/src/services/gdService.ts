@@ -342,8 +342,15 @@ export async function beginDiscussionTurn(roomId: string): Promise<{
   round?: number;
   participants?: IGDParticipant[];
 }> {
-  const res = await api.post(`/api/v1/gd/rooms/${roomId}/begin`);
-  return res.data;
+  try {
+    const res = await api.post(`/api/v1/gd/rooms/${roomId}/begin`);
+    return res.data;
+  } catch (error: any) {
+    // Older deployed backends expose the kickoff only as `/start`.
+    if (error?.response?.status !== 404) throw error;
+    const res = await api.post(`/api/v1/gd/rooms/${roomId}/start`);
+    return res.data;
+  }
 }
 
 /**
