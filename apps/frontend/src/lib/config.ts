@@ -1,6 +1,11 @@
-export const BACKEND_URL =
+const CONFIGURED_BACKEND_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) ||
   "http://localhost:3003";
+
+export const BACKEND_URL =
+  typeof import.meta !== "undefined" && import.meta.env?.PROD
+    ? "https://ai-interviewer-backend-ten.vercel.app"
+    : CONFIGURED_BACKEND_URL;
 
 export const GOOGLE_CLIENT_ID =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_GOOGLE_CLIENT_ID) ||
