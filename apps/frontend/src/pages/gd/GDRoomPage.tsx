@@ -417,7 +417,17 @@ export function GDRoomPage() {
   useEffect(() => {
     if (!sessionId) return;
     initializeRoom();
+
+    const handleWindowLeave = () => {
+      cleanupResources();
+    };
+
+    window.addEventListener("beforeunload", handleWindowLeave);
+    window.addEventListener("pagehide", handleWindowLeave);
+
     return () => {
+      window.removeEventListener("beforeunload", handleWindowLeave);
+      window.removeEventListener("pagehide", handleWindowLeave);
       cleanupResources();
     };
   }, [sessionId]);
@@ -1725,37 +1735,105 @@ export function GDRoomPage() {
     return () => clearInterval(interval);
   }, [sessionId, isEnding, navigate]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount - strictly terminates all audio, speech, streams, and sockets
   function cleanupResources() {
+    // 1. Immediately pause and destroy moderator voice playback
+    if (moderatorAudioRef.current) {
+      try {
+        moderatorAudioRef.current.pause();
+        moderatorAudioRef.current.currentTime = 0;
+        moderatorAudioRef.current.src = "";
+        moderatorAudioRef.current.load();
+      } catch { }
+      moderatorAudioRef.current = null;
+    }
+
+    // 2. Cancel any speech synthesis in the browser
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch { }
+    }
+
+    // 3. Stop Murf WebSocket if open
+    if (murfSocketRef.current) {
+      try {
+        murfSocketRef.current.close();
+      } catch { }
+      murfSocketRef.current = null;
+    }
+
+    // 4. Destroy AudioWorklet PCM capture session
     if (audioCaptureSessionRef.current) {
       try {
         audioCaptureSessionRef.current.destroy();
       } catch { }
       audioCaptureSessionRef.current = null;
     }
+
+    // 5. Clear silence & speech timers
     if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
     if (speechRestartTimeoutRef.current) {
       clearTimeout(speechRestartTimeoutRef.current);
       speechRestartTimeoutRef.current = null;
     }
+
+    // 6. Abort native speech recognition
     if (recognitionRef.current) {
       try {
         recognitionRef.current.abort();
       } catch { }
       recognitionRef.current = null;
     }
+
+    // 7. Close Web AudioContext
     if (audioContextRef.current) {
       try {
         audioContextRef.current.close();
       } catch { }
+      audioContextRef.current = null;
     }
+
+    // 8. Stop all local audio/video tracks
     const stream = localStreamRef.current || localStream;
     if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
+      try {
+        stream.getTracks().forEach((t) => t.stop());
+      } catch { }
     }
-    Object.values(peerConnectionsRef.current).forEach((pc) => pc.close());
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.close();
+
+    // 9. Stop all remote stream tracks & close RTCPeerConnections
+    try {
+      Object.values(remoteStreams).forEach((st) => {
+        try {
+          st.getTracks().forEach((t) => t.stop());
+        } catch { }
+      });
+      setRemoteStreams({});
+    } catch { }
+
+    Object.values(peerConnectionsRef.current).forEach((pc) => {
+      try {
+        pc.getSenders().forEach((s) => {
+          try { s.track?.stop(); } catch { }
+        });
+        pc.getReceivers().forEach((r) => {
+          try { r.track?.stop(); } catch { }
+        });
+        pc.close();
+      } catch { }
+    });
+    peerConnectionsRef.current = {};
+
+    // 10. Close Signaling WebSocket
+    if (wsRef.current) {
+      try {
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: "leave", sessionId }));
+        }
+        wsRef.current.close();
+      } catch { }
+      wsRef.current = null;
     }
   }
 

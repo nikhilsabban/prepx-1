@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router";
 
 import { AuthProvider } from "./context/AuthContext";
 import { GamificationProvider } from "./context/GamificationContext";
+import { AntiCheatProvider } from "./context/AntiCheatContext";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -91,8 +92,9 @@ export function App() {
     <AuthProvider>
       <GamificationProvider>
         <BrowserRouter>
-          <ScrollToTop />
-          <div className="min-h-screen bg-background text-foreground flex flex-col antialiased">
+          <AntiCheatProvider>
+            <ScrollToTop />
+            <div className="min-h-screen bg-background text-foreground flex flex-col antialiased">
 
             <Navbar />
             <div className="flex-1">
@@ -333,7 +335,8 @@ export function App() {
               <GamificationHubModal />
             </Suspense>
           </div>
-        </BrowserRouter>
+        </AntiCheatProvider>
+      </BrowserRouter>
       </GamificationProvider>
     </AuthProvider>
   );
