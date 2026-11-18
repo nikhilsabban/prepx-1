@@ -562,10 +562,9 @@ export function GDRoomPage() {
         localVideoRef.current.play().catch(() => { });
       }
 
-      // Start local voice activity detection (VAD) and speech recognition
+      // Start local voice activity detection. STT starts only for an active turn.
       if (hasAudio) {
         startVoiceActivityDetection(stream);
-        startMurfOrNativeSTT();
       }
 
       if (!hasVideo && hasAudio) {
@@ -640,7 +639,12 @@ export function GDRoomPage() {
   }
 
   // Resilient transcript dispatcher: sends via WebSocket if connected, otherwise submits via REST API and updates local state optimistically
-  async function dispatchTranscriptSegment(text: string, durationSeconds?: number, segmentIdOverride?: string) {
+  async function dispatchTranscriptSegment(
+    text: string,
+    durationSeconds?: number,
+    segmentIdOverride?: string,
+    persistDirectly = false,
+  ) {
     const textToSubmit = text.trim();
     if (!textToSubmit || !sessionId) return;
 
@@ -700,7 +704,7 @@ export function GDRoomPage() {
     };
 
     let sentViaWs = false;
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (!persistDirectly && wsRef.current?.readyState === WebSocket.OPEN) {
       try {
         wsRef.current.send(
           JSON.stringify({
@@ -751,7 +755,7 @@ export function GDRoomPage() {
 
   // 4. Distributed, Participant-Isolated Real-Time AudioWorklet & Deepgram Nova-3 PCM Capture
   function startMurfOrNativeSTT() {
-    if (!isMicOnRef.current || !localStreamRef.current) return;
+    if (!isMicOnRef.current || !localStreamRef.current || sessionRef.current?.status !== "in_progress" || !isMyTurnRef.current) return;
 
     const participant = currentParticipantRef.current || currentParticipant;
     if (!participant || !sessionId) return;
@@ -806,7 +810,12 @@ export function GDRoomPage() {
           } catch { }
         }
         if (event?.text && event.text.trim().length >= 2) {
-          dispatchTranscriptSegment(event.text.trim(), undefined, event.segmentId);
+          dispatchTranscriptSegment(
+            event.text.trim(),
+            undefined,
+            event.segmentId,
+            event.segmentId.startsWith("http-"),
+          );
         }
       },
       onStatusChange: (status) => {
@@ -991,7 +1000,7 @@ export function GDRoomPage() {
 
   // 4b. Speech Recognition (Web Speech API) fallback
   function startSpeechRecognition() {
-    if (!isMicOnRef.current) return;
+    if (!isMicOnRef.current || sessionRef.current?.status !== "in_progress" || !isMyTurnRef.current) return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn("Web Speech API not supported in this browser. Use manual contribution input.");

@@ -19212,14 +19212,10 @@ function getRoomParticipant(session, userId) {
     (participant) => participant.id === userId || participant.userId?.toString() === userId
   );
 }
-function isActiveOrRecentlyFinishedSpeaker(session, userId) {
-  const participant = getRoomParticipant(session, userId);
-  const participantId = participant?.id || userId;
-  if (session?.currentTurn?.participantId === participantId) return true;
-  const cutoff = Date.now() - 12e4;
-  return (session?.turnHistory || []).some(
-    (turn) => turn.participantId === participantId && new Date(turn.endedAt).getTime() >= cutoff
-  );
+function isRecentlyCompletedDiscussion(session) {
+  const endedAt = session?.endedAt ? new Date(session.endedAt).getTime() : Number.NaN;
+  const timeSinceEnd = Date.now() - endedAt;
+  return session?.status === "completed" && Number.isFinite(endedAt) && timeSinceEnd >= -6e4 && timeSinceEnd <= 10 * 6e4;
 }
 async function getRandomTopic(req, res) {
   try {
@@ -19605,15 +19601,11 @@ async function appendTranscriptSegment(req, res) {
       res.status(400).json({ success: false, message: "Valid text and sessionId are required" });
       return;
     }
-    const speakerId = req.user?._id?.toString() || "";
+    const speakerId = req.user?._id?.toString() || req.user?.id?.toString() || "";
     const room = await gdSessionService.getSessionById(sessionId);
-    if (!room || room.status !== "in_progress" || !isActiveOrRecentlyFinishedSpeaker(room, speakerId)) {
-      res.status(403).json({ success: false, message: "Only the active or recently finished speaker can submit transcript text." });
-      return;
-    }
     const registeredParticipant = getRoomParticipant(room, speakerId);
-    if (!registeredParticipant) {
-      res.status(403).json({ success: false, message: "You are not a participant in this discussion." });
+    if (!room || room.status !== "in_progress" && !isRecentlyCompletedDiscussion(room) || !registeredParticipant || registeredParticipant.isAi) {
+      res.status(403).json({ success: false, message: "Only a participant in an active or recently completed discussion can submit transcript text." });
       return;
     }
     const speakerName = registeredParticipant.name || req.user?.fullName || "Participant";
@@ -19847,9 +19839,7 @@ async function transcribeGDClip(req, res) {
     const audio = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
     const session = await gdSessionService.getSessionById(roomId);
     const roomParticipant = getRoomParticipant(session, userId);
-    const endedAt = session?.endedAt ? new Date(session.endedAt).getTime() : Number.NaN;
-    const timeSinceEnd = Date.now() - endedAt;
-    const isRecentlyCompleted = session?.status === "completed" && Number.isFinite(endedAt) && timeSinceEnd >= -6e4 && timeSinceEnd <= 10 * 6e4;
+    const isRecentlyCompleted = isRecentlyCompletedDiscussion(session);
     if (!session || session.status !== "in_progress" && !isRecentlyCompleted || !roomParticipant || roomParticipant.isAi) {
       res.status(403).json({ success: false, message: "Only a participant in an active or recently completed discussion can transcribe audio." });
       return;
