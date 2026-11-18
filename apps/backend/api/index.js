@@ -19207,11 +19207,18 @@ function getParam(param) {
   if (Array.isArray(param)) return param[0] || "";
   return param || "";
 }
+function getRoomParticipant(session, userId) {
+  return session?.participants?.find(
+    (participant) => participant.id === userId || participant.userId?.toString() === userId
+  );
+}
 function isActiveOrRecentlyFinishedSpeaker(session, userId) {
-  if (session?.currentTurn?.participantId === userId) return true;
+  const participant = getRoomParticipant(session, userId);
+  const participantId = participant?.id || userId;
+  if (session?.currentTurn?.participantId === participantId) return true;
   const cutoff = Date.now() - 12e4;
   return (session?.turnHistory || []).some(
-    (turn) => turn.participantId === userId && new Date(turn.endedAt).getTime() >= cutoff
+    (turn) => turn.participantId === participantId && new Date(turn.endedAt).getTime() >= cutoff
   );
 }
 async function getRandomTopic(req, res) {
@@ -19604,7 +19611,7 @@ async function appendTranscriptSegment(req, res) {
       res.status(403).json({ success: false, message: "Only the active or recently finished speaker can submit transcript text." });
       return;
     }
-    const registeredParticipant = room.participants.find((participant) => participant.id === speakerId);
+    const registeredParticipant = getRoomParticipant(room, speakerId);
     if (!registeredParticipant) {
       res.status(403).json({ success: false, message: "You are not a participant in this discussion." });
       return;
@@ -19839,8 +19846,9 @@ async function transcribeGDClip(req, res) {
     const userId = req.user?._id?.toString() || req.user?.id?.toString() || "";
     const audio = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
     const session = await gdSessionService.getSessionById(roomId);
-    if (!session || session.status !== "in_progress" || !isActiveOrRecentlyFinishedSpeaker(session, userId)) {
-      res.status(403).json({ success: false, message: "Only the active or recently finished speaker can transcribe audio." });
+    const roomParticipant = getRoomParticipant(session, userId);
+    if (!session || session.status !== "in_progress" || !roomParticipant || roomParticipant.isAi) {
+      res.status(403).json({ success: false, message: "Only a participant in this active discussion can transcribe audio." });
       return;
     }
     if (audio.length < 9600) {
