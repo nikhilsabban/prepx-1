@@ -124,14 +124,67 @@ export function SkeletonProfile() {
 }
 
 export function SkeletonPage() {
+  const loadingHints = [
+    "Preparing intelligent workspace...",
+    "Calibrating technical evaluation metrics...",
+    "Connecting low-latency audio stream...",
+    "Syncing placement interview environment...",
+  ];
+  const [hintIndex, setHintIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setHintIndex((prev) => (prev + 1) % loadingHints.length);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="min-h-[70vh] flex flex-col items-center justify-center p-8 space-y-6">
-      <Skeleton className="size-16 rounded-2xl" />
-      <Skeleton className="h-8 w-64" />
-      <Skeleton className="h-4 w-96 max-w-full" />
-      <div className="flex gap-4 pt-2">
-        <Skeleton className="h-10 w-32 rounded-xl" />
-        <Skeleton className="h-10 w-32 rounded-xl" />
+    <div className="relative min-h-[75vh] w-full flex flex-col items-center justify-center p-6 sm:p-12 overflow-hidden select-none">
+      {/* Top Sweep Progress Indicator */}
+      <div className="fixed top-0 left-0 right-0 h-1 z-[100] overflow-hidden bg-zinc-900">
+        <div className="h-full w-1/3 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full animate-[progress_1.4s_ease-in-out_infinite]" />
+      </div>
+
+      {/* Ambient background glows */}
+      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-80 rounded-full bg-indigo-600/10 blur-3xl animate-pulse" />
+      <div className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 size-60 rounded-full bg-purple-600/10 blur-2xl" />
+
+      {/* Dynamic Animated Core Emblem */}
+      <div className="relative z-10 flex flex-col items-center space-y-6 text-center max-w-md">
+        <div className="relative flex items-center justify-center">
+          {/* Outer glowing pulsing ring */}
+          <div className="absolute size-20 rounded-2xl bg-gradient-to-tr from-indigo-500/30 via-purple-500/30 to-pink-500/30 animate-spin blur-[2px]" style={{ animationDuration: "6s" }} />
+          
+          {/* Inner glass tile */}
+          <div className="relative size-16 rounded-2xl border border-white/15 bg-zinc-950/90 shadow-2xl shadow-indigo-500/20 backdrop-blur-xl flex items-center justify-center">
+            <div className="size-3.5 rounded-full bg-gradient-to-r from-indigo-400 to-purple-400 animate-ping" />
+            <div className="absolute size-2.5 rounded-full bg-white" />
+          </div>
+        </div>
+
+        {/* Dynamic Typography & Hints */}
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-300 text-xs font-semibold tracking-wider uppercase">
+            <span className="size-1.5 rounded-full bg-indigo-400 animate-ping" />
+            <span>prepX AI</span>
+          </div>
+
+          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+            Loading Experience
+          </h3>
+
+          <p className="text-xs sm:text-sm text-zinc-400 min-h-[1.5rem] transition-opacity duration-300">
+            {loadingHints[hintIndex]}
+          </p>
+        </div>
+
+        {/* Shimmer Placeholder Bars */}
+        <div className="w-full max-w-xs space-y-2 pt-2">
+          <div className="h-1.5 w-full rounded-full bg-zinc-800/80 overflow-hidden">
+            <div className="h-full w-1/2 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent animate-[shimmer_1.5s_infinite]" />
+          </div>
+        </div>
       </div>
     </div>
   );
