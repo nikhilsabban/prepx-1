@@ -231,8 +231,7 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // 0. Guaranteed bootstrap & credential validation for administrator account
-    // Admin (admin@gmail.com / admin) is explicitly exempted from Anti-Cheat system restrictions
+    // 0. Guaranteed bootstrap & credential validation for administrator account (admin@gmail.com / admin)
     if (normalizedEmail === "admin@gmail.com" && password === "admin") {
       let adminUser = await User.findOne({ email: "admin@gmail.com" });
       if (!adminUser) {
