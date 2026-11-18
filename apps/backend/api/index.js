@@ -1755,7 +1755,7 @@ async function login(req, res) {
           username: "admin",
           email: "admin@gmail.com",
           password: hashedPassword,
-          role: "admin",
+          isAdmin: true,
           isVerified: true,
           college: "PrepX Institute",
           branch: "Administration",
@@ -1769,7 +1769,7 @@ async function login(req, res) {
         if (!adminUser.password || !await bcrypt.compare("admin", adminUser.password)) {
           adminUser.password = await bcrypt.hash("admin", 10);
         }
-        adminUser.role = "admin";
+        adminUser.isAdmin = true;
         await adminUser.save();
       }
       const token2 = generateToken(adminUser._id.toString());

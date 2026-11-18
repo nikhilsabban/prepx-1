@@ -241,7 +241,7 @@ export async function login(req: Request, res: Response): Promise<void> {
           username: "admin",
           email: "admin@gmail.com",
           password: hashedPassword,
-          role: "admin",
+          isAdmin: true,
           isVerified: true,
           college: "PrepX Institute",
           branch: "Administration",
@@ -255,7 +255,7 @@ export async function login(req: Request, res: Response): Promise<void> {
         if (!adminUser.password || !(await bcrypt.compare("admin", adminUser.password))) {
           adminUser.password = await bcrypt.hash("admin", 10);
         }
-        adminUser.role = "admin";
+        adminUser.isAdmin = true;
         await adminUser.save();
       }
 
